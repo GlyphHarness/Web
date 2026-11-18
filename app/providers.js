@@ -37,7 +37,7 @@ function openaiCompatible({ label, base }) {
       if (!r.ok) throw new Error(`models: HTTP ${r.status}`);
       const j = await r.json();
       // pricing is kept as the provider sent it (USD strings, per token unless noted)
-      return (j.data || []).map(m => ({ id: m.id, name: m.name || m.id, ctx: m.context_length ?? null, pricing: m.pricing || {} }));
+      return (j.data || []).map(m => ({ id: m.id, name: m.name || m.id, ctx: m.context_length ?? null, pricing: m.pricing || {}, tools: (m.supported_parameters || []).includes('tools') }));
     },
     async *stream(body, key, signal, opt = {}) {
       const url = root(opt) + '/chat/completions';
@@ -74,7 +74,13 @@ function openaiCompatible({ label, base }) {
 const mockSeen = []; // recent flattened requests, standing in for a provider-side prefix cache
 const mock = {
   label: 'Mock (offline)', needsKey: false,
-  async models() { return [{ id: 'mock-1', name: 'Mock 1', ctx: 32000, pricing: { prompt: '0.00000015', completion: '0.0000006', input_cache_read: '0.000000003' } }]; },
+  async models() {
+    return [
+      { id: 'mock-1', name: 'Mock 1', ctx: 32000, tools: true, pricing: { prompt: '0.00000015', completion: '0.0000006', input_cache_read: '0.000000003' } },
+      { id: 'mock-pro', name: 'Mock Pro', ctx: 1048576, tools: true, pricing: { prompt: '0.000002', completion: '0.00001' } },
+      { id: 'mock-free:free', name: 'Mock Free', ctx: 262144, tools: false, pricing: { prompt: '0', completion: '0' } },
+    ];
+  },
   async *stream(body, _key, signal) {
     const flat = JSON.stringify(body.tools || []) + '\n' + body.messages.map(m => JSON.stringify(m)).join('\n');
     let kept = 0;

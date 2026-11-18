@@ -33,7 +33,17 @@ body { overflow: hidden; }
 main { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; min-width: 0; }
 #bar { display: flex; gap: 6px; padding: 8px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
 #title { flex: 1; min-width: 120px; }
-#model { width: 240px; }
+#modelbox { position: relative; }
+#model { width: 280px; }
+#picker { display: none; position: absolute; z-index: 5; top: 100%; left: 0; width: min(640px, 90vw); max-height: 60vh; overflow: auto; background: var(--panel); border: 1px solid var(--accent); border-radius: 6px; box-shadow: 0 8px 24px #0006; font: 12px ui-monospace, monospace; }
+#app[data-picking] #picker { display: block; }
+#picker .hint { padding: 6px 10px; color: var(--dim); font-family: system-ui, sans-serif; }
+#picker .row { display: grid; grid-template-columns: minmax(0, 1fr) 60px 70px 70px 70px; gap: 8px; padding: 3px 10px; }
+#picker .row span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#picker .row span:not(:first-child) { text-align: right; }
+#picker .row.head { color: var(--dim); border-bottom: 1px solid var(--line); position: sticky; top: 0; background: var(--panel); }
+#picker .row[data-model] { cursor: pointer; }
+#picker .row[data-model]:hover { background: var(--sel); }
 #threads { overflow: auto; }
 .thread { max-width: 860px; margin: 0 auto; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
 

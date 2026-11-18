@@ -12,7 +12,7 @@ import * as pat from './patterns.js';
 import { put, get, handlesIn } from './outstore.js';
 import { buildRequest, measure, report, padAttachment, inherit, imitatesNote, keptLines, corePrompt } from './context.js';
 
-export const VERSION = '0.10.0';
+export const VERSION = '0.11.0';
 const MAX_STEPS = 8; // model <-> tool round trips per user turn
 const MAX_BRANCHES = 6; // concerns per fan_out
 const FOLD_MAX = 2000; // chars of a fold handed back to the source
@@ -39,7 +39,7 @@ const SHELL = `
   <header id="bar">
     <input id="title" aria-label="Session title">
     <select id="provider" aria-label="Provider"></select>
-    <input id="model" list="models" placeholder="model id" aria-label="Model">
+    <span id="modelbox"><input id="model" placeholder="model: type to filter" aria-label="Model" autocomplete="off"><div id="picker"></div></span>
     <datalist id="models"></datalist>
     <button data-act="export">export .session</button>
     <button data-act="branch" title="Fork this session at its tail to work the text in the message box as one concern">branch</button>
@@ -329,7 +329,7 @@ const MODELS_TTL = 24 * 3600e3;
 let catalogue = [], loadSeq = 0;
 
 async function loadModels(force) {
-  const id = state.meta.settings.provider, o = opt(), k = 'wh:models:' + id;
+  const id = state.meta.settings.provider, o = opt(), k = 'wh:models2:' + id;
   const turn = ++loadSeq, stale = () => turn !== loadSeq; // a slower earlier load must not win
   let c = null;
   try { c = JSON.parse(localStorage.getItem(k)); } catch {}
@@ -348,6 +348,48 @@ async function loadModels(force) {
   showPrice();
 }
 
+// ---------- model picker ----------
+// Filter words all have to match the id or name. Some words are filters instead:
+//   free    costs nothing            tools   supports tool calls
+//   cache   lists a cached price     cheap   sort by input price
+//   <0.1    input under $0.10 / 1M
+const per1M = v => v == null || v === '' || !(Number(v) > 0) ? '--' : '$' + +(Number(v) * 1e6).toPrecision(3);
+const ctxText = n => !n ? '--' : n >= 1e6 ? +(n / 1e6).toFixed(1) + 'M' : Math.round(n / 1e3) + 'k';
+
+function filterModels(q) {
+  let list = catalogue, cheap = false;
+  const price = m => Number(m.pricing.prompt) || 0;
+  for (const w of q.toLowerCase().split(/\s+/).filter(Boolean)) {
+    const under = /^<(\d*\.?\d+)$/.exec(w);
+    if (w === 'free') list = list.filter(m => price(m) === 0 && !(Number(m.pricing.completion) > 0));
+    else if (w === 'tools') list = list.filter(m => m.tools);
+    else if (w === 'cache') list = list.filter(m => Number(m.pricing.input_cache_read) > 0);
+    else if (w === 'cheap') cheap = true;
+    else if (under) list = list.filter(m => price(m) * 1e6 < Number(under[1]));
+    else list = list.filter(m => m.id.toLowerCase().includes(w) || m.name.toLowerCase().includes(w));
+  }
+  return cheap ? [...list].sort((a, b) => price(a) - price(b)) : list;
+}
+
+function showPicker() {
+  const hits = filterModels($('#model').value);
+  $('#picker').replaceChildren(
+    h('div', { class: 'hint', text: `${hits.length} of ${catalogue.length} · words match the name · free · tools · cache · cheap · <0.1` }),
+    h('div', { class: 'row head' }, ...['model', 'context', 'input', 'cached', 'output'].map(t => h('span', { text: t }))),
+    ...hits.slice(0, 80).map(m => h('div', { class: 'row', 'data-model': m.id, title: m.name + (m.tools ? '' : ' (no tool calls)') },
+      h('span', { text: m.id + (m.tools ? '' : ' ⚠') }), h('span', { text: ctxText(m.ctx) }),
+      h('span', { text: per1M(m.pricing.prompt) }), h('span', { text: per1M(m.pricing.input_cache_read) }), h('span', { text: per1M(m.pricing.completion) }))));
+  app.setAttribute('data-picking', '');
+}
+
+function pickModel(id) {
+  $('#model').value = id;
+  state.meta.settings.model = id;
+  saveMeta();
+  showPrice();
+  app.removeAttribute('data-picking');
+}
+
 // [pricing key, label, multiplier, unit]. Token prices arrive as USD per token.
 const PRICE_ROWS = [
   ['prompt', 'input', 1e6, '/ 1M tok'], ['input_cache_read', 'cached input', 1e6, '/ 1M tok'],
@@ -362,8 +404,9 @@ function showPrice() {
   if (m) {
     const known = new Set(PRICE_ROWS.map(r => r[0]));
     for (const [k, label, mul, unit] of PRICE_ROWS) {
-      const v = Number(m.pricing[k]);
+      const v = Number(m.pricing[k]), core = k === 'prompt' || k === 'input_cache_read' || k === 'completion';
       if (m.pricing[k] != null && v > 0) rows.push(h('tr', {}, h('td', { text: label }), h('td', { text: '$' + +(v * mul).toPrecision(4) + ' ' + unit })));
+      else if (core) rows.push(h('tr', {}, h('td', { text: label }), h('td', { text: '--' }))); // no cost, or none listed
     }
     // anything the provider sends that this build has no label for is shown raw
     for (const [k, v] of Object.entries(m.pricing)) if (!known.has(k) && Number(v) > 0) rows.push(h('tr', {}, h('td', { text: k }), h('td', { text: String(v) + ' (raw)' })));
@@ -734,6 +777,15 @@ function bind() {
   $('#keep').addEventListener('change', e => { const s = cur(); s.keep = e.target.checked; saveSession(s); showCore(); });
   $('#wire').addEventListener('change', e => { const s = cur(); s.wire = e.target.value; saveSession(s); showCore(); });
   $('#model').addEventListener('change', e => { state.meta.settings.model = e.target.value.trim(); saveMeta(); showPrice(); });
+  $('#model').addEventListener('input', showPicker);
+  $('#model').addEventListener('focus', e => { e.target.select(); showPicker(); });
+  $('#model').addEventListener('blur', () => app.removeAttribute('data-picking'));
+  $('#model').addEventListener('keydown', e => {
+    if (e.key === 'Escape') { e.target.value = state.meta.settings.model; e.target.blur(); }
+    if (e.key === 'Enter') { const first = $('#picker .row[data-model]'); if (first) { e.preventDefault(); pickModel(first.dataset.model); e.target.blur(); } }
+  });
+  // mousedown, not click: the choice has to land before the input's blur closes the list
+  $('#picker').addEventListener('mousedown', e => { const r = e.target.closest('[data-model]'); if (r) { e.preventDefault(); pickModel(r.dataset.model); $('#model').blur(); } });
   $('#provider').addEventListener('change', e => { state.meta.settings.provider = e.target.value; saveMeta(); $('#key').value = state.keys[e.target.value] || ''; showBase(); loadModels(); });
   $('#base').addEventListener('change', e => { (state.meta.settings.base ??= {})[state.meta.settings.provider] = e.target.value.trim(); saveMeta(); loadModels(); });
   $('#key').addEventListener('change', e => { state.keys[state.meta.settings.provider] = e.target.value.trim(); saveKeys(); });

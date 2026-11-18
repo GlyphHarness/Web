@@ -23,8 +23,15 @@ const visible = () => page.locator('.thread:visible');
 
 await page.goto(url);
 await page.selectOption('#provider', 'mock');
-await page.fill('#model', 'mock-1');
-await page.dispatchEvent('#model', 'change');
+await page.waitForFunction(() => /3 models/.test(document.querySelector('#modelsn').textContent));
+await page.fill('#model', 'free');
+const freeRows = await page.locator('#picker .row[data-model]').allTextContents();
+check('picker: "free" filters, and no-cost prices show as --', freeRows.length === 1 && /^mock-free:free ⚠262k------$/.test(freeRows[0]), freeRows.join('|'));
+await page.fill('#model', 'cheap tools');
+check('picker: "cheap tools" sorts by input price among tool-capable models', (await page.locator('#picker .row[data-model] span:first-child').allTextContents()).join() === 'mock-1,mock-pro');
+await page.fill('#model', 'mock <1');
+await page.locator('#picker .row[data-model]').first().dispatchEvent('mousedown');
+check('picker: choosing a row sets the model and its price panel', await page.inputValue('#model') === 'mock-1' && /cached input\$0.003/.test(await page.locator('#price').textContent()));
 await page.fill('#system', 'You are a test assistant. '.repeat(40));
 await page.dispatchEvent('#system', 'change');
 
