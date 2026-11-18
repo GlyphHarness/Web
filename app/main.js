@@ -227,7 +227,7 @@ const PRICE_ROWS = [
   ['prompt', 'input', 1e6, '/ 1M tok'], ['input_cache_read', 'cached input', 1e6, '/ 1M tok'],
   ['input_cache_write', 'cache write', 1e6, '/ 1M tok'], ['completion', 'output', 1e6, '/ 1M tok'],
   ['internal_reasoning', 'reasoning', 1e6, '/ 1M tok'], ['web_search', 'web search', 1, '/ search'],
-  ['request', 'request', 1, '/ request'], ['image', 'image', 1, '/ image'],
+  ['input_cache_write_1h', 'cache write 1h', 1e6, '/ 1M tok'], ['request', 'request', 1, '/ request'],
 ];
 
 function showPrice() {
