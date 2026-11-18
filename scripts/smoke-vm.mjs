@@ -69,6 +69,11 @@ const cmdCard = page.locator('.thread:visible figure.handoff[data-kind=command]'
 await cmdCard.locator('button', { hasText: 'run on the machine' }).click();
 await page.waitForFunction(() => /\[exit \d+\]/.test([...document.querySelectorAll('figure.handoff[data-kind=command] .hout')].at(-1)?.textContent || ''), null, { timeout: 120000 });
 check('handoff: a command block runs on the machine when you click it', /hello-from-command[^]*\[exit 0\]/.test(await cmdCard.locator('.hout').textContent()));
+// ---- the package shelf: packages fetched from the page's own site, installed offline ----
+const shelf = await run('wh-install tmux && tmux -V; wh-install nope; echo rc=$?');
+check('shelf: tmux installs from the page\'s own site and runs', /tmux 3\.4/.test(shelf), JSON.stringify(shelf.slice(0, 300)));
+check('shelf: an unknown package says what the shelf has', /nope is not on the shelf; it has: tmux/.test(shelf) && /rc=1/.test(shelf));
+
 // ---- file explorer: a fresh session, a file made before it, then its own changes ----
 await page.click('[data-act=new]');
 await page.click('[data-pane=machine]');

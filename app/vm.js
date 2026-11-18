@@ -19,6 +19,23 @@ const NET = ROOT + 'image/c2w-net-proxy.wasm';
 const PLACEHOLDER = 'wh-placeholder-token';
 export const RUNTIME_MARK = /__WH_RUNTIME_POLICY (\S+) ([^\n]*?)__\n?/g;
 export const SLEEP_LIMIT = 20; // seconds; matches the bounded-waits policy
+// The package shelf: Alpine packages kept next to the image on the page's own site
+// (same origin, so the machine can fetch them; Alpine's mirrors do not allow
+// cross-origin requests). wh-install <name> installs one, offline, from there.
+export const SHELF = ROOT + 'image/pkgs';
+const INSTALL = `#!/bin/sh
+# Installed by the harness: installs packages from the page's own shelf (no mirror needed).
+[ -n "$1" ] || { echo "usage: wh-install <package>..." >&2; exit 2; }
+d=$(mktemp -d); trap 'rm -rf "$d"' EXIT
+curl -fsS "$WH_SHELF/index.txt" -o "$d/index.txt" || { echo "wh-install: the shelf is not reachable at $WH_SHELF" >&2; exit 1; }
+for p in "$@"; do
+  files=$(grep "^$p:" "$d/index.txt" | cut -d: -f2-)
+  [ -n "$files" ] || { echo "wh-install: $p is not on the shelf; it has: $(cut -d: -f1 "$d/index.txt" | tr '\\n' ' ')" >&2; exit 1; }
+  set --
+  for f in $files; do curl -fsS "$WH_SHELF/$f" -o "$d/$f" || { echo "wh-install: could not fetch $f" >&2; exit 1; }; set -- "$@" "$d/$f"; done
+  apk add --allow-untrusted --no-network --quiet "$@" || exit 1
+done
+`;
 const SLEEP_SHIM = `#!/bin/sh
 # Installed by the harness (policy bounded-waits): fixed waits of ${SLEEP_LIMIT}s or more are refused.
 t=0
@@ -109,7 +126,10 @@ export function machine(env) {
     await new Promise(r => setTimeout(r, 500));
     // runtime policy: a sleep ahead of the real one on PATH refuses long fixed waits
     // however they are spelled (the argument check only sees the literal call)
-    input(`mkdir -p /usr/local/bin && echo ${btoa(SLEEP_SHIM)} | base64 -d > /usr/local/bin/sleep && chmod +x /usr/local/bin/sleep; hash -r\r`);
+    // one line per script: the console takes lines of about 2,000 characters at most
+    input(`mkdir -p /usr/local/bin && echo ${btoa(SLEEP_SHIM)} | base64 -d > /usr/local/bin/sleep && chmod +x /usr/local/bin/sleep\r`);
+    input(`echo ${btoa(INSTALL)} | base64 -d > /usr/local/bin/wh-install && chmod +x /usr/local/bin/wh-install\r`);
+    input(`export WH_SHELF='${SHELF}'; hash -r\r`);
     // the network stack (a second wasm) can come up after the shell: wait for its
     // proxy port (polled every second, stops as soon as it answers, at most ~60 s)
     // so the first networked command does not race it

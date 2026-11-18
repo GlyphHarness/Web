@@ -197,7 +197,7 @@ export const repoTools = [
 // The Linux machine (vm.js). Only sessions created with it, or switched on, get it.
 export const vmTools = [
   fn('shell',
-    'Run a bash script on a Linux machine (Alpine: bash, coreutils, git, python3, gh, curl, jq). State persists between calls until the page is reloaded. Returns the combined output and the exit status. Outbound HTTPS works only for hosts that allow cross-origin requests: the GitHub API does (gh is authenticated), git clone/push over HTTPS does not. If the output may be long, say in `want` what you are looking for.',
+    'Run a bash script on a Linux machine (Alpine: bash, coreutils, git, python3, gh, curl, jq; more with wh-install <name>, e.g. tmux). State persists between calls until the page is reloaded. Returns the combined output and the exit status. Outbound HTTPS works only for hosts that allow cross-origin requests: the GitHub API does (gh is authenticated), git clone/push over HTTPS does not. If the output may be long, say in `want` what you are looking for.',
     { cmd: { type: 'string' }, timeout: { type: 'integer', description: 'seconds, default 120, max 600' }, want: { type: 'string' }, ...REF_PROPS }, [],
     async (a, ctx) => {
       if (!ctx.vm) return 'No machine is available.';
