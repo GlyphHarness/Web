@@ -34,14 +34,20 @@ const q = new URLSearchParams(location.search);
 if (q.has('ref')) localStorage.setItem('wh:ref', q.get('ref'));
 let ref = REPO ? localStorage.getItem('wh:ref') || '' : '';
 if (!/^[\w.\-\/]{1,80}$/.test(ref)) ref = '';
-const base = ref ? `https://cdn.jsdelivr.net/gh/${REPO}@${ref}/app/` : new URL('./app/', location.href).href;
+// Unpinned: the build named in version.json (read past every cache). The deploy
+// writes each build to b/<commit>/ as well as app/, so a reload gets every module
+// of one build, never a mix of a cached old one and a new one; a running tab keeps
+// the build it loaded until it reloads (the update button reloads every tab together).
+let build = '';
+if (!ref) { try { const v = await fetch('./version.json', { cache: 'no-store' }).then(r => r.ok ? r.json() : null); if (/^[0-9a-f]{40}$/.test(v?.build || '')) build = v.build; } catch {} }
+const base = ref ? `https://cdn.jsdelivr.net/gh/${REPO}@${ref}/app/` : new URL(build ? `./b/${build}/` : './app/', location.href).href;
 
 const css = document.createElement('link');
 css.rel = 'stylesheet';
 css.href = base + 'app.css';
 document.head.append(css);
 
-import(base + 'main.js').then(m => m.boot({ base, ref, repo: REPO })).catch(err => {
+import(base + 'main.js').then(m => m.boot({ base, ref, repo: REPO, build })).catch(err => {
   const el = document.getElementById('app');
   el.textContent = '';
   const pre = document.createElement('pre');

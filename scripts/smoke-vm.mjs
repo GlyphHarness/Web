@@ -36,7 +36,7 @@ await page.waitForSelector('#vmdiag .vrow');
 const diag = await page.evaluate(() => [...document.querySelectorAll('#vmdiag .vrow')].map(r => [r.querySelector('.slabel').textContent, r.dataset.ok, r.querySelector('.vdetail').textContent]));
 check('machine pane: says what is on and what is not yet (before first use)', diag.slice(0, 4).every(r => r[1] === 'true') && diag[4][1] === 'false' && /not yet/.test(diag[4][2]), JSON.stringify(diag));
 await page.click('#vmdiag button.primary');
-await page.waitForFunction(() => document.querySelectorAll('#vmdiag .vrow[data-ok=true]').length === 5, null, { timeout: 300000 });
+await page.waitForFunction(() => [...document.querySelectorAll('#vmdiag .vrow')].every(r => r.dataset.ok === 'true'), null, { timeout: 300000 });
 check('machine pane: "start now" boots it and every line turns to ready', true);
 await page.click('[data-pane=insp]');
 
@@ -73,6 +73,30 @@ check('handoff: a command block runs on the machine when you click it', /hello-f
 const shelf = await run('wh-install tmux && tmux -V; wh-install nope; echo rc=$?');
 check('shelf: tmux installs from the page\'s own site and runs', /tmux 3\.4/.test(shelf), JSON.stringify(shelf.slice(0, 300)));
 check('shelf: an unknown package says what the shelf has', /nope is not on the shelf; it has: tmux/.test(shelf) && /rc=1/.test(shelf));
+
+// ---- sessions as unix users: own home (700), quota, isolation, jobs at once, a second tab ----
+const who = await run('id -un; echo HOME=$HOME; ls -ld ~ | cut -c1-10; touch ~/mine && echo touched');
+const userA = /^(u[a-z0-9]+)$/m.exec(who)?.[1];
+check('users: a session runs as its own user in its own home (700)', !!userA && new RegExp(`HOME=/home/${userA}`).test(who) && /drwx--[-sS]---/.test(who) && /touched/.test(who), JSON.stringify(who.slice(0, 300)));
+await page.click('[data-act=new]');
+const other = await run(`id -un; ls /home/${userA} 2>&1 | head -1; cat /home/${userA}/mine 2>&1 | head -1`);
+check('users: another session is another user and cannot read the first one\'s home', !new RegExp(`^${userA}$`, 'm').test(other) && /Permission denied/.test(other), JSON.stringify(other.slice(0, 300)));
+const par = await page.evaluate(async () => { const v = whDebug.vm(), t0 = Date.now(); const slow = v.run('sleep 6; echo slow-done', 60, { user: 'upar1', quiet: true }).then(r => ({ r, ms: Date.now() - t0 })); const fast = await v.run('echo fast-done', 60, { user: 'upar2', quiet: true }); const fms = Date.now() - t0; const s = await slow; return { fast: fast.out, fms, slow: s.r.out, sms: s.ms }; });
+check('jobs: two commands run at once (a short one is not held behind a long one)', /fast-done/.test(par.fast) && /slow-done/.test(par.slow) && par.fms < par.sms - 2000, JSON.stringify(par));
+const quota = await page.evaluate(async () => { const v = whDebug.vm(); const a = await v.run('dd if=/dev/zero of=~/big bs=1M count=3 2>&1 | tail -1; ls -l ~/big | cut -d" " -f5-6', 60, { user: 'uquota', quotaMB: 1, quiet: true }); await v.run('head -c 2000000 /dev/zero > /home/uquota/fill', 60, { quiet: true }); const b = await v.run('echo should-not-run', 60, { user: 'uquota', quotaMB: 1, quiet: true }); return { a: a.out, b: b.out, code: b.code }; });
+check('quota: a file over the quota is cut off, and an over-quota home refuses new commands', /File size limit exceeded|1048576/.test(quota.a) && /quota: \/home\/uquota is over 1 MB/.test(quota.b) && quota.code === 122 && !/should-not-run/.test(quota.b), JSON.stringify(quota));
+const page2 = await ctx.newPage();
+await page2.goto(url);
+await page2.waitForFunction(() => window.whDebug, null, { timeout: 30000 });
+const t2 = await page2.evaluate(async () => { const v = whDebug.vm(); await v.connect(); const r = await v.run('echo from-the-second-tab; id -un', 60, { user: 'utab2' }); return { role: v.role(), out: r.out, host: v.host()?.tab }; });
+check('tabs: a second tab uses the first tab\'s machine (no second boot)', t2.role === 'client' && /from-the-second-tab/.test(t2.out) && /utab2/.test(t2.out), JSON.stringify(t2));
+await page.waitForFunction(() => /from-the-second-tab/.test(document.querySelector('#machine .vmout').textContent), null, { timeout: 30000 });
+check('tabs: the second tab\'s command shows in the machine\'s terminal', true);
+await page2.close();
+// the rest of this suite checks paths under /root: run as root from here on
+await page.evaluate(() => document.querySelector('[data-act=cfgpaste]').click());
+await page.fill('.modal textarea', JSON.stringify({ settings: { machineUser: 'root' } }));
+await page.click('.modal .primary');
 
 // ---- file explorer: a fresh session, a file made before it, then its own changes ----
 await page.click('[data-act=new]');
@@ -134,6 +158,7 @@ check('shell: exit status is reported', /\[exit 1\]/.test(code));
 check('machine pane shows the guest output', /gh version/.test(await page.textContent('#machine .vmout')));
 const termText = await page.evaluate(() => document.querySelector('#machine .vmout').innerText);
 const actText = await page.evaluate(() => document.querySelector('#machine .vmacts').innerText);
+if (process.env.DUMP) (await import('node:fs')).writeFileSync(process.env.DUMP, termText);
 check('terminal: only input and output, in order; the model\'s commands shown as input', /\$ s=sleep; \$s 30; echo after=\$\?/.test(termText) && /sleep: refused: a fixed wait of 30s/.test(termText) && /after=1/.test(termText) && termText.indexOf('$ s=sleep') < termText.indexOf('after=1'), termText.slice(-500));
 check('terminal: no harness events, markers, base64 reads or listings in it', !/harness|__WH_|size=\d+|regular file\t/.test(termText));
 check('harness activity: its own list, with each harness command and the policy refusal', /machine ready/.test(actText) && /read \/root\/proj\/a\.txt\s*\d+ ms · \d+ chars/.test(actText) && /policy bounded-waits: refused sleep 30/.test(actText), actText.slice(-400));

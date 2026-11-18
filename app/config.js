@@ -18,6 +18,8 @@ export const FIELDS = {
   base: { check: v => v && typeof v === 'object' && Object.values(v).every(x => S(x) && (x === '' || /^https?:\/\//.test(x))), hint: '{provider: url}' },
   machine: { check: v => typeof v === 'boolean', hint: 'true/false; reloads the page' },
   logTranscripts: { check: v => typeof v === 'boolean' },
+  machineUser: { check: v => v === 'session' || v === 'root', hint: 'session (a unix user per session) or root' },
+  machineQuota: { check: v => Number.isInteger(v) && v >= 0, hint: 'MB per session home; 0 = none' },
   newProfile: { check: v => typeof v === 'string', hint: 'a profile name' },
 };
 const SECRET = /token|key|pem|secret|passw|credential|auth|bearer/i;

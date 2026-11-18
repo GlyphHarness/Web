@@ -13,6 +13,8 @@ import * as tokencheck from './tokencheck.js';
 import * as cust from './custodial.js';
 import * as fx from './explorer.js';
 import { machine, vmWanted, vmReady } from './vm.js';
+import { sharedMachine, MPROTO, stashed } from './vmhost.js';
+import { coordinator, published } from './coord.js';
 import * as policy from './policy.js';
 import * as smells from './smells.js';
 import { logRepo } from './logrepo.js';
@@ -27,7 +29,12 @@ import * as pat from './patterns.js';
 import { put, get, handlesIn, setFallback } from './outstore.js';
 import { buildRequest, measure, report, padAttachment, inherit, imitatesNote, keptLines, corePrompt, EDGE_MIN, markedOnly, edgeReplies, turnOf, KINDS } from './context.js';
 
-export const VERSION = '0.44.0';
+export const VERSION = '0.45.0';
+// This tab: an id kept for the tab's life (sessionStorage survives its reloads).
+const TAB = (() => { const mk = () => 't' + Math.random().toString(36).slice(2, 8); try { let t = sessionStorage.getItem('wh:tab'); if (!t) sessionStorage.setItem('wh:tab', t = mk()); return t; } catch { return mk(); } })();
+const QS = new URLSearchParams(location.search);
+const MACHINE_TAB = QS.has('machine'); // a tab that only hosts the machine (never reloads for an update)
+let co = null; // coord.js: halt, step, resume, update across tabs
 const MAX_STEPS = 8; // model <-> tool round trips per user turn
 const MAX_BRANCHES = 6; // concerns per fan_out
 const FOLD_MAX = 2000; // chars of a fold handed back to the source
@@ -63,7 +70,9 @@ const SHELL = `
     <button data-act="inspector">inspector</button>
     <button class="qbar slot" id="queuebar" data-act="q-show" title="custodial queue"></button>
     <label class="pace" title="Hold model requests and/or tool calls until you release them">pace <select id="pace"><option value="run">run</option><option value="requests">hold model requests</option><option value="tools">hold tool calls</option><option value="both">hold both</option></select></label>
+    <span id="coord" class="coord"><button data-act="haltall" title="Halt every session in every tab at its next gate (before a model request or tool call)">halt all</button><button data-act="stepall" title="Every halted session in every tab takes one step, then holds again" hidden>step</button><button data-act="resumeall" hidden>resume</button><span class="slot note" id="coordstat"></span><button id="updbtn" data-act="update" class="primary slot" hidden></button></span>
   </header>
+  <p id="rohint" class="note" hidden><span class="slot" id="rotext"></span> <button data-act="takeover" type="button">run it here instead</button></p>
   <div id="threads"></div>
   <form id="composer">
     <textarea id="input" rows="3" placeholder="Message. Enter adds a line; the send button sends."></textarea>
@@ -205,7 +214,7 @@ const SHELL = `
   </div>
 </aside>`;
 
-let app, busy = false, ctl = null, link = null;
+let app, busy = false, ctl = null, link = null, runningId = null;
 const trace = []; // raw request/response records, memory only
 const gh = ghAuth(() => state.keys, trace); // mint and lookup calls appear in the trace, tokens masked
 const opt = () => ({ base: state.meta.settings.base?.[state.meta.settings.provider] || '', trace });
@@ -436,7 +445,7 @@ function sessionRow(s) {
   const parentProfile = s.parent ? state.sessions[s.parent.id]?.profile : undefined;
   const badge = pr && (!s.parent || parentProfile !== s.profile) ? h('i', { class: 'pbadge', style: `--pc:${pr.color || '#888'}`, title: eff(s).path, text: pr.name }) : '';
   if (pr) attrs.style = `--pc:${pr.color || '#888'}`;
-  return h('div', attrs, h('span', { text: s.title }), badge, h('button', { 'data-act': 'drop', type: 'button', title: 'Delete session', text: '×' }));
+  return h('div', attrs, h('span', { text: s.title }), badge, h('button', { 'data-act': 'newtab', type: 'button', title: 'Open in a tab of its own (it runs there; sessions in different tabs run at the same time)', text: '↗' }), h('button', { 'data-act': 'drop', type: 'button', title: 'Delete session', text: '×' }));
 }
 
 function ledgerRow(e, i) {
@@ -691,7 +700,7 @@ function inlineEdit(head, edit, input, { label, show = v => v, save }) {
 // ---------- this session's scope, attribute by attribute ----------
 
 const SCOPE_ROWS = [...prof.SETTING_KEYS.map(k => ({ k, kind: 'set' })), ...prof.CAP_KEYS.map(k => ({ k, kind: 'cap' }))];
-const SCOPE_LABEL = { logRepo: 'log repo', logTranscripts: 'transcripts', model: 'model', helper: 'helper model', policyModel: 'policy model', pace: 'pace', branchBudget: 'branch budget', run_js: 'run code', fanout: 'fan out', ask: 'ask and values', vm: 'machine', repo: 'repositories' };
+const SCOPE_LABEL = { machineUser: 'machine user', machineQuota: 'machine quota (MB)', logRepo: 'log repo', logTranscripts: 'transcripts', model: 'model', helper: 'helper model', policyModel: 'policy model', pace: 'pace', branchBudget: 'branch budget', run_js: 'run code', fanout: 'fan out', ask: 'ask and values', vm: 'machine', repo: 'repositories' };
 // levels from this session up: session, each profile leaf to root, defaults
 function scopeLevels(s) {
   const ch = eff(s).chain;
@@ -850,6 +859,8 @@ function activate(id) {
   app.removeAttribute('data-empty');
   state.meta.active = id;
   saveMeta();
+  try { sessionStorage.setItem('wh:tab-active', id); } catch {}
+  claimSession(id);
   const s = cur();
   thread(s);
   stagebox(s);
@@ -1008,6 +1019,7 @@ function showPrice() {
 async function send(text) {
   const s = cur();
   if (busy || !text.trim()) return;
+  if (!owns(s.id)) return notice(s, 'This session runs in another tab. Switch to that tab, or "run it here instead".');
   if (s.title === 'New session') { retitle(s, text.trim().slice(0, 40)); s.autoTitle = true; }
   await stewarding; // a pass already under way may be condensing this session's edge
   await edgeFold(s);
@@ -1038,12 +1050,13 @@ async function run(s) {
   try { return await runInner(s); } finally { transcriptSoon(); }
 }
 async function runInner(s) {
+  if (!owns(s.id)) return notice(s, 'This session runs in another tab. Switch to that tab, or "run it here instead".');
   const set = cfg(s), p = provider();
   if (!set.model) return notice(s, 'Choose a model first.');
   if (p.needsKey && !state.keys[set.provider]) return notice(s, 'Add an API key in Settings first.');
-  busy = true; app.setAttribute('data-busy', ''); ctl = new AbortController();
+  busy = true; runningId = s.id; app.setAttribute('data-busy', ''); ctl = new AbortController();
   try { return await turns(s, 0); }
-  finally { busy = false; app.removeAttribute('data-busy'); ctl = null; queueSteward(); }
+  finally { busy = false; runningId = null; app.removeAttribute('data-busy'); ctl = null; queueSteward(); }
 }
 
 // ---------- edge folding and the steward ----------
@@ -1142,7 +1155,13 @@ function overview() {
 
 // Request > stream > tool calls > repeat, for one session.
 // Returns 'done', 'failed' or 'limit'. onFirst fires on the first response event.
+// A turn counts as running (for halts and updates) from its start to its end,
+// except while it waits at a gate.
 async function turns(s, depth, onFirst) {
+  co?.enter();
+  try { return await turnsInner(s, depth, onFirst); } finally { co?.leave(); }
+}
+async function turnsInner(s, depth, onFirst) {
   const set = cfg(s), p = provider(), key = state.keys[set.provider];
   const shown = () => s.id === state.meta.active;
   const ctx = {
@@ -1153,7 +1172,7 @@ async function turns(s, depth, onFirst) {
     knownRef: r => !!state.sessions[r] || s.messages.some(m => typeof m.content === 'string' && m.content.includes(r)),
     onPatterns: renderPatterns,
     helper: set.helper ? (want, text) => helper(s, want, text) : null,
-    vm: s.tools?.includes('vm') ? shellRunner() : null,
+    vm: s.tools?.includes('vm') ? shellRunner(s) : null,
     fsMark: () => fsMark(s),
     ask: a => askCard(s, a),
     concern: (a, who) => fileConcern(s, a, who),
@@ -1166,6 +1185,9 @@ async function turns(s, depth, onFirst) {
     // Cache affinity: ask OpenRouter for the upstream that served this session last, so
     // its prefix cache is warm. Fallbacks stay allowed. Outside the messages, so the prefix is unchanged.
     if (set.provider === 'openrouter' && s.upstream && s.pin !== false) body.provider = { order: [s.upstream], allow_fallbacks: true };
+    // halt gate: every tool result is recorded and nothing is in flight, so the turn
+    // can be continued from storage alone (s.resume marks it for after a reload)
+    if (co?.halted()) { s.resume = 'request'; saveSession(s); await co.gate(s.id, 'request'); delete s.resume; saveSession(s); }
     // pacing: the request waits here, before anything counts as sent
     const go = await hold(s, 'request', `${set.model} · ${body.messages.length} messages · ${(body.tools || []).length} tools · about ${k(Math.ceil(JSON.stringify(body).length / 4))} tokens`);
     if (go === 'skip') { notice(s, 'Model request skipped; the turn stopped here.'); return 'held'; }
@@ -1244,6 +1266,7 @@ async function turns(s, depth, onFirst) {
       const pol = scopeNo ? null : await enforce(s, tc);
       let content;
       // pacing: the call waits as it will run (after any policy repair)
+      if (!scopeNo && !pol?.refused && co?.halted()) await co.gate(s.id, 'tool');
       const go = scopeNo || pol?.refused ? 'release' : await hold(s, 'tool', `${tc.function.name} ${pol ? pol.to : await fullArgs(tc)}`);
       if (scopeNo) { content = `Not run: ${tc.function.name} is not available in this session.`; smell(s, { kind: 'scope-refused', tool: tc.function.name, detail: eff(s).path }); }
       else if (go === 'skip') content = 'Not run: skipped by the user.';
@@ -1735,6 +1758,15 @@ const download = (name, obj) => {
 };
 
 const actions = {
+  newtab(b) { const id = b.closest('[data-id]')?.dataset.id; if (id) window.open('?s=' + encodeURIComponent(id), '_blank'); },
+  machinetab() { window.open('?machine', 'wh-machine'); },
+  async vmhere() { slot($('#vmstat'), 'Machine: moving to this tab'); const r = await vm().takeOver().catch(e => ({ error: e.message })); slot($('#vmstat'), r?.tooBig ? `Machine: moved; the homes (${humanSize(r.tooBig)}) were too big to carry` : r?.error ? 'Machine: ' + r.error : 'Machine: moved here; it starts with the next command'); machineDiag(); },
+  async vmsave() { const r = await vmInst?.saveNow(); slot($('#vmstat'), r?.tooBig ? `Machine: homes are ${humanSize(r.tooBig)}, over the 4 MB that is kept` : r ? `Machine: homes saved (${humanSize(r.saved)})` : 'Machine: not running here'); },
+  haltall() { co.halt('halted by you'); },
+  stepall() { co.step(); },
+  resumeall() { co.resume(); },
+  update() { updateAll(); },
+  takeover() { const s = cur(); if (s) claimSession(s.id, true); },
   trace() { download('webharness-' + new Date().toISOString().replace(/[:.]/g, '-') + '.trace', { kind: 'webharness.trace', version: 1, build: VERSION, exchanges: trace, trail: pat.trail(), smells: smells.all(), proposals: smells.proposals() }); },
   new() { logSync('session start'); const np = profiles().some(p => p.id === state.meta.settings.newProfile) ? state.meta.settings.newProfile : undefined; const s = newSession({ keep: true, core: 3, edge: 'marks', ...(np ? { profile: np } : {}), ...(() => { const t = ['ask', 'values', ...(gh.mode() ? ['repo'] : []), ...(vmWanted() && vmReady() ? ['vm'] : [])]; return t.length ? { tools: t } : {}; })() }); redrawSessions(); activate(s.id); $('#input').focus(); },
   import() { $('#file').click(); },
@@ -1998,7 +2030,14 @@ function bind() {
   $('#qbudget').addEventListener('change', e => { state.meta.settings.queueBudget = Number(e.target.value) || 20000; saveMeta(); });
   renderQueue();
   // autostart: with the machine switched on (and the page isolated), boot it now
-  if (vmWanted() && vmReady() && state.meta.settings.vmAutostart !== false) setTimeout(() => vm().run('true', 300, { quiet: true, label: 'autostart' }).catch(() => {}), 1500);
+  // autostart: the machine tab always; another tab only when no tab runs it yet
+  if (vmWanted() && vmReady() && (MACHINE_TAB || state.meta.settings.vmAutostart !== false)) setTimeout(async () => { const v = vm(); const h0 = await v.who().catch(() => null); if (MACHINE_TAB && h0 && !/ready|booting|loading|downloading|waiting/.test(h0.status)) await v.takeOver().catch(() => {}); if (MACHINE_TAB || !h0) v.run('true', 300, { quiet: true, label: 'autostart' }).catch(() => {}); else { v.connect().catch(() => {}); } }, 1500);
+  $('#machine').addEventListener('click', e => { const j = e.target.dataset?.job; if (j) { vmInst?.cancel(j); setTimeout(renderJobs, 500); } });
+  if (MACHINE_TAB) { document.title = 'WebHarness · machine'; app.setAttribute('data-machine-tab', ''); setPane('machine'); }
+  checkPublished(); setInterval(checkPublished, 5 * 60e3); addEventListener('visibilitychange', () => { if (!document.hidden) checkPublished(); });
+  setTimeout(finishUpdate, 1200);
+  globalThis.whDebug = { vm, co: () => co, tab: TAB, owns, userOf: id => userOf(state.sessions[id]) }; // scripted checks (smoke suites, drive.mjs)
+  renderCoord();
   // conditions checked at start: a credential never checked, or not for a week
   if ((state.keys.github || state.keys.ghapp) && Date.now() - (state.meta.settings.ghScopeAt || 0) > 7 * 864e5) enqueue({ type: 'scope-check', targets: [{ kind: 'credential', id: gh.mode() || 'github', label: 'GitHub credential' }], reason: { kind: state.meta.settings.ghScopeAt ? 'stale' : 'never checked', detail: state.meta.settings.ghScopeAt ? 'last checked over a week ago' : 'the credential has not been checked against its intended use' } });
   for (const id of ['#ghintent', '#ghpulls', '#ghcreate']) $(id).addEventListener('change', readIntent);
@@ -2135,6 +2174,9 @@ export function boot(env) {
   applyInspector();
   bind();
   uptext();
+  { let ta = ''; try { ta = sessionStorage.getItem('wh:tab-active') || ''; } catch {} const want = QS.get('s') || ta; if (state.sessions[want]) state.meta.active = want; }
+  co = coordinator({ tab: TAB, version: VERSION, describe: () => ({ machine: vmInst?.role() || 'idle', dedicated: MACHINE_TAB, session: state.meta.active, build: bootEnv?.build || '' }), onChange: renderCoord, onReload: x => onCoordReload(x) });
+  addEventListener('storage', adopt);
   if (!state.sessions[state.meta.active]) state.meta.active = state.meta.order[0] || '';
   state.meta.active ? activate(state.meta.active) : showEmpty();
   loadModels();
@@ -2146,7 +2188,16 @@ export function boot(env) {
 
 // per session, for this page load (the machine starts fresh on reload)
 const fsState = new Map(); // sessionId -> {mark: seconds, base: Map(path -> row)}
-const pinsOf = s => s?.pins?.length ? s.pins : ['/root'];
+// Each top-level session (with its branches) is its own unix user on the machine,
+// home /home/<user> (700), with a size quota; "root" runs as root in /root.
+const userOf = s => {
+  if (!s || cfg(s).machineUser === 'root') return '';
+  let r = s; while (r.parent && state.sessions[r.parent.id]) r = state.sessions[r.parent.id];
+  return 'u' + r.id.slice(-8).toLowerCase().replace(/[^a-z0-9]/g, '');
+};
+const homeOf = s => userOf(s) ? '/home/' + userOf(s) : '/root';
+const shellOpt = s => s ? { user: userOf(s), quotaMB: Number(cfg(s).machineQuota ?? 200) || 0, session: s.id } : {};
+const pinsOf = s => s?.pins?.length ? s.pins : [homeOf(s)];
 async function fsMark(s) {
   if (fsState.has(s.id)) return fsState.get(s.id);
   const st = { mark: 0, base: new Map() };
@@ -2270,28 +2321,36 @@ async function openExplorer() {
 // session "agent": typed into its pane, output recorded from the pane, completion
 // signalled with tmux wait-for. The person can watch the pane and type into it.
 const TMUX = 'agent';
-let tmuxReady = null;
+const tmuxReady = new Map(); // user -> promise
 const shq = t => "'" + String(t).replace(/'/g, "'\\''") + "'";
-function ensureTmux() {
-  return tmuxReady ??= vm().run(`command -v tmux >/dev/null || wh-install tmux; tmux has-session -t ${TMUX} 2>/dev/null || tmux new-session -d -s ${TMUX} -x 160 -y 48; tmux set -g history-limit 5000 >/dev/null; echo tmux-ok`, 300, { quiet: true, label: 'start the agent pty (tmux)' })
-    .then(r => { if (!/tmux-ok/.test(r.out)) { tmuxReady = null; throw new Error('tmux did not start: ' + r.out.slice(-200)); } });
+const INSTALL_ONLY = /^\s*wh-install(\s+[\w.+-]+)+\s*$/;
+function ensureTmux(o = {}) {
+  const k = o.user || '';
+  if (!tmuxReady.has(k)) tmuxReady.set(k, (async () => {
+    await vm().run('command -v tmux >/dev/null || wh-install tmux', 300, { quiet: true, label: 'install tmux' });
+    const r = await vm().run(`tmux has-session -t ${TMUX} 2>/dev/null || tmux new-session -d -s ${TMUX} -x 160 -y 48; tmux set -g history-limit 5000 >/dev/null; echo tmux-ok`, 120, { ...o, quiet: true, label: 'start the agent pty (tmux)' + (k ? ' for ' + k : '') });
+    if (!/tmux-ok/.test(r.out)) throw new Error('tmux did not start: ' + r.out.slice(-200));
+  })().catch(e => { tmuxReady.delete(k); throw e; }));
+  return tmuxReady.get(k);
 }
-async function agentRun(cmd, timeoutS) {
-  await ensureTmux();
-  const id = Math.random().toString(36).slice(2, 10), d = '/tmp/.wh';
+async function agentRun(cmd, timeoutS, o = {}) {
+  await ensureTmux(o);
+  const id = Math.random().toString(36).slice(2, 10), d = '$HOME/.wh';
   const script = `mkdir -p ${d}; cat > ${d}/c-${id}.sh <<'WH_EOF_${id}'\n${cmd}\nWH_EOF_${id}\n: > ${d}/o-${id}\n`
-    + `tmux pipe-pane -t ${TMUX} -o ${shq(`cat >> ${d}/o-${id}`)}\n`
-    + `tmux send-keys -t ${TMUX} ${shq(`bash ${d}/c-${id}.sh; echo $? > ${d}/r-${id}; tmux wait-for -S d-${id}`)} Enter\n`
+    + `tmux pipe-pane -t ${TMUX} -o "cat >> ${d}/o-${id}"\n`
+    + `tmux send-keys -t ${TMUX} "bash ${d}/c-${id}.sh; echo \\$? > ${d}/r-${id}; tmux wait-for -S d-${id}" Enter\n`
     + `timeout ${timeoutS} tmux wait-for d-${id} || { tmux send-keys -t ${TMUX} C-c; sleep 1; echo "[timed out after ${timeoutS}s; interrupted]" >> ${d}/o-${id}; }\n`
     + `tmux pipe-pane -t ${TMUX}\n`
     + `sed -e 's/\\x1b\\[[0-9;?]*[ -\\/]*[@-~]//g' -e 's/\\x1b[()][0-9A-B]//g' -e 's/\\r//g' ${d}/o-${id} | grep -v ${shq(`c-${id}.sh`)}\n`
-    + `exit $(cat ${d}/r-${id} 2>/dev/null || echo 124)`;
-  const r = await vm().run(script, timeoutS + 30, { display: cmd });
+    + `s=$(cat ${d}/r-${id} 2>/dev/null || echo 124); rm -f ${d}/?-${id}*; exit $s`;
+  const r = await vm().run(script, timeoutS + 30, { ...o, display: cmd });
   return { ...r, timedOut: /\[timed out after \d+s; interrupted\]/.test(r.out) || r.timedOut };
 }
-// what the shell tool runs on: the plain shell, or the agent pty
-function shellRunner() {
-  return state.meta.settings.vmTmux ? { run: (cmd, t) => agentRun(cmd, t) } : vm();
+// what the shell tool runs on for a session: its own user, plain or in its agent pty
+// (installing a package is one command of its own, run as root)
+function shellRunner(s) {
+  const o = shellOpt(s);
+  return { run: (cmd, t, opt = {}) => INSTALL_ONLY.test(cmd) ? vm().run(cmd, t, { ...opt, session: s.id }) : state.meta.settings.vmTmux ? agentRun(cmd, t, o) : vm().run(cmd, t, { ...o, ...opt }) };
 }
 
 // ---------- machine status: what is on, what is missing, and why ----------
@@ -2307,6 +2366,8 @@ async function machineDiag() {
     ['this session has the shell tool', !!s?.tools?.includes('vm'), s?.tools?.includes('vm') ? 'yes' : 'no: System prompt → "Linux machine (shell tool)" switch, or a new session'],
     ['its scope allows the machine', !!e?.caps.vm, e?.caps.vm ? 'yes' : `no: denied by ${e?.capFrom.vm || 'its profile'}`],
     ['machine started', !!vmInst && /ready/.test(vmInst.status()), vmInst ? vmInst.status() : 'not yet: it starts when a session first uses it, or with "start now"'],
+    ['runs in', true, !vmInst || vmInst.role() === 'idle' ? 'whichever tab needs it first (or open a machine tab)' : vmInst.role() === 'host' ? (MACHINE_TAB ? 'this machine tab' : 'this tab: closing or reloading it stops the machine (homes are saved for an update)') : `another tab (${vmInst.host()?.dedicated ? 'the machine tab' : 'tab ' + vmInst.host()?.tab}, build ${vmInst.host()?.version || '?'})`],
+    ['this session’s user', true, s ? (userOf(s) ? `${userOf(s)} (home ${homeOf(s)}, quota ${shellOpt(s).quotaMB || 'none'} MB)` : 'root (/root)') : '-'],
   ];
   const box = $('#vmdiag');
   const start = btn('start now', { class: 'primary' });
@@ -2315,8 +2376,144 @@ async function machineDiag() {
   const recheck = btn('check again'); recheck.onclick = () => machineDiag();
   box.replaceChildren(h('div', { class: 'sgroup' }, h('div', { class: 'shead' }, h('span', { text: 'Machine' }), h('span', { class: 'note', text: rows.every(r => r[1]) ? 'ready' : 'what it needs, for this session' })),
     ...rows.map(([label, ok, detail]) => h('div', { class: 'vrow', 'data-ok': String(!!ok) }, h('span', { class: 'vmark', text: ok ? '✓' : '·' }), h('span', { class: 'slabel', text: label }), h('span', { class: 'vdetail', text: detail })))),
-    h('div', { class: 'cfgbar' }, start, recheck, btn('explore files', { 'data-act': 'explore' })));
+    h('div', { class: 'cfgbar' }, start, recheck, btn('explore files', { 'data-act': 'explore' }),
+      MACHINE_TAB ? '' : btn('open a machine tab', { 'data-act': 'machinetab', title: 'A tab that only runs the machine: sessions in other tabs share it, and it stays up through site updates' }),
+      vmInst?.role() === 'client' ? btn('move it to this tab', { 'data-act': 'vmhere', title: 'The machine saves its homes, stops there and starts here with them' }) : '',
+      vmInst?.role() === 'host' && /ready/.test(vmInst.status()) ? btn('save homes now', { 'data-act': 'vmsave', title: 'Kept in this browser; restored by the next start' }) : ''),
+    h('div', { id: 'vmjobs' }));
+  renderJobs();
   return rows;
+}
+
+// running commands across every tab's sessions, with a stop button each
+async function renderJobs() {
+  const box = $('#vmjobs');
+  if (!box || !vmInst || vmInst.role() === 'idle') return;
+  const jobs = await vmInst.jobs().catch(() => []);
+  box.replaceChildren(...(jobs.length ? [h('div', { class: 'shead' }, h('span', { text: 'Running now' }), h('span', { class: 'note', text: String(jobs.length) })),
+    ...jobs.map(j => h('div', { class: 'jrow' }, h('span', { class: 'vmark', text: '▸' }), h('span', { class: 'slabel', text: (j.user || 'root') + (j.session && state.sessions[j.session] ? ' · ' + state.sessions[j.session].title : '') }), h('span', { class: 'vdetail', text: `${Math.round(j.ms / 1000)} s · ${String(j.label || j.cmd).slice(0, 120)}` }), btn('stop', { 'data-job': j.id })))] : []));
+  if (jobs.length && state.meta.settings.pane === 'machine') { clearTimeout(renderJobs.t); renderJobs.t = setTimeout(renderJobs, 2000); }
+}
+
+// ---------- one session per tab, and every tab together (coord.js) ----------
+
+// A session runs in one tab at a time: the tab holding the Web Lock "wh-s:<id>".
+// Another tab shows it read-only, follows it through storage events, and can take it over.
+const owned = new Map(), foreign = new Set(); // session id -> release; sessions another tab holds
+const owns = id => !foreign.has(id); // a claim still being granted counts as ours
+function setReadOnly(id, on) {
+  if (state.meta.active !== id) return;
+  app.toggleAttribute('data-readonly', on);
+  $('#rohint').hidden = !on;
+  if (on) slot($('#rotext'), 'This session is open in another tab, which runs it; this view follows it.');
+}
+function claimSession(id, steal = false) {
+  for (const [k, rel] of [...owned]) if (k !== id && k !== runningId) { rel(); owned.delete(k); }
+  if (owned.has(id) || !navigator.locks) { setReadOnly(id, false); continueGated(); return; }
+  navigator.locks.request('wh-s:' + id, steal ? { steal: true } : { ifAvailable: true }, lock => {
+    if (!lock) { foreign.add(id); setReadOnly(id, true); return; }
+    foreign.delete(id); setReadOnly(id, false);
+    setTimeout(continueGated, 0);
+    return new Promise(r => owned.set(id, r));
+  }).catch(() => { owned.delete(id); foreign.add(id); if (runningId === id) ctl?.abort(); setReadOnly(id, true); }); // taken over by another tab
+}
+// another tab saved: take its version of what this tab does not own
+function adopt(e) {
+  if (!e.newValue) return;
+  let v; try { v = JSON.parse(e.newValue); } catch { return; }
+  if (e.key === 'wh:meta') {
+    const active = state.meta.active;
+    state.meta = { ...v, active, settings: { provider: 'openrouter', model: '', inspector: true, ...v.settings } };
+    for (const id of state.meta.order) if (!state.sessions[id]) { try { const x = JSON.parse(localStorage.getItem('wh:s:' + id)); if (x) state.sessions[id] = x; } catch {} }
+    redrawSessions(); renderPads();
+  } else if (e.key.startsWith('wh:s:') && v?.id && !owned.has(v.id)) {
+    state.sessions[v.id] = v;
+    $(`.thread[data-session="${v.id}"]`)?.remove();
+    if (state.meta.active === v.id) { thread(v); scrollDown(); }
+  }
+}
+// a session stopped at a halt gate continues once the halt is off (also after a reload)
+function continueGated() {
+  const s = cur();
+  if (!s?.resume || busy || co?.halted() || !owns(s.id)) return;
+  delete s.resume; saveSession(s);
+  notice(s, 'Continuing from the gate where the halt stopped this session.');
+  run(s);
+}
+function renderCoord() {
+  if (!co || !app) return;
+  const h0 = co.halted(), tabs = co.tabs();
+  const waiting = tabs.reduce((n, t) => n + (t.waiting?.length || 0), 0), running = tabs.filter(t => t.active > 0).length;
+  $('[data-act=haltall]').hidden = !!h0; $('[data-act=stepall]').hidden = !h0 || h0.mode === 'update'; $('[data-act=resumeall]').hidden = !h0;
+  const st = $('#coordstat');
+  slot(st, `${tabs.length} tab${tabs.length === 1 ? '' : 's'}${h0 ? ` · halted (${h0.reason}) · ${waiting} at a gate · ${running} finishing` : running ? ` · ${running} running` : ''}`);
+  st.title = tabs.map(t => `${t.tab === TAB ? 'this tab' : t.tab}: v${t.version}${t.dedicated ? ' (machine tab)' : ''}${t.machine === 'host' ? ' · runs the machine' : ''} · ${t.active} running · ${t.waiting?.length || 0} at a gate${t.session && state.sessions[t.session] ? ' · ' + state.sessions[t.session].title : ''}`).join('\n');
+  if (!h0) continueGated();
+}
+let pub = null;
+async function checkPublished() {
+  const v = await published(); if (!v) return;
+  pub = v;
+  const newer = (v.build && bootEnv?.build && v.build !== bootEnv.build) || (v.version && v.version !== VERSION);
+  const b = $('#updbtn'); if (!b) return;
+  b.hidden = !newer || MACHINE_TAB;
+  if (newer) { slot(b, `update to v${v.version}`); b.title = `Published: v${v.version}${v.build ? ' (' + v.build.slice(0, 7) + ')' : ''}; this tab runs v${VERSION}. Halts every session at a safe point, reloads the tabs, and continues.`; }
+}
+// The update: halt everything at the request gate, wait until every tab is at
+// rest, save and restart the machine only when its protocol changed, reload the
+// tabs onto the new build; the first tab on the new build resumes (finishUpdate).
+async function updateAll() {
+  const v = pub || await published();
+  if (!v) return;
+  const hostProto = vmInst?.role() === 'host' ? MPROTO : vmInst?.host()?.proto;
+  const restartMachine = hostProto != null && Number(v.machine ?? MPROTO) !== hostProto;
+  const dedicated = vmInst?.role() === 'client' && vmInst.host()?.dedicated;
+  const ok = await modal({ title: `Update every tab to v${v.version}`, body: `Every session stops at its next model request (tool calls already running finish first). Then the tabs reload onto the new build and the stopped sessions go on. ${restartMachine ? 'The machine has to restart for this build: its homes are saved (up to 4 MB) and put back.' : dedicated ? 'The machine tab keeps running; the machine is not touched.' : vmInst && vmInst.role() !== 'idle' ? 'The machine runs in a session tab, so it restarts with that tab: its homes are saved (up to 4 MB) and put back. A machine tab avoids this.' : ''}`, actions: [{ text: 'Cancel', value: false, cancel: true }, { text: 'Update', value: true, primary: true }] });
+  if (!ok) return;
+  co.halt(`update to v${v.version}`, 'update', { to: v.version, build: v.build || '', restartMachine });
+  const t0 = Date.now();
+  for (;;) {
+    const tabs = await co.poll(600), busyTabs = tabs.filter(t => t.active > 0);
+    slot($('#coordstat'), `updating: waiting for ${busyTabs.length} tab${busyTabs.length === 1 ? '' : 's'} to reach a safe point`);
+    if (!busyTabs.length) break;
+    if (Date.now() - t0 > 600e3) {
+      const go = await modal({ title: 'Some tabs are still running', body: busyTabs.map(t => `${t.tab}: ${t.active} running`).join('\n') + '\n\nA tool call can run up to its own timeout.', actions: [{ text: 'Keep waiting', value: false }, { text: 'Reload anyway', value: true, primary: true }] });
+      if (go) break;
+    }
+    await new Promise(r => setTimeout(r, 1000));
+  }
+  co.reload({ restartMachine });
+  await onCoordReload({ restartMachine });
+}
+async function onCoordReload(x) {
+  if (vmInst?.role() === 'host' && /ready|booting|loading|downloading|waiting/.test(vmInst.status())) {
+    if (MACHINE_TAB && !x.restartMachine) { slot($('#vmstat'), 'Machine: kept running through the update'); return; }
+    slot($('#vmstat'), 'Machine: saving the homes before the reload');
+    await vmInst.restart().catch(() => {});
+  }
+  location.reload();
+}
+// after a reload: the first tab on the new build waits for the others, then resumes
+async function finishUpdate() {
+  const h0 = co.halted();
+  if (h0?.mode !== 'update') return;
+  if (h0.to !== VERSION) {
+    let tried = false; try { tried = sessionStorage.getItem('wh:upd-retry') === h0.id; sessionStorage.setItem('wh:upd-retry', h0.id); } catch {}
+    if (!tried && !MACHINE_TAB) { location.reload(); return; }
+    slot($('#coordstat'), `this tab loaded v${VERSION}, the update is to v${h0.to}: reload it`);
+    return;
+  }
+  if (!navigator.locks) return co.resume();
+  await navigator.locks.request('wh-coord-lead', { ifAvailable: true }, async lock => {
+    if (!lock) return;
+    for (let i = 0; i < 90 && co.halted()?.id === h0.id; i++) {
+      const tabs = await co.poll(800);
+      const behind = tabs.filter(t => t.version !== h0.to && !(t.dedicated && !h0.restartMachine));
+      if (!behind.length) { co.resume(); return; }
+      slot($('#coordstat'), `updating: ${behind.length} tab${behind.length === 1 ? '' : 's'} not on v${h0.to} yet`);
+      await new Promise(r => setTimeout(r, 1000));
+    }
+  });
 }
 
 // ---------- the Linux machine (vm.js) ----------
@@ -2326,11 +2523,20 @@ async function machineDiag() {
 let vmInst = null;
 function vm() {
   if (vmInst) return vmInst;
-  vmInst = machine({
-    token: gh.token, trace,
-    onStatus: t => { slot($('#vmstat'), 'Machine: ' + t); link?.emit('notice', { session: 'machine', text: t }); machineDiag(); },
-    showHarness: () => !!state.meta.settings.vmShowHarness,
-    mount(type) {
+  vmInst = sharedMachine({
+    tab: TAB, dedicated: MACHINE_TAB, info: () => ({ version: VERSION }),
+    local: cb => machine({ token: gh.token, trace, onStatus: cb.onStatus, showHarness: () => !!state.meta.settings.vmShowHarness }),
+  });
+  vmInst.onStatus(t => { slot($('#vmstat'), 'Machine: ' + t + (vmInst.role() === 'client' ? ' (in another tab)' : '')); link?.emit('notice', { session: 'machine', text: t }); machineDiag(); });
+  vmInst.onRole(() => { machineDiag(); co?.announce(); });
+  mountMachine();
+  return vmInst;
+}
+// The Machine pane's terminal: the same in every tab (the host's bytes come over the channel).
+function mountMachine() {
+  const type = d => vmInst.send(d);
+  {
+    {
       const box = $('#vmterm');
       // Terminal: what went in and what came out, in order. Harness activity: its own list.
       const term = h('div', { class: 'vmout', role: 'log', 'aria-label': 'terminal' });
@@ -2341,12 +2547,12 @@ function vm() {
       let ptyTimer = null;
       const ptyPoll = async () => {
         if (ptyView.hidden) { ptyTimer = null; return; }
-        try { await ensureTmux(); const r = await vm().run(`tmux capture-pane -p -t ${TMUX} -S -200`, 20, { quiet: true, silent: true }); ptyView.textContent = r.out.replace(/\x1b\[[0-9;?]*[ -\/]*[@-~]|\r/g, ''); ptyView.scrollTop = ptyView.scrollHeight; }
+        try { const o = shellOpt(cur()); await ensureTmux(o); const r = await vm().run(`tmux capture-pane -p -t ${TMUX} -S -200`, 20, { ...o, quiet: true, silent: true }); ptyView.textContent = r.out.replace(/\x1b\[[0-9;?]*[ -\/]*[@-~]|\r/g, ''); ptyView.scrollTop = ptyView.scrollHeight; }
         catch (e) { ptyView.textContent = 'The agent pty is not available: ' + (e.message || e); }
         ptyTimer = setTimeout(ptyPoll, 1500);
       };
-      ptyIn.addEventListener('keydown', async e => { if (e.key === 'Enter') { const v = ptyIn.value; ptyIn.value = ''; await ensureTmux(); await vm().run(`tmux send-keys -t ${TMUX} -l ${shq(v)}; tmux send-keys -t ${TMUX} Enter`, 20, { quiet: true, label: 'typed into the agent pty' }); } });
-      ptyBar.addEventListener('click', async e => { const k = e.target.dataset?.pty; if (k) { await ensureTmux(); await vm().run(`tmux send-keys -t ${TMUX} ${k}`, 20, { quiet: true, label: 'sent ' + k + ' to the agent pty' }); } });
+      ptyIn.addEventListener('keydown', async e => { if (e.key === 'Enter') { const v = ptyIn.value; ptyIn.value = ''; const o = shellOpt(cur()); await ensureTmux(o); await vm().run(`tmux send-keys -t ${TMUX} -l ${shq(v)}; tmux send-keys -t ${TMUX} Enter`, 20, { ...o, quiet: true, label: 'typed into the agent pty' }); } });
+      ptyBar.addEventListener('click', async e => { const k = e.target.dataset?.pty; if (k) { const o = shellOpt(cur()); await ensureTmux(o); await vm().run(`tmux send-keys -t ${TMUX} ${k}`, 20, { ...o, quiet: true, label: 'sent ' + k + ' to the agent pty' }); } });
       ptyBar.querySelector('#vmtmux').addEventListener('change', e => { state.meta.settings.vmTmux = e.target.checked; saveMeta(); });
       const nAct = h('span', { class: 'count slot' });
       tabH.append(' ', nAct);
@@ -2373,14 +2579,13 @@ function vm() {
         for (const l of parts) {
           const rt = /__WH_RUNTIME_POLICY (\S+) (.*?)__/.exec(l);
           if (rt) { addAct(`policy ${rt[1]}: refused ${rt[2]}`, '', 'policy'); if (!raw.checked) continue; }
-          if (!raw.checked && /__WH_[A-Za-z0-9]+_(\d+|up|down|\$\?)__|__WH_UP_|__WH_NET_/.test(l)) continue;
+          if (!raw.checked && /__WH_\w+__|__WH_UP_|__WH_NET_|\/var\/wh\/|^\s*stty -echo/.test(l)) continue; // plumbing (the guest echoes what is typed)
           put(seg.k === 'raw' ? 'vmline vmraw' : 'vmline', l);
         }
       });
       return term;
-    },
-  });
-  return vmInst;
+    }
+  }
 }
 
 // ---------- log repo (logrepo.js) ----------

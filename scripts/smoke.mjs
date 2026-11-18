@@ -549,6 +549,66 @@ check('newer-schema data: build refuses to start', /schema 99/.test(await page.l
 await page.evaluate(() => { const m = JSON.parse(localStorage['wh:meta']); m.schema = 1; localStorage['wh:meta'] = JSON.stringify(m); });
 await page.reload();
 
+// ---- tabs: one session per tab, every tab halts, steps and resumes together ----
+{
+  await page.click('[data-act=new]');
+  await say('tab test one');
+  const sid = await page.evaluate(() => JSON.parse(localStorage['wh:meta']).active || document.querySelector('.thread:not([style*=none])')?.dataset.session);
+  const activeId = await page.evaluate(() => { try { return sessionStorage.getItem('wh:tab-active'); } catch { return ''; } });
+  const p2 = await bctx.newPage();
+  p2.on('pageerror', e => errors.push('tab2: ' + e));
+  await p2.goto(url + '?s=' + activeId);
+  await p2.waitForSelector('#app #composer', { state: 'attached' });
+  await p2.waitForFunction(() => !document.querySelector('#rohint').hidden, null, { timeout: 5000 }).catch(() => {});
+  check('tabs: a session open in another tab is read-only here, and says so', await p2.isVisible('#rohint') && /another tab/.test(await p2.evaluate(async () => (await import('./app/styles.js')).slotText(document.querySelector('#rotext')))));
+  await p2.waitForFunction(() => /2 tabs/.test(document.querySelector('#coordstat')?.getAttribute('data-v') || ''), null, { timeout: 5000 }).catch(() => {});
+  check('tabs: each tab counts the others', /2 tabs/.test(await slotOf('#coordstat')));
+  // a reply written in tab 1 shows in tab 2 (storage events)
+  await say('tab test two');
+  await p2.waitForFunction(() => /tab test two/.test(document.querySelector('.thread:not([style*="display: none"])')?.textContent || [...document.querySelectorAll('.thread')].map(t => t.textContent).join()), null, { timeout: 5000 }).catch(() => {});
+  check('tabs: the other tab follows the session as it runs', await p2.evaluate(id => [...document.querySelectorAll(`.thread[data-session="${id}"] .msg`)].some(m => /tab test two/.test(m.textContent)), activeId));
+  // halt from tab 2: tab 1's turn stops before its model request
+  await p2.click('[data-act=haltall]');
+  await page.waitForFunction(() => !document.querySelector('[data-act=resumeall]').hidden, null, { timeout: 5000 });
+  const n0 = await visible().locator('.msg[data-role=assistant]').count();
+  await page.fill('#input', 'held by a halt'); await page.click('#send');
+  await page.waitForSelector('#app[data-busy]', { state: 'attached' });
+  await page.waitForTimeout(800);
+  check('halt: a turn waits at the gate before its model request, in another tab too', await page.evaluate(() => document.querySelector('#app').hasAttribute('data-busy')) && await visible().locator('.msg[data-role=assistant]').count() === n0 && /1 at a gate/.test(await p2.evaluate(async () => (await import('./app/styles.js')).slotText(document.querySelector('#coordstat')))));
+  await p2.click('[data-act=stepall]');
+  await page.waitForSelector('#app:not([data-busy])', { state: 'attached', timeout: 10000 });
+  check('step: one step through every gate, then the turn ends normally', await visible().locator('.msg[data-role=assistant]').count() === n0 + 1);
+  // halted turn survives a reload and continues on resume
+  await page.fill('#input', 'held across a reload'); await page.click('#send');
+  await page.waitForSelector('#app[data-busy]', { state: 'attached' });
+  await page.waitForTimeout(500);
+  check('halt: the waiting session is marked to continue', await page.evaluate(id => JSON.parse(localStorage['wh:s:' + id]).resume === 'request', activeId));
+  await page.reload();
+  await page.waitForSelector('#app #composer', { state: 'attached' });
+  await page.waitForTimeout(500);
+  const n1 = await visible().locator('.msg[data-role=assistant]').count();
+  await p2.click('[data-act=resumeall]');
+  await page.waitForFunction(n => document.querySelectorAll('.thread:not([style*="display: none"]) .msg[data-role=assistant]').length > n || [...document.querySelectorAll('.msg[data-role=error]')].some(e => /Continuing from the gate/.test(e.textContent)), n1, { timeout: 10000 });
+  await page.waitForSelector('#app:not([data-busy])', { state: 'attached', timeout: 10000 });
+  check('resume: after a reload the session goes on from its gate', /Continuing from the gate/.test(await visible().textContent()) && await page.evaluate(id => !JSON.parse(localStorage['wh:s:' + id]).resume, activeId));
+  // update: a newer published build halts, reloads every tab, and the new build resumes
+  await bctx.route('**/version.json*', r => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ version: '9.9.9', build: '', machine: 1 }) }));
+  await page.reload(); await page.waitForSelector('#app #composer', { state: 'attached' });
+  await page.waitForFunction(() => !document.querySelector('#updbtn').hidden, null, { timeout: 5000 });
+  check('update: a newer published build is offered', /update to v9\.9\.9/.test(await slotOf('#updbtn')));
+  const reloaded = p2.waitForEvent('load', { timeout: 15000 }).then(() => true).catch(() => false);
+  await page.click('#updbtn');
+  await page.waitForSelector('.modal .primary'); await page.click('.modal .primary');
+  check('update: every tab reloads once all are at rest', await reloaded);
+  await p2.waitForSelector('#app #composer', { state: 'attached' });
+  await p2.waitForFunction(() => /update is to v9\.9\.9/.test(document.querySelector('#coordstat')?.getAttribute('data-v') || ''), null, { timeout: 15000 }).catch(() => {});
+  check('update: a tab that still has the old build stays halted and says so (no resume on a mixed set)', /update is to v9\.9\.9/.test(await p2.evaluate(async () => (await import('./app/styles.js')).slotText(document.querySelector('#coordstat')))) && await p2.evaluate(() => JSON.parse(localStorage['wh:coord']).halt?.mode === 'update'));
+  await bctx.unroute('**/version.json*');
+  await p2.click('[data-act=resumeall]');
+  await p2.close();
+  await page.waitForTimeout(300);
+}
+
 check('layout: the page itself does not scroll', await page.evaluate(() => document.documentElement.scrollHeight <= innerHeight && scrollY === 0));
 if (shot) await page.screenshot({ path: shot });
 check('no page errors', errors.filter(e => !/schema 99|ERR_TUNNEL|Failed to load resource/.test(e)).length === 0, errors.join(' | '));

@@ -35,6 +35,17 @@ jobs:
             git reset -q
             ls -la app/vm/image
           fi
+      # Every build is also served from b/<commit>/ (code only; the machine's files
+      # stay in app/vm/), and version.json names it: index.html loads exactly that
+      # build, and open tabs see that a newer one is published.
+      - name: Versioned build
+        run: |
+          V=$(grep -oP "VERSION = '\K[^']+" app/main.js)
+          P=$(grep -oP 'MPROTO = \K[0-9]+' app/vmhost.js)
+          mkdir -p "b/$GITHUB_SHA"
+          cp app/*.js app/*.css "b/$GITHUB_SHA/"
+          printf '{"version":"%s","build":"%s","machine":%s}\n' "$V" "$GITHUB_SHA" "$P" > version.json
+          cat version.json
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

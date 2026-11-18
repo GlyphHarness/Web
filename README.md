@@ -303,6 +303,10 @@ Settings → "Linux machine" gives new sessions a `shell` tool: an x86_64 Alpine
 - **State:** the machine persists for the page load and is shared by the sessions that have the tool. A reload starts a fresh machine.
 - **Image:** built with `c2w` from `Dockerfile` (Alpine + packages), split by `scripts/vm-pack.mjs`, kept on the `vm-image` branch and copied in by the Pages workflow. `node scripts/smoke-vm.mjs` runs it end to end (needs `app/vm/image/`).
 
+### Tabs, the shared machine, halts and updates
+
+Open a session in a tab of its own (↗ on its row) to run sessions in parallel; one tab hosts the machine for all of them (or a dedicated machine tab, `?machine`, that stays up through site updates). Each session is its own unix user with a 700 home and a size quota; commands run as concurrent jobs. **halt all / step / resume** move every session in every tab together, stopping at the gate before a model request (a state that survives a reload). **update to vX** appears when a newer build is published: every tab halts at a safe point, reloads onto the new build (served from `b/<commit>/`, named in `version.json`), and the halted sessions continue; the machine restarts only when its protocol changed, with the homes saved and restored. Details: [docs/TABS.md](docs/TABS.md).
+
 ### Debug bridge
 
 Opening the page with `#bridge=<owner/repo>~<branch>~<key>` connects it to an agent running `scripts/bridge.mjs`. The channel is a git branch: the page commits encrypted batches to `up/` through the API with your GitHub token; the agent pushes directives to `down/` with plain git; the page polls with ETags (304s are free). Payloads are AES-GCM; the key exists only in the fragment, which is moved to sessionStorage and removed from the address bar.

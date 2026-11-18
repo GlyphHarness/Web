@@ -387,3 +387,15 @@ ol.xlines li::marker { color: var(--dim); font-size: 10px; }
 .targets input { width: 100%; font-size: 12px; }
 .targets-t td[data-met=true] { color: var(--ok); }
 .targets-t td[data-met=false] { color: var(--bad); font-weight: 600; }
+
+/* every tab together (coord.js) and one session per tab */
+.coord { display: inline-flex; gap: 4px; align-items: center; }
+.coord .note { font-size: 12px; }
+#updbtn { font-size: 12px; }
+#rohint { margin: 0; padding: 4px 10px; border-bottom: 1px solid var(--line); background: var(--sel); }
+#app[data-readonly] #composer { opacity: .5; pointer-events: none; }
+#sessions [data-act=newtab] { opacity: .5; }
+#sessions [data-act=newtab]:hover { opacity: 1; }
+#app[data-machine-tab] #composer, #app[data-machine-tab] #threads { display: none; }
+#vmjobs .jrow { display: flex; gap: 8px; align-items: baseline; font-size: 12px; }
+#vmjobs .jrow button { margin-left: auto; }

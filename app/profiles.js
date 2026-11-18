@@ -3,7 +3,8 @@
 // have a parent, and what a session can use is resolved down that chain.
 //
 // profile = {id, name, parent, color,
-//   settings: {model, helper, policyModel, pace, branchBudget}   (absent = inherit)
+//   settings: {model, helper, policyModel, pace, branchBudget, logRepo, logTranscripts,
+//              machineUser: 'session'|'root', machineQuota: MB}   (absent = inherit)
 //   caps: {run_js, fanout, ask, vm: bool, repo: 'none'|'read'|'write'}   (absent = inherit)
 //   repos: ['owner/*', 'owner/name']   (absent or empty = inherit)
 //   policies: [{name, tool, pattern, flags, rule, on}]   (added to the inherited ones)
@@ -14,11 +15,11 @@
 // a repo must be allowed by every profile in the chain that lists repos;
 // policies accumulate, and a lower profile cannot replace an ancestor's policy.
 
-export const SETTING_KEYS = ['model', 'helper', 'policyModel', 'pace', 'branchBudget', 'logRepo', 'logTranscripts'];
+export const SETTING_KEYS = ['model', 'helper', 'policyModel', 'pace', 'branchBudget', 'logRepo', 'logTranscripts', 'machineUser', 'machineQuota'];
 // Who an attribute is for. harness: configuration the harness uses on the session's
 // behalf; it never appears in anything the model reads. tools: shapes the model's
 // tool list (the model sees the tools, not the setting).
-export const AUDIENCE = { model: 'harness', helper: 'harness', policyModel: 'harness', pace: 'harness', branchBudget: 'harness', logRepo: 'harness', logTranscripts: 'harness', run_js: 'tools', fanout: 'tools', ask: 'tools', vm: 'tools', repo: 'tools' };
+export const AUDIENCE = { model: 'harness', helper: 'harness', policyModel: 'harness', pace: 'harness', branchBudget: 'harness', logRepo: 'harness', logTranscripts: 'harness', machineUser: 'harness', machineQuota: 'harness', run_js: 'tools', fanout: 'tools', ask: 'tools', vm: 'tools', repo: 'tools' };
 export const CAP_KEYS = ['run_js', 'fanout', 'ask', 'vm', 'repo'];
 const REPO_RANK = { none: 0, read: 1, write: 2 };
 const ALL = { run_js: true, fanout: true, ask: true, vm: true, repo: 'write' };
