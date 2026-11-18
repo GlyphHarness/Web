@@ -19,17 +19,25 @@ Origins: `L` = glyphcore/lodestar (`CLAUDE.md`, `docs/design/`), `S` = glyphcore
 | 9 | **Graft by handle.** A fold carries its branch id; the full transcript is fetched only on demand. | `foldTag`, `branch_read` | L7, L5 |
 | 10 | **Siblings wait for the first cache write.** The first branch goes out alone until its response starts. | `fanOut` (`warm`) | W |
 | 11 | **Forward-only data.** Schema number, migration steps never edited, newer data refuses to load. | `migrate.js`; smoke test "newer-schema data" | W |
+| 13 | **Nothing is lost, nothing is re-run.** A tool result over 1,500 chars is stored whole under a content handle; the log gets a short view and the handle. | `outstore.js` `view`, `output_read`; smoke tests "output store" | L5, L `output-store.md` |
+| 14 | **Branches are budgeted.** A fan_out branch stops when its prompt + output tokens pass the budget (default 150,000), and at 8 tool rounds. | `turns` budget check, Settings field | L10 |
+| 15 | **Folding the source opens a new epoch.** The old session is never edited; a branch writes a pocket and a new session starts from it. The break-even is shown before any spend. | `epoch` action, `foldCase`, `POCKET_REQUEST`; smoke test "fold session" | L11, L12 |
+| 16 | **The stage is derived from the log.** Widgets are rebuilt from `show_widget` calls; a slot shows its latest call. | `showWidget`; smoke tests "widget", "slot reuse" | W |
+| 17 | **No remote load without a click.** A model-chosen URL is fetched only after the user presses its button. | `widgets.js` `remote` | W |
 | 12 | **Secrets stay out of records.** The API key is never in a session file or trace. | `store.js` key separation, `providers.js` trace record | L9 |
 
 ## Concerns (no enforcer yet)
 
 | Concern | Note | Origin |
 |---|---|---|
-| Fold the source itself (new epoch) | Allowed only when `saved_tokens_per_turn * expected_turns > rewrite_cost`; compute from the ledger and catalogue prices. | L `shim.md` |
+| Fold break-even is advisory | The estimate is shown, not enforced, and assumes 600 pocket tokens and full cache hits. Calibrate from real traces. | L `shim.md` |
 | Two views, one prefix | Derive the wire request as stable prefix + ephemeral edge instead of replaying the log. Today scratchpads are baked into the user message. | L12 |
-| Bulky tool output by handle | Store the full result out of band; the log gets a capped view plus a handle. Today results are truncated at 8,000 chars and the rest is lost. | L5, L `output-store.md` |
+| Stored output is never pruned | Blobs live in IndexedDB until the browser clears them; no retention rule. | L `output-store.md` Q5 |
+| View threshold vs cache floor | 1,500 chars is a guess; a view that is too thin shows up as an `output_read` after every call. Measure the read rate. | L `output-store.md` Q3 |
 | Persist text only | Rules for reasoning blocks and provider cache markers before `reasoning_details` pass-back is added. | L `shim.md` |
-| Branch budgets | Cap a branch by tokens, not only by 8 tool rounds; suggest a branch when a session passes a size threshold. | L10, L11 |
+| Suggest a fold or branch by size | Nothing prompts when a session passes a size threshold. | L11 |
+| Widget events spend a turn | Every form submit or `emit` is a full request; no batching or debounce. | W |
+| Widget library | Built-ins are fixed in `widgets.js`; no way to register one from a context file or the repo yet. | W |
 | Model per branch | A cheaper model for lookups breaks the shared prefix; measure before adopting. | L, S |
 | Progressive exposure of context files | Index line in the prefix, bodies fetched by handle. Not built. | L2 |
 | Trail of attempts | Terse rows (tried, failed with retry-if, worked, settled) so a later branch does not re-explore. | L11 |

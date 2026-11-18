@@ -2,13 +2,13 @@
 
 A client-side LLM chat harness served straight from this repo with GitHub Pages. No server, no build step: the browser holds the API key, the sessions and the tools.
 
-Status: working skeleton (v0.4.0). The OpenRouter path is written from the OpenAI-compatible conventions and has not yet been run against the live API.
+Status: working skeleton (v0.5.0). The OpenRouter path is written from the OpenAI-compatible conventions and has not yet been run against the live API.
 
 ## Run
 
 - Hosted: enable Pages (Settings > Pages > Deploy from a branch > `main`, `/ (root)`), then open `https://glyphcore.github.io/WebHarness/`.
 - Local: `python3 -m http.server 8787` in the repo root, then open `http://localhost:8787/`.
-- No key needed to try it: choose the provider "Mock (offline)" and model `mock-1`. Say "tool", "widget" or "fan out" to see a tool round trip.
+- No key needed to try it: choose the provider "Mock (offline)" and model `mock-1`. Say "tool", "big", "widget", "form", "chart" or "fan out" to see a tool round trip.
 - Smoke test (needs Playwright): `node scripts/smoke.mjs`
 
 ## How it fits together
@@ -20,6 +20,8 @@ Status: working skeleton (v0.4.0). The OpenRouter path is written from the OpenA
 | `app/context.js` | Builds the request from the session log; measures the cached prefix. |
 | `app/providers.js` | Pluggable providers: OpenRouter (OpenAI-compatible SSE) and an offline mock. |
 | `app/tools.js` | Tools the model can call, and the Worker that runs code. |
+| `app/widgets.js` | Built-in widget kinds for the stage. |
+| `app/outstore.js` | Handle-addressed store for large tool output. |
 | `app/store.js` | localStorage layout, `.session` export and import. |
 | `app/migrate.js` | Schema number and forward migrations. |
 | `app/styles.js` | Dynamic style tags for cosmetic state. |
@@ -60,16 +62,42 @@ A branch is a session forked from another at a cut point: a byte-identical copy 
 - **By the model:** the `fan_out` tool takes a list of `{id, task, after}` concerns. Concerns with no unmet `after` run in parallel as a wave; a later wave gets the folds it depends on. All folds return as one tool result. `branch_read` fetches a branch's transcript by id.
 - **By hand:** type a concern in the message box and press "branch". "fold back" appends the branch's last reply to its source without running it, so several folds can be batched.
 - **Audit:** the table under a `fan_out` result (status, requests, tool calls, tokens, cost per branch) is built from the harness's records, not from what the model says it did.
-- Limits: 6 concerns per call, 8 tool rounds per branch, no fan-out inside a branch.
+- Limits: 6 concerns per call, 8 tool rounds and a token budget per branch (Settings, default 150,000), no fan-out inside a branch.
 
 The rules this follows, where each is enforced, and what is still open are in [docs/TENETS.md](docs/TENETS.md).
 
+### Stage: widgets, media and forms
+
+The right pane has two tabs, Stage and Inspector. The stage shows what the model puts there with `show_widget`:
+
+| Kind | Data |
+|---|---|
+| `html` | `{html}`, run in a sandboxed iframe; `emit(value)` reports an interaction |
+| `text` | `{text}` |
+| `image`, `audio`, `video`, `embed` | `{url}` (https; loaded only after you click) |
+| `table` | `{columns, rows}` |
+| `chart` | `{type: bar or line, labels, values}` |
+| `form` | `{fields, submit}` |
+
+- A call that reuses a `slot` replaces that card in place.
+- A form submit or an `emit` call is sent as a `<widget_event>` user message and starts a turn.
+- The thread shows a chip per widget; clicking it brings the card into view.
+- The stage is rebuilt from the session log, so it survives reload, export and import.
+
+### Large tool output
+
+A tool result over 1,500 characters is stored whole in the browser (IndexedDB) under a handle such as `os:1k2j3h4g5f`. The log gets the first 900 and last 400 characters plus the handle, and the model can call `output_read` with `find` or an offset. Exports include the stored outputs their sessions cite.
+
+### Folding a session
+
+"fold session" asks the model, in a branch, for a pocket of at most 30 lines (Goal, Settled, Worked, Do not retry, Open), then starts a new session from that pocket. The original is untouched. Before spending anything it shows the context size before and after, and how many turns the fold needs to pay for itself at the model's prices.
+
 ### Tools
 
-Tool definitions make no mention of where they run. Current set: `run_js`, `scratchpad_read`, `scratchpad_write`, `show_widget`, `fan_out`, `branch_read`.
+Tool definitions make no mention of where they run. Current set: `run_js`, `scratchpad_read`, `scratchpad_write`, `show_widget`, `output_read`, `fan_out`, `branch_read`.
 
 - `run_js` runs in a dedicated Worker: no DOM, no localStorage (so no API key), killed after 5 s. It is not a network sandbox; code can still call `fetch`.
-- `show_widget` renders HTML in an iframe with `sandbox="allow-scripts"`, which cannot read the page or its storage.
+- An `html` widget runs in an iframe with `sandbox="allow-scripts"`, which cannot read the page or its storage. An `embed` is a third-party page and gets its own origin.
 
 ### Cosmetic state
 
@@ -85,5 +113,5 @@ Which session is visible, the highlighted row and the inspector toggle are each 
 
 - OpenRouter specifics: explicit `cache_control` breakpoints, provider pinning for cache affinity, passing `reasoning_details` back in tool loops.
 - Context files with gitignore-style include patterns (CLAUDE.md-like constraints, skills, agents).
-- Rewind and folding of the source session, paradigm comparison runs. See the concerns list in `docs/TENETS.md`.
+- Rewind, paradigm comparison runs. See the concerns list in `docs/TENETS.md`.
 - Markdown rendering beyond fenced code blocks.

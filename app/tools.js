@@ -1,6 +1,8 @@
 // Tools the model can call. Definitions are sent in a fixed order (they sit in
 // the cacheable prefix) and are worded without reference to where they run.
 //   { def: <OpenAI tool schema>, run(args, ctx) -> string | Promise<string> }
+import { view, read } from './outstore.js';
+
 // ctx = { pads, savePads, depth, fanOut, branchRead } from the host.
 
 const WORKER = `
@@ -21,7 +23,12 @@ function runJs({ code }, _ctx, timeout = 5000) {
   return new Promise(resolve => {
     const url = URL.createObjectURL(new Blob([WORKER], { type: 'text/javascript' }));
     const w = new Worker(url);
-    const done = out => { clearTimeout(t); w.terminate(); URL.revokeObjectURL(url); resolve(JSON.stringify(out)); };
+    // Plain text, not JSON: a long result keeps its line breaks, so it can be searched by line later.
+    const text = o => {
+      const r = o.ok ? (typeof o.result === 'string' ? o.result : JSON.stringify(o.result)) : 'Error: ' + o.error;
+      return o.logs?.length ? `${r}\n[console]\n${o.logs.join('\n')}` : r;
+    };
+    const done = out => { clearTimeout(t); w.terminate(); URL.revokeObjectURL(url); resolve(text(out)); };
     const t = setTimeout(() => done({ ok: false, error: `Timed out after ${timeout} ms` }), timeout);
     w.onmessage = e => {
       let out = e.data;
@@ -38,7 +45,7 @@ const fn = (name, description, properties, required, run) =>
 
 export const tools = [
   fn('run_js',
-    'Run JavaScript in an isolated runtime. The code is the body of an async function: use `return` for the result. console output is captured. Returns JSON {ok, result|error, logs}.',
+    'Run JavaScript in an isolated runtime. The code is the body of an async function: use `return` for the result. console output is captured. Returns the result as text, then any console output.',
     { code: { type: 'string' } }, ['code'], runJs),
   fn('scratchpad_read',
     'Read a labelled scratchpad. With no label, lists the available labels.',
@@ -58,9 +65,13 @@ export const tools = [
       return 'Saved.';
     }),
   fn('show_widget',
-    'Display a small self-contained HTML widget (inline CSS and JS allowed) to the user.',
-    { title: { type: 'string' }, html: { type: 'string' } }, ['html'],
-    () => 'Displayed.'),
+    'Show something to the user in a side pane. kind and its data: html {html} (self-contained; call emit(value) to report an interaction), text {text}, image|audio|video|embed {url} (https), table {columns, rows}, chart {type: bar|line, labels, values}, form {fields: [{name, label, type: text|number|select|checkbox|textarea, options, value}], submit}. Reusing a slot replaces what it shows. A user interaction arrives later as a <widget_event> message.',
+    { slot: { type: 'string' }, kind: { type: 'string', enum: ['html', 'text', 'image', 'audio', 'video', 'embed', 'table', 'chart', 'form'] }, title: { type: 'string' }, data: { type: 'object' } }, ['kind', 'data'],
+    ({ slot }) => `Displayed${slot ? ` in slot "${slot}"` : ''}.`),
+  fn('output_read',
+    'Read stored output by its handle (os:...). Give `find` to get matching lines, or `offset` and `length` for a slice.',
+    { handle: { type: 'string' }, find: { type: 'string' }, offset: { type: 'number' }, length: { type: 'number' } }, ['handle'],
+    args => read(args)),
   fn('fan_out',
     'Work several concerns in parallel, each in its own isolated continuation of this conversation, and get back one compact fold per concern (OUTCOME, RESULT, EVIDENCE, OPEN). Use it for work whose intermediate steps are not needed here. `after` makes a concern wait for the folds of the listed concern ids.',
     { concerns: { type: 'array', items: { type: 'object', properties: { id: { type: 'string' }, task: { type: 'string' }, after: { type: 'array', items: { type: 'string' } } }, required: ['id', 'task'] } } }, ['concerns'],
@@ -71,6 +82,8 @@ export const tools = [
     (args, ctx) => ctx.branchRead(args)),
 ];
 
+const WHOLE = new Set(['fan_out', 'output_read', 'branch_read']);
+
 export const toolDefs = tools.map(t => t.def);
 
 export async function execTool(call, ctx) {
@@ -80,6 +93,7 @@ export async function execTool(call, ctx) {
   try { args = JSON.parse(call.function.arguments || '{}'); } catch (e) { return `Invalid JSON arguments: ${e.message}`; }
   try {
     const out = String(await t.run(args, ctx));
-    return out.length > 8000 ? out.slice(0, 8000) + '\n[truncated]' : out;
+    // Bounded by construction: folds are capped, reads are sliced. Everything else goes through the store.
+    return WHOLE.has(call.function.name) ? out : await view(out);
   } catch (e) { return `Tool error: ${e.message || e}`; }
 }

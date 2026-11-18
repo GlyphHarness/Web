@@ -7,12 +7,15 @@ import { SCHEMA } from './migrate.js';
 import { rule } from './styles.js';
 import { providers } from './providers.js';
 import { toolDefs, execTool } from './tools.js';
+import { render } from './widgets.js';
+import { put, get, handlesIn } from './outstore.js';
 import { buildRequest, measure, report, padAttachment, inherit } from './context.js';
 
-export const VERSION = '0.4.0';
+export const VERSION = '0.5.0';
 const MAX_STEPS = 8; // model <-> tool round trips per user turn
 const MAX_BRANCHES = 6; // concerns per fan_out
 const FOLD_MAX = 2000; // chars of a fold handed back to the source
+const BRANCH_BUDGET = 150000; // default prompt+output tokens a fan_out branch may spend
 
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
@@ -39,6 +42,7 @@ const SHELL = `
     <datalist id="models"></datalist>
     <button data-act="export">export .session</button>
     <button data-act="branch" title="Fork this session at its tail to work the text in the message box as one concern">branch</button>
+    <button data-act="epoch" title="Replace this conversation with a short pocket in a new session">fold session</button>
     <button data-act="foldback" title="Append this branch's last reply to its source as a fold">fold back</button>
     <button data-act="inspector">inspector</button>
   </header>
@@ -50,6 +54,9 @@ const SHELL = `
   </form>
 </main>
 <aside id="inspect">
+  <nav id="panes"><button data-act="pane" data-pane="stage">Stage</button><button data-act="pane" data-pane="insp">Inspector</button></nav>
+  <div id="stage"></div>
+  <div id="insp">
   <details open><summary>Settings</summary>
     <label>API key (kept in this browser only, never exported)</label>
     <input id="key" type="password" autocomplete="off">
@@ -57,6 +64,8 @@ const SHELL = `
     <input id="ref" placeholder="e.g. v0.1.0">
     <label>API base URL (empty = provider default)</label>
     <input id="base" placeholder="">
+    <label>Branch token budget (prompt + output, per fan_out branch)</label>
+    <input id="budget" type="number" min="1000" step="1000">
     <p class="note" id="build"></p>
   </details>
   <details open><summary>Model</summary>
@@ -84,6 +93,7 @@ const SHELL = `
     <p class="note">Every request this page load: body sent, status, raw response chunks with ms offsets. No API key. Contains your message text.</p>
     <button data-act="trace">export .trace</button> <span class="note" id="tracen">0 requests</span>
   </details>
+  </div>
 </aside>`;
 
 let app, busy = false, ctl = null;
@@ -110,16 +120,46 @@ function blocks(text) {
   return out;
 }
 
-function widget(args) {
-  let a = {};
-  try { a = JSON.parse(args); } catch {}
-  // sandbox without allow-same-origin: the widget cannot read this page or its storage
-  return h('figure', { class: 'widget' },
-    h('figcaption', { text: a.title || 'widget' }),
-    h('iframe', { sandbox: 'allow-scripts', srcdoc: String(a.html || '') }));
+// ---------- stage: where widgets live ----------
+// The stage is derived from the log: every show_widget call, in order, with a
+// later call to the same slot replacing the earlier card. Restoring a session
+// rebuilds it. The thread only carries a chip that points at the card.
+
+function stagebox(s) {
+  let b = $(`.stagebox[data-session="${s.id}"]`);
+  if (!b) { b = h('div', { class: 'stagebox', 'data-session': s.id }); $('#stage').append(b); }
+  return b;
 }
 
-function messageNode(m) {
+function showWidget(s, tc) {
+  let a = {};
+  try { a = JSON.parse(tc.function.arguments); } catch {}
+  if (!a.kind && a.html) a = { kind: 'html', title: a.title, data: { html: a.html } }; // calls stored before 0.5
+  const slot = String(a.slot || tc.id), title = String(a.title || slot);
+  const card = h('section', { class: 'card', 'data-kind': String(a.kind) },
+    h('header', {}, h('b', { text: title }), h('span', { class: 'note', text: String(a.kind) }), h('button', { type: 'button', 'data-act': 'card-drop', title: 'Hide', text: '×' })),
+    h('div', { class: 'body' }, render(a.kind, a.data, v => widgetEvent(s, slot, v))));
+  card._slot = slot;
+  const box = stagebox(s), old = [...box.children].find(c => c._slot === slot);
+  old ? old.replaceWith(card) : box.prepend(card);
+  const chip = h('button', { class: 'chip', type: 'button', text: '▣ ' + title });
+  chip._slot = slot;
+  return chip;
+}
+
+// A user interaction with a widget becomes a user message and a turn.
+function widgetEvent(s, slot, value) {
+  if (busy || !s || s.id !== state.meta.active) return;
+  push(s, { role: 'user', content: `<widget_event slot=${JSON.stringify(slot)}>\n${(JSON.stringify(value) ?? 'null').slice(0, 4000)}\n</widget_event>` });
+  run(s);
+}
+
+function setPane(p) {
+  state.meta.settings.pane = p;
+  rule('pane', `#${p === 'stage' ? 'insp' : 'stage'}{display:none}\n#panes [data-pane="${p}"]{border-color:var(--accent);color:var(--accent)}`);
+}
+
+function messageNode(m, s) {
   const el = h('article', { class: 'msg', 'data-role': m.role });
   if (m.x?.reasoning) el.append(h('div', { class: 'think', text: m.x.reasoning }));
   if (m.role === 'tool') {
@@ -128,7 +168,7 @@ function messageNode(m) {
   } else if (m.content) el.append(...blocks(m.content));
   for (const tc of m.tool_calls || []) {
     el.append(h('details', { class: 'call' }, h('summary', { text: `call ${tc.function.name} (${tc.id})` }), h('pre', { text: tc.function.arguments })));
-    if (tc.function.name === 'show_widget') el.append(widget(tc.function.arguments));
+    if (tc.function.name === 'show_widget') el.append(showWidget(s, tc));
   }
   if (m.content) el.append(h('button', { class: 'copy', 'data-copy': 'msg', type: 'button', text: 'copy' }));
   el._raw = m.content || '';
@@ -148,7 +188,7 @@ function thread(s) {
   let t = $(`.thread[data-session="${s.id}"]`);
   if (!t) {
     t = h('section', { class: 'thread', 'data-session': s.id });
-    t.append(...s.messages.map(messageNode));
+    t.append(...s.messages.map(m => messageNode(m, s)));
     $('#threads').append(t);
   }
   return t;
@@ -157,9 +197,11 @@ function thread(s) {
 const scrollDown = () => { const t = $('#threads'); t.scrollTop = t.scrollHeight; };
 
 function push(s, m) {
+  const t = thread(s); // built from the log as it stands, before the new message joins it
   s.messages.push(m);
   saveSession(s);
-  thread(s).append(messageNode(m));
+  t.append(messageNode(m, s));
+  if (s.id === state.meta.active && m.tool_calls?.some(t => t.function.name === 'show_widget')) setPane('stage');
   scrollDown();
 }
 
@@ -198,7 +240,8 @@ function activate(id) {
   saveMeta();
   const s = cur();
   thread(s);
-  rule('active', `.thread:not([data-session="${id}"]){display:none}\n#sessions [data-id="${id}"]{background:var(--sel)}`);
+  stagebox(s);
+  rule('active', `.thread:not([data-session="${id}"]),.stagebox:not([data-session="${id}"]){display:none}\n#sessions [data-id="${id}"]{background:var(--sel)}`);
   $('#title').value = s.title;
   $('#system').value = s.system;
   $('#ledger tbody').replaceChildren(...s.ledger.map(ledgerRow));
@@ -363,6 +406,10 @@ async function turns(s, depth, onFirst) {
 
     if (failure) { if (failure.name !== 'AbortError') notice(s, String(failure.message || failure)); return 'failed'; }
     if (!calls.length) return 'done';
+    if (depth && s.ledger.reduce((n, e) => n + (e.prompt || 0) + (e.completion || 0), 0) > (Number(set.branchBudget) || BRANCH_BUDGET)) {
+      notice(s, 'Branch token budget reached; stopped before running more tools.');
+      return 'budget';
+    }
     for (const tc of calls) {
       ctx.audit = null;
       const m = { role: 'tool', tool_call_id: tc.id, content: await execTool(tc, ctx) };
@@ -459,10 +506,39 @@ async function fanOut(source, args, ctx) {
   }).join('\n');
 }
 
+// ---------- fold the session (new epoch) ----------
+// The source is never edited. Its pocket is written by a branch (so the request
+// reads the cached prefix), and a new session starts from the pocket alone.
+
+const POCKET_REQUEST = `<pocket_request>
+Write the pocket that will replace this conversation for whoever continues the work. At most 30 lines, in these sections, omitting empty ones:
+## Goal
+## Settled (decisions, with exact values, ids and handles)
+## Worked
+## Do not retry (what failed, and when a retry would make sense)
+## Open
+Keep what is needed to act. Drop exploration, retries and narration.
+</pocket_request>`;
+
+// Rough cost case for folding now, from the last request and the catalogue prices.
+function foldCase(s) {
+  const now = s.ledger.at(-1)?.prompt || Math.ceil(JSON.stringify(s.messages).length / 4);
+  const after = Math.ceil((s.system.length + JSON.stringify(toolDefs).length) / 4) + 600;
+  const m = catalogue.find(m => m.id === state.meta.settings.model);
+  const pin = Number(m?.pricing.prompt) || 0, pc = m?.pricing.input_cache_read != null ? Number(m.pricing.input_cache_read) : pin, pout = Number(m?.pricing.completion) || 0;
+  const saving = (now - after) * pc, cost = now * pc + 600 * pout + after * (pin - pc);
+  let text = `Context is about ${now.toLocaleString()} tokens; after folding, about ${after.toLocaleString()}.`;
+  if (now <= after) text += '\nThere is nothing to gain yet.';
+  else if (pin) text += `\nEach later turn saves about $${saving.toFixed(5)}. The fold costs about $${cost.toFixed(5)}, so it pays for itself after about ${Math.ceil(cost / saving)} turns.`;
+  else text += '\nNo price data for this model, so the break-even is unknown.';
+  return text;
+}
+
 function branchRead({ branch }) {
   const b = state.sessions[branch];
   if (!b?.parent) return `No branch "${branch}".`;
-  return JSON.stringify(b.messages.slice(b.parent.at).map(m => ({ role: m.role, content: m.content, calls: m.tool_calls?.map(t => t.function) })));
+  const out = JSON.stringify(b.messages.slice(b.parent.at).map(m => ({ role: m.role, content: m.content, calls: m.tool_calls?.map(t => t.function) })));
+  return out.length > 6000 ? out.slice(0, 6000) + '\n[truncated]' : out;
 }
 
 // ---------- wiring ----------
@@ -477,12 +553,31 @@ const actions = {
   trace() { download('webharness-' + new Date().toISOString().replace(/[:.]/g, '-') + '.trace', { kind: 'webharness.trace', version: 1, build: VERSION, exchanges: trace }); },
   new() { const s = newSession(); $('#sessions').prepend(sessionRow(s)); activate(s.id); $('#input').focus(); },
   import() { $('#file').click(); },
-  export() {
-    const s = cur();
-    download((s.title.replace(/[^\w\- ]+/g, '').trim() || 'session') + '.session', exportBundle(s));
+  async export() {
+    const s = cur(), bundle = exportBundle(s), blobs = {};
+    // carry the stored outputs these sessions cite, so handles still resolve after import
+    for (const hd of new Set(bundle.sessions.flatMap(x => x.messages.flatMap(m => handlesIn(m.content))))) { const t = await get(hd).catch(() => null); if (t != null) blobs[hd] = t; }
+    if (Object.keys(blobs).length) bundle.blobs = blobs;
+    download((s.title.replace(/[^\w\- ]+/g, '').trim() || 'session') + '.session', bundle);
   },
   inspector() { state.meta.settings.inspector = !state.meta.settings.inspector; saveMeta(); applyInspector(); },
   stop() { ctl?.abort(); },
+  pane(el) { setPane(el.dataset.pane); saveMeta(); },
+  'card-drop'(el) { el.closest('.card').remove(); },
+  async epoch() {
+    const src = cur();
+    if (busy || !src.messages.length) return;
+    if (!confirm('Fold this session into a new one? The original stays as it is.\n\n' + foldCase(src))) return;
+    const b = fork(src, 'pocket', src.messages.length);
+    push(b, { role: 'user', content: POCKET_REQUEST });
+    const status = await run(b), m = b.messages.at(-1);
+    if (status !== 'done' || m?.role !== 'assistant' || !m.content) return notice(src, 'The pocket was not written; nothing was folded.');
+    const epoch = (src.epoch || 1) + 1;
+    const n = newSession({ title: src.title.replace(/ · epoch \d+$/, '') + ' · epoch ' + epoch, system: src.system, epoch, from: src.id });
+    $('#sessions').prepend(sessionRow(n));
+    push(n, { role: 'user', content: `<pocket from="${src.id}">\n${m.content}\n</pocket>` });
+    activate(n.id);
+  },
   // Manual branch: the message box text becomes the concern.
   async branch() {
     const src = cur(), task = $('#input').value.trim();
@@ -526,6 +621,13 @@ function bind() {
       navigator.clipboard.writeText(text).then(() => { copy.textContent = 'copied'; setTimeout(() => copy.textContent = 'copy', 900); });
       return;
     }
+    const chip = e.target.closest('.chip');
+    if (chip) {
+      const card = [...stagebox(cur()).children].find(c => c._slot === chip._slot);
+      setPane('stage');
+      if (card) { card.scrollIntoView({ block: 'nearest' }); card.setAttribute('data-flash', ''); setTimeout(() => card.removeAttribute('data-flash'), 900); }
+      return;
+    }
     const go = e.target.closest('[data-goto]');
     if (go) return state.sessions[go.dataset.goto] ? activate(go.dataset.goto) : undefined;
     const act = e.target.closest('[data-act]');
@@ -545,6 +647,14 @@ function bind() {
   $('#key').addEventListener('change', e => { state.keys[state.meta.settings.provider] = e.target.value.trim(); saveKeys(); });
   $('#ref').addEventListener('change', e => { location.search = '?ref=' + encodeURIComponent(e.target.value.trim()); });
 
+  $('#budget').addEventListener('change', e => { state.meta.settings.branchBudget = Number(e.target.value) || BRANCH_BUDGET; saveMeta(); });
+  // html widgets report through postMessage; match the sender to its card
+  addEventListener('message', e => {
+    if (e.data?.wh !== 1) return;
+    const f = $$('#stage iframe').find(f => f.contentWindow === e.source);
+    if (f) widgetEvent(state.sessions[f.closest('.stagebox').dataset.session], f.closest('.card')._slot, e.data.data);
+  });
+
   $('#pads').addEventListener('change', e => {
     const p = state.meta.pads.find(p => p.id === e.target.closest('[data-pad]')?.dataset.pad);
     const f = e.target.dataset.f;
@@ -558,7 +668,9 @@ function bind() {
     e.target.value = '';
     if (!f) return;
     try {
-      const added = importBundle(JSON.parse(await f.text()));
+      const obj = JSON.parse(await f.text());
+      const added = importBundle(obj);
+      for (const t of Object.values(obj.blobs || {})) await put(String(t));
       $('#sessions').replaceChildren(...rows());
       renderPads();
       const top = added.find(s => !s.parent) || added[0];
@@ -587,6 +699,8 @@ export function boot(env) {
   $('#model').value = set.model;
   $('#key').value = state.keys[set.provider] || '';
   $('#sessions').append(...rows());
+  $('#budget').value = set.branchBudget || BRANCH_BUDGET;
+  setPane(set.pane || 'insp');
   showBase();
   renderPads();
   applyInspector();

@@ -95,9 +95,19 @@ const mock = {
     let text = '';
     const concern = last.role === 'user' && /^<concern id="([^"]*)"/.exec(last.content);
     if (concern) text = `OUTCOME: done\nRESULT: mock result for ${concern[1]}\nEVIDENCE: folds received: ${(last.content.match(/<fold /g) || []).length}\nOPEN: none`;
-    else if (last.role === 'tool') text = 'The tool returned:\n\n```json\n' + last.content + '\n```';
-    else if (/widget/i.test(last.content || '')) {
-      yield { choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_' + Date.now(), type: 'function', function: { name: 'show_widget', arguments: JSON.stringify({ title: 'Demo widget', html: '<button onclick="this.textContent=Number(this.textContent)+1">0</button>' }) } }] } }] };
+    else if (last.role === 'tool') text = 'The tool returned:\n\n```text\n' + last.content + '\n```';
+    else if (/^<widget_event/.test(last.content || '')) text = 'Got the event: ' + last.content.split('\n')[1];
+    else if (/^<pocket_request/.test(last.content || '')) text = '## Goal\nmock goal\n## Settled\n- mock decision\n## Open\n- none';
+    else if (/read (os:\w+)/.test(last.content || '')) {
+      yield { choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_' + Date.now(), type: 'function', function: { name: 'output_read', arguments: JSON.stringify({ handle: /read (os:\w+)/.exec(last.content)[1], find: 'line 399' }) } }] } }] };
+    } else if (/big/i.test(last.content || '')) {
+      yield { choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_' + Date.now(), type: 'function', function: { name: 'run_js', arguments: JSON.stringify({ code: "return Array.from({length:400},(_,i)=>'line '+i).join('\\n')" }) } }] } }] };
+    } else if (/form/i.test(last.content || '')) {
+      yield { choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_' + Date.now(), type: 'function', function: { name: 'show_widget', arguments: JSON.stringify({ slot: 'demo', kind: 'form', title: 'Demo form', data: { fields: [{ name: 'name', label: 'Name' }, { name: 'n', label: 'Count', type: 'number', value: 3 }], submit: 'Send' } }) } }] } }] };
+    } else if (/chart/i.test(last.content || '')) {
+      yield { choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_' + Date.now(), type: 'function', function: { name: 'show_widget', arguments: JSON.stringify({ slot: 'demo', kind: 'chart', title: 'Demo chart', data: { type: 'bar', labels: ['a', 'b', 'c', 'd'], values: [3, 7, 4, 9] } }) } }] } }] };
+    } else if (/widget/i.test(last.content || '')) {
+      yield { choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_' + Date.now(), type: 'function', function: { name: 'show_widget', arguments: JSON.stringify({ slot: 'counter', kind: 'html', title: 'Demo widget', data: { html: '<button onclick="this.textContent=Number(this.textContent)+1">0</button> <button onclick="emit({clicked:true})">report</button>' } }) } }] } }] };
     } else if (/fan ?out/i.test(last.content || '')) {
       yield { choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_' + Date.now(), type: 'function', function: { name: 'fan_out', arguments: JSON.stringify({ concerns: [{ id: 'a', task: 'First part.' }, { id: 'b', task: 'Second part.' }, { id: 'c', task: 'Combine a and b.', after: ['a', 'b'] }] }) } }] } }] };
     } else if (/tool/i.test(last.content || '')) {
@@ -106,7 +116,7 @@ const mock = {
         await tick();
         yield { choices: [{ delta: { tool_calls: [{ index: 0, function: { arguments: part } }] } }] };
       }
-    } else text = 'Mock reply. Say "tool", "widget" or "fan out" to see a tool call.\n\n```js\nconst echo = ' + JSON.stringify(String(last.content).slice(0, 60)) + ';\n```';
+    } else text = 'Mock reply. Say "tool", "big", "widget", "form", "chart" or "fan out" to see a tool call.\n\n```js\nconst echo = ' + JSON.stringify(String(last.content).slice(0, 60)) + ';\n```';
     for (const w of text.split(/(?<=\s)/)) { await tick(); yield { choices: [{ delta: { content: w } }] }; }
     yield { choices: [{ delta: {}, finish_reason: 'stop' }], usage: { prompt_tokens: prompt, completion_tokens: Math.ceil(text.length / 4), prompt_tokens_details: { cached_tokens: cached }, cost: 0 } };
   },
