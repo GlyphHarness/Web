@@ -21,6 +21,7 @@ export function client(env) {
     // the repository and the least permission this request needs decide which token is used
     const repo = /^\/repos\/([^/]+\/[^/]+)/.exec(path)?.[1] || body?.variables?.i?.branch?.repositoryNameWithOwner;
     const level = method === 'GET' ? 'read' : /\/pulls$/.test(path) ? 'pr' : 'write';
+    if (level !== 'read' && repo && env.readOnly?.().some(r => r.toLowerCase() === repo.toLowerCase())) throw new Error(`${repo} is read-only here: it is the log repo, written only by the harness. Propose changes through a review instead.`);
     const tok = await env.token(repo, level);
     if (!tok) throw new Error('No GitHub token is set.');
     const t0 = performance.now();

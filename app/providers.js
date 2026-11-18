@@ -105,6 +105,15 @@ const mock = {
       yield { choices: [{ delta: {}, finish_reason: 'stop' }], usage: { prompt_tokens: prompt, completion_tokens: 12, prompt_tokens_details: { cached_tokens: 0 }, cost: 0 } };
       return;
     }
+    const sys0 = String(body.messages[0]?.content || '');
+    if (sys0.startsWith('You repair') || sys0.startsWith('You review')) {
+      const said = sys0.startsWith('You review') ? 'POLICIES: keep p1 -- policy-rewritten 1 in 3 requests'
+        : /refuse me/.test(last.content) ? '{"refuse": "cannot be made safe"}'
+        : JSON.stringify({ arguments: { code: 'let i = 0; for (let k = 0; k < 100; k++) { if (++i > 5) break } return i' } });
+      yield { choices: [{ delta: { content: said } }] };
+      yield { choices: [{ delta: {}, finish_reason: 'stop' }], usage: { prompt_tokens: prompt, completion_tokens: 20, prompt_tokens_details: { cached_tokens: 0 }, cost: 0 } };
+      return;
+    }
     if (String(body.messages[0]?.content).startsWith('You filter')) {
       const said = 'mock-filtered: ' + /WANT: (.*)/.exec(last.content)[1];
       yield { choices: [{ delta: { content: said } }] };
@@ -124,6 +133,9 @@ const mock = {
     } else if (/long script/.test(last.content || '')) {
       const code = "const out = []; for (let i = 0; i < 300; i++) { out.push('row ' + i + '   '); if (i === 150) out.push('total=4950'); } out.push('same', 'same', 'same'); return out.join('\\n'); // " + 'padding '.repeat(60);
       yield { choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_' + Date.now(), type: 'function', function: { name: 'run_js', arguments: JSON.stringify({ code, name: 'sum rows', want: 'total' }) } }] } }] };
+    } else if (/loop forever/.test(last.content || '')) {
+      const code = /refuse me/.test(last.content) ? 'while (true) {} // refuse me' : 'let i = 0; while (true) { if (++i > 5) break } return i';
+      yield { choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_' + Date.now(), type: 'function', function: { name: 'run_js', arguments: JSON.stringify({ code }) } }] } }] };
     } else if (/^shell: /.test(last.content || '')) {
       yield { choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_' + Date.now(), type: 'function', function: { name: 'shell', arguments: JSON.stringify({ cmd: last.content.slice(7), timeout: 600 }) } }] } }] };
     } else if (/repo (read|commit|pr)/.test(last.content || '')) {

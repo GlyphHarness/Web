@@ -174,6 +174,25 @@ check('patterns: a new session opens with the index', /patterns \(pattern_get id
 await page.locator('#sessions > div', { hasText: 'hello there · epoch 2' }).click();
 check('fold session: new epoch starts from the pocket, source kept', /^Pocket:\n[^]*## Settled/.test(await visible().locator('.msg').first().textContent()) && await visible().locator('.msg').count() === 1, await page.inputValue('#title'));
 
+// ---- policies: repaired before they run; smells tracked by steering version; review proposes ----
+await page.evaluate(() => { const t = document.querySelector('#policies'); t.value = 'run_js /while\\s*\\(true\\)/ Never loop without a bound; use a counted loop.'; t.dispatchEvent(new Event('change')); });
+await say('loop forever please');
+const toolOut = () => visible().locator('.msg[data-role=tool] > details:not(.policy) pre').last().textContent();
+const pres = await toolOut();
+check('policy: the breaking call was repaired and the repair ran', /^\[policy p1: call rewritten\]\n6$/.test(pres), JSON.stringify(pres));
+const loggedCall = await page.evaluate(() => { const m = JSON.parse(localStorage['wh:meta']); const s = JSON.parse(localStorage['wh:s:' + m.active]); return s.messages.findLast(x => x.tool_calls)?.tool_calls[0].function.arguments; });
+check('policy: the log keeps the repaired call, the original is shown beside it', /for \(let k/.test(loggedCall) && /while \(true\)/.test(await visible().locator('details.policy pre').last().textContent()));
+await say('loop forever please, refuse me');
+check('policy: an unrepairable call does not run', /^Not run: policy p1/.test(await toolOut()));
+const rows = await page.evaluate(() => JSON.parse(localStorage['wh:smells'] || '[]'));
+check('smells: both events recorded with the steering in effect', rows.filter(r => /^policy-/.test(r.kind)).length === 2 && rows.every(r => r.steer) && rows.some(r => r.kind === 'policy-refused'));
+check('smells: nothing was changed in the session (no automatic pattern)', !(await page.evaluate(() => localStorage['wh:patterns'] || '')).includes('Never loop'));
+await page.evaluate(() => document.querySelector('[data-act=review]').click());
+await page.waitForSelector('#smells [data-kind=proposal]', { state: 'attached' });
+check('review: a pending proposal from the counts', /keep p1/.test(await page.textContent('#smells [data-kind=proposal]')));
+await page.evaluate(() => document.querySelector('#smells [data-act=propose][data-to=dismissed]').click());
+check('review: dismissing records the decision', await page.evaluate(() => JSON.parse(localStorage['wh:proposals'])[0].status) === 'dismissed');
+
 await page.evaluate(() => { const m = JSON.parse(localStorage['wh:meta']); m.schema = 99; localStorage['wh:meta'] = JSON.stringify(m); });
 await page.reload();
 check('newer-schema data: build refuses to start', /schema 99/.test(await page.locator('#app pre').textContent()));

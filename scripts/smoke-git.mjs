@@ -11,7 +11,8 @@ const TOKEN = 'github_pat_TESTTOKEN_' + 'x'.repeat(20);
 
 // ---- fake GitHub: one repo o/r, branches as {sha, files} ----
 const sha = () => randomBytes(20).toString('hex');
-const branches = { main: { sha: sha(), files: { 'a.txt': 'hello world\n', 'src/x.js': 'x' } } };
+const repos = { 'o/r': { main: { sha: sha(), files: { 'a.txt': 'hello world\n', 'src/x.js': 'x' } } } };
+const branches = repos['o/r'];
 const seen = []; // [method, path, body]
 const b64 = s => Buffer.from(s).toString('base64');
 const etagOf = v => '"' + createHash('sha1').update(JSON.stringify(v)).digest('hex') + '"';
@@ -27,6 +28,11 @@ function jwtOk(h) {
 }
 const need = (method, path) => method === 'GET' ? ['contents', 'read'] : /\/pulls$/.test(path) ? ['pull_requests', 'write'] : ['contents', 'write'];
 function api(method, path, q, body, headers) {
+  // any repo: paths are normalized to /repos/o/r and B is that repo's branches
+  const repoName = /^\/repos\/([^/]+\/[^/]+)/.exec(path)?.[1] || body?.variables?.i?.branch?.repositoryNameWithOwner;
+  let B = repos[repoName];
+  if (repoName && !B && !/\/installation$/.test(path)) return [404, { message: 'Not Found' }];
+  path = path.replace(/^\/repos\/[^/]+\/[^/]+/, '/repos/o/r');
   if (path === '/app') return jwtOk(headers.authorization) ? [200, { slug: 'wh-test', installations_count: 1 }] : [401, { message: 'bad jwt' }];
   if (path === '/repos/o/r/installation') return jwtOk(headers.authorization) ? [200, { id: 99 }] : [401, { message: 'bad jwt' }];
   if (path === '/app/installations/99/access_tokens') {
@@ -39,20 +45,20 @@ function api(method, path, q, body, headers) {
   if (minted[tok]) {
     const [perm, lvl] = need(method, path), has = minted[tok].permissions[perm];
     used.push([method + ' ' + path, minted[tok].permissions]);
-    if (!(has === 'write' || has === lvl) || !minted[tok].repositories.includes('r')) return [403, { message: 'Resource not accessible by integration' }];
+    if (!(has === 'write' || has === lvl) || !minted[tok].repositories.includes((repoName || 'o/r').split('/')[1])) return [403, { message: 'Resource not accessible by integration' }];
   } else if (tok !== TOKEN) return [401, { message: 'Bad credentials' }];
   let m;
   if (path === '/user') return [200, { login: 'tester' }];
   if (path === '/repos/o/r') return [200, { default_branch: 'main' }];
-  if ((m = /^\/repos\/o\/r\/git\/ref\/heads\/(.+)$/.exec(path))) { const b = branches[decodeURIComponent(m[1])]; return b ? [200, { object: { sha: b.sha } }] : [404, { message: 'Not Found' }]; }
+  if ((m = /^\/repos\/o\/r\/git\/ref\/heads\/(.+)$/.exec(path))) { const b = B[decodeURIComponent(m[1])]; return b ? [200, { object: { sha: b.sha } }] : [404, { message: 'Not Found' }]; }
   if (path === '/repos/o/r/git/refs' && method === 'POST') {
-    const from = Object.values(branches).find(b => b.sha === body.sha);
-    branches[body.ref.replace('refs/heads/', '')] = { sha: body.sha, files: { ...from.files } };
+    const from = Object.values(B).find(b => b.sha === body.sha);
+    B[body.ref.replace('refs/heads/', '')] = { sha: body.sha, files: { ...from.files } };
     return [201, {}];
   }
   if ((m = /^\/repos\/o\/r\/contents\/(.*)$/.exec(path))) {
     const p = m[1].split('/').map(decodeURIComponent).join('/');
-    const br = branches[q.get('ref') || body?.branch || 'main'];
+    const br = B[q.get('ref') || body?.branch || 'main'];
     if (!br) return [404, { message: 'No commit found for the ref' }];
     if (method === 'PUT') { br.files[p] = Buffer.from(body.content, 'base64').toString(); br.sha = sha(); return [201, { content: { path: p } }]; }
     if (br.files[p] != null) return [200, { type: 'file', path: p, sha: 'blob', encoding: 'base64', content: b64(br.files[p]) }];
@@ -60,14 +66,18 @@ function api(method, path, q, body, headers) {
     return list.length ? [200, list, { etag: etagOf(list) }] : [404, { message: 'Not Found' }];
   }
   if (path === '/graphql') {
-    const i = body.variables.i, br = branches[i.branch.branchName];
+    const i = body.variables.i, br = B[i.branch.branchName];
     if (br.sha !== i.expectedHeadOid) return [200, { errors: [{ message: 'Expected branch to point to ' + i.expectedHeadOid }] }];
     for (const a of i.fileChanges.additions) br.files[a.path] = Buffer.from(a.contents, 'base64').toString();
     for (const d of i.fileChanges.deletions) delete br.files[d.path];
     br.sha = sha();
     return [200, { data: { createCommitOnBranch: { commit: { oid: br.sha, url: 'https://github.com/o/r/commit/' + br.sha } } } }];
   }
-  if (path === '/orgs/neworg/repos' && method === 'POST') return [201, { full_name: 'neworg/' + body.name, private: body.private, default_branch: 'main', html_url: 'https://github.com/neworg/' + body.name }];
+  if ((m = /^\/orgs\/([\w.-]+)\/repos$/.exec(path)) && method === 'POST') {
+    const full = m[1] + '/' + body.name;
+    repos[full] = { main: { sha: sha(), files: body.auto_init ? { 'README.md': '# ' + body.name } : {} } };
+    return [201, { full_name: full, private: body.private, default_branch: 'main', html_url: 'https://github.com/' + full }];
+  }
   if (path === '/repos/o/r/pulls' && method === 'POST') return [201, { number: 7, head: { ref: body.head }, base: { ref: body.base }, html_url: 'https://github.com/o/r/pull/7' }];
   return [404, { message: 'no fake for ' + method + ' ' + path }];
 }
@@ -199,6 +209,31 @@ await page.selectOption('#provider', 'mock');
 const unknown = await directive('eval', { code: '1' });
 check('bridge: unknown directives are refused', unknown && !unknown.ok && /unknown directive/.test(unknown.error));
 
+// ---- log repo: cold start (create, layout), sync at session start, read-only for agents ----
+await page.evaluate(() => { const i = document.querySelector('#logrepo'); i.value = 'o/logs'; i.dispatchEvent(new Event('change')); });
+page.once('dialog', d => d.accept());
+await page.evaluate(() => document.querySelector('[data-act=logsetup]').click());
+const ready = await until(async () => /ready \(schema 1\)|sync|failed|Not/.test(await page.textContent('#logstat')) && /sync [^(]|nothing new|failed/.test(await page.textContent('#logstat')) && await page.textContent('#logstat'), 20000);
+const L = repos['o/logs']?.main?.files || {};
+check('log repo: created private and laid out on a cold start', !!repos['o/logs'] && JSON.parse(L['.harness/manifest.json'] || '{}').schema === 1 && /only writer/.test(L['README.md'] || ''), ready);
+const smellFiles = Object.keys(L).filter(f => f.startsWith('smells/'));
+const sessFiles = Object.keys(L).filter(f => /^sessions\/.+\.jsonl$/.test(f));
+check('log repo: first sync wrote smells, session metrics and steering', Object.keys(L).some(f => /^steering\/\w+\.json$/.test(f)) && sessFiles.length === 1, Object.keys(L).join(' '));
+const sessRows = (L[sessFiles[0]] || '').trim().split('\n').map(l => JSON.parse(l));
+check('log repo: session rows are metrics only, no message text or keys', sessRows.length > 0 && sessRows.every(r => !('messages' in r) && !('title' in r)) && !Object.values(L).join('').includes(TOKEN));
+await page.click('[data-act=new]');
+await until(async () => /nothing new|sync /.test(await page.textContent('#logstat')) && !/syncing/.test(await page.textContent('#logstat')), 15000);
+const L2 = repos['o/logs'].main.files;
+check('log repo: a new session syncs again, append-only (no file rewritten)', Object.keys(L2).filter(f => /^sessions\//.test(f)).length >= 1 && L2[sessFiles[0]] === L[sessFiles[0]]);
+const tools2 = await page.evaluate(async () => {
+  const { client } = await import('./app/git.js');
+  const c = client({ token: async () => 'github_pat_TESTTOKEN_' + 'x'.repeat(20), readOnly: () => ['o/logs'], confirm: async () => true });
+  const read = await c.read({ repo: 'o/logs', op: 'file', path: 'README.md' }).then(t => t.slice(0, 20), e => 'ERR ' + e.message);
+  const write = await c.commit({ repo: 'o/logs', branch: 'main', message: 'x', changes: [{ path: 'evil.txt', content: 'x' }] }).then(() => 'WROTE', e => e.message);
+  return { read, write };
+});
+check('log repo: agents can read it but not write to it', /^# o\/logs/.test(tools2.read) && /read-only here/.test(tools2.write) && !repos['o/logs'].main.files['evil.txt'], JSON.stringify(tools2));
+
 // ---- GitHub App mode: no pasted token, tokens minted per repository and permission ----
 await page.evaluate(pem => { localStorage.setItem('wh:keys', JSON.stringify({ ghapp: { appId: '123', pem } })); }, PEM);
 await page.reload();
@@ -215,7 +250,7 @@ await page.waitForSelector('.thread:visible .msg[data-role=approve]:not([data-do
 await thread().locator('.msg[data-role=approve]:not([data-done]) button', { hasText: 'allow' }).click();
 await idle();
 check('app: commit landed using minted tokens', branches.feat.files['a.txt'] === 'goodbye again\n', await thread().locator('.msg[data-role=tool] pre').last().textContent());
-check('app: each token is for repo r only, at the level asked', mints.length >= 2 && mints.every(m => m.repositories.join() === 'r') && mints.some(m => m.permissions.contents === 'read' && Object.keys(m.permissions).length === 1) && mints.some(m => m.permissions.contents === 'write'));
+check('app: each token is for exactly one repo, at the level asked', mints.length >= 2 && mints.every(m => m.repositories.length === 1) && mints.some(m => m.permissions.contents === 'read' && Object.keys(m.permissions).length === 1) && mints.some(m => m.permissions.contents === 'write'));
 check('app: reads used a read-only token, the commit a write token', used.filter(([p]) => p.startsWith('GET /repos/o/r/contents/a.txt')).some(([, pm]) => pm.contents === 'read') && used.some(([p, pm]) => p === 'POST /graphql' && pm.contents === 'write'));
 const allUp = JSON.stringify(await upEvents());
 check('app: neither the key nor a minted token leaves the page', !allUp.includes('BEGIN RSA') && !Object.keys(minted).some(t => allUp.includes(t)));

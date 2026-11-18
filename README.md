@@ -2,11 +2,11 @@
 
 A client-side LLM chat harness served straight from this repo with GitHub Pages. No server, no build step: the browser holds the API key, the sessions and the tools.
 
-Status: working skeleton (v0.19.0). The OpenRouter path is written from the OpenAI-compatible conventions and has not yet been run against the live API.
+Status: working skeleton (v0.20.0). The OpenRouter path is written from the OpenAI-compatible conventions and has not yet been run against the live API.
 
 ## Run
 
-- Hosted: enable Pages (Settings > Pages > Source > GitHub Actions); every push to `main` deploys to `https://glyphharness.github.io/web/`.
+- Hosted: enable Pages (Settings > Pages > Source > GitHub Actions); every push to `main` deploys to `https://glyphharness.github.io/Web/`.
 - Local: `python3 -m http.server 8787` in the repo root, then open `http://localhost:8787/`.
 - No key needed to try it: choose the provider "Mock (offline)" and model `mock-1`. Say "tool", "big", "widget", "form", "chart" or "fan out" to see a tool round trip.
 - Smoke tests (need Playwright): `node scripts/smoke.mjs`, `node scripts/smoke-git.mjs` (fake GitHub API), `node scripts/smoke-vm.mjs` (the Linux machine)
@@ -175,6 +175,23 @@ A page can call `api.github.com` (it answers any origin) but not git's own HTTP 
 ### Sandbox
 
 `run_js` runs in a Worker started inside a hidden `sandbox="allow-scripts"` iframe whose CSP is `default-src 'none'`. The code cannot fetch, open sockets, import scripts or reach the page's storage. It is killed on timeout. `html` widgets get the same no-network CSP, so remote media goes only through the click-gated kinds. Verified in Chromium (`scripts/smoke-git.mjs`); Firefox and Safari are untested.
+
+### Policies: repair before a call runs
+
+Inspector → Policies holds rules checked against every tool call's arguments before it runs, one per line: `<tool|*> /regex/flags rule`. A call that breaks one is not just blocked: the policy model (Settings; else the helper, else the session's model) gets a small fixed context (the rule, the tool's schema and the call) and returns corrected arguments. The repair is checked again and runs instead. The log keeps the repaired call (that message has not been sent back yet, so no cached byte changes), the result starts with `[policy p1: call rewritten]`, and the thread shows the original beside it. No repair, or one that still breaks the rule, means `Not run: policy ...`. The default policy turns long fixed `sleep`s in `shell` into bounded waits on a condition.
+
+### Smells and review: steering quality over time
+
+Policy rewrites and refusals, call notes written as text, tool errors and timeouts are recorded as they happen (`wh:smells`), each with the fingerprint of the steering in effect: core prompt version, system prompt, policies and tool list. Inspector → Smells shows counts, and per steering version the requests made and smells per request, so versions can be compared. Nothing is changed mid-session. "review" sends the policy model the counts and the current steering texts (no transcripts) and stores what it proposes as pending; you adopt or dismiss each one. An adopted change is yours to apply, and it reaches new sessions only, so a cached prefix never changes under a running session. Smells and proposals are in `.trace` exports and are sent up the bridge.
+
+### Log repo: tracking in a private repo of yours
+
+Settings → Log repo names a private repository (`owner/name`) where the harness keeps that tracking over time, in the repo-as-a-service way: the frontend bootstraps it and writes it, and agents read it.
+
+- **Cold start:** "set up" checks the repo. If it is missing, it offers to create it as a private repo with your credential; if it is empty, it writes the layout: `README.md`, `.harness/manifest.json` (schema 1), `smells/`, `sessions/`, `steering/`, `proposals/`.
+- **Sync:** at every session start and on "sync", one commit with what is new: smell rows, per-session metrics (model, requests, tokens, cache hits, cost, smell count, steering fingerprint; never message text), each new steering version's texts under its fingerprint, and proposals. Batch files are named `<device>-<time>` and never edited, so devices do not conflict. Stored keys are redacted.
+- **Agents read, do not write:** model-facing repo tools treat the log repo as read-only and refuse writes to it before any token is used; in app mode, reads get a contents:read token. Changes to steering go through review proposals and you.
+- Agents that improve on it from sessions come later; this is the scaffold.
 
 ### Linux machine
 

@@ -10,13 +10,16 @@ import { defsFor, execTool, SWAPPABLE, ARG_MAX, runJs } from './tools.js';
 import { client as gitClient } from './git.js';
 import { auth as ghAuth } from './ghauth.js';
 import { machine, vmWanted, vmReady } from './vm.js';
+import * as policy from './policy.js';
+import * as smells from './smells.js';
+import { logRepo } from './logrepo.js';
 import * as bridge from './bridge.js';
 import { render } from './widgets.js';
 import * as pat from './patterns.js';
 import { put, get, handlesIn } from './outstore.js';
 import { buildRequest, measure, report, padAttachment, inherit, imitatesNote, keptLines, corePrompt, EDGE_MIN, markedOnly, edgeReplies, turnOf, KINDS } from './context.js';
 
-export const VERSION = '0.19.0';
+export const VERSION = '0.20.0';
 const MAX_STEPS = 8; // model <-> tool round trips per user turn
 const MAX_BRANCHES = 6; // concerns per fan_out
 const FOLD_MAX = 2000; // chars of a fold handed back to the source
@@ -77,6 +80,9 @@ const SHELL = `
     <input id="ghlabel" autocomplete="off">
     <p class="note" id="ghwho"></p>
     <label><input type="checkbox" id="vmon"> Linux machine: a <code>shell</code> tool for new sessions (bash, git, python3, gh). Downloads the image once; switching this reloads the page to turn cross-origin isolation on or off.</label>
+    <label>Log repo: a private repo of yours where the harness keeps tracking over time (owner/name). Only the harness writes to it; agents can read it.</label>
+    <div style="display:flex;gap:6px"><input id="logrepo" placeholder="e.g. Glyphharness/harness-logs" autocomplete="off"><button data-act="logsetup">set up</button><button data-act="logsync">sync</button></div>
+    <p class="note" id="logstat"></p>
     <label>Pinned code ref (tag, branch or commit; empty = this branch)</label>
     <input id="ref" placeholder="e.g. v0.1.0">
     <label>API base URL (empty = provider default)</label>
@@ -86,6 +92,18 @@ const SHELL = `
     <label>Branch token budget (prompt + output, per fan_out branch)</label>
     <input id="budget" type="number" min="1000" step="1000">
     <p class="note" id="build"></p>
+  </details>
+  <details><summary>Policies</summary>
+    <p class="note">Checked before every tool call. A call that breaks one is repaired by the policy model from the policy and the call alone, then runs as repaired; the original stays visible. One per line: <code>&lt;tool|*&gt; /regex/flags rule</code>.</p>
+    <textarea id="policies" rows="5" spellcheck="false"></textarea>
+    <p class="note" id="polerr"></p>
+    <label>Policy model (empty = helper model, else the session's model)</label>
+    <input id="polmodel" list="models" placeholder="a small, cheap model id">
+  </details>
+  <details><summary>Smells</summary>
+    <p class="note">Policy rewrites and refusals, call notes written as text, tool errors and timeouts, recorded as they happen with the steering in effect (core prompt, system prompt, policies, tools), across sessions. Nothing changes mid-session. "review" asks the policy model for steering changes from these counts alone; adopted ones are yours to apply, and reach new sessions only.</p>
+    <div id="smells"></div>
+    <button data-act="review">review</button> <button data-act="smellsclear">clear</button>
   </details>
   <details><summary id="pricesum">Models</summary>
     <p class="note">Collapsed line: input / cached input / output, per 1M tokens.</p>
@@ -216,6 +234,7 @@ function messageNode(m, s) {
   if (m.role === 'tool') {
     el.append(h('details', { class: 'call' }, h('summary', { text: 'result ' + m.tool_call_id }), h('pre', { text: m.content })));
     if (m.x?.audit) el.append(auditTable(m.x.audit));
+    if (m.x?.policy) { const p = m.x.policy; el.append(h('details', { class: 'call policy' }, h('summary', { text: `policy ${p.id} ${p.refused ? 'refused the call' : 'rewrote the call'} (${p.model})` }), h('pre', { text: `${p.rule}\n\nfrom: ${p.from}${p.to ? '\nto:   ' + p.to : ''}${p.refused ? '\nwhy:  ' + p.refused : ''}` }))); }
   } else if (m.content) el.append(...blocks(m.content));
   for (const tc of m.tool_calls || []) {
     const d = h('details', { class: 'call' }, h('summary', { text: `call ${tc.function.name} (${tc.id})` }), h('pre', { text: tc.function.arguments }));
@@ -276,7 +295,7 @@ function sessionRow(s) {
 }
 
 function ledgerRow(e, i) {
-  const pct = e.helper ? 'helper' : e.kept == null ? '-' : Math.round(100 * e.kept / e.prevChars) + '%';
+  const pct = e.helper ? (e.kind || 'helper') : e.kept == null ? '-' : Math.round(100 * e.kept / e.prevChars) + '%';
   const hit = e.kept == null ? '' : e.kept === e.prevChars ? 'full' : 'broken';
   const n = v => v == null ? '-' : String(v);
   return h('tr', {},
@@ -601,7 +620,7 @@ async function turns(s, depth, onFirst) {
     onPatterns: renderPatterns,
     helper: set.helper ? (want, text) => helper(s, want, text) : null,
     vm: s.tools?.includes('vm') ? vm() : null,
-    git: s.tools?.includes('repo') ? gitClient({ token: gh.token, trace, get, confirm: what => approve(s, what) }) : null,
+    git: s.tools?.includes('repo') ? gitClient({ token: gh.token, trace, get, confirm: what => approve(s, what), readOnly: () => [state.meta.settings.logRepo].filter(Boolean) }) : null,
   };
   for (let step = 0; step < MAX_STEPS; step++) {
     const body = buildRequest(s, set.model, defsFor(s));
@@ -667,6 +686,7 @@ async function turns(s, depth, onFirst) {
     if (!calls.length) {
       if (s.wire === 'notes' && imitatesNote(acc.content)) {
         pat.trailAdd({ t: Date.now(), ...ctx.by(), tool: 'imitated_note', shape: 'imitated', ok: false, chars: acc.content.length, ms: 0 });
+        smell(s, { kind: 'imitated-note', detail: acc.content.slice(0, 200) });
         notice(s, 'The reply wrote a call note as text instead of calling the tool, so nothing ran. This is the known risk of the "notes" log form.');
       }
       return 'done';
@@ -677,13 +697,114 @@ async function turns(s, depth, onFirst) {
     }
     for (const tc of calls) {
       ctx.audit = null;
-      const m = { role: 'tool', tool_call_id: tc.id, content: await execTool(tc, ctx) };
-      if (ctx.audit) m.x = { audit: ctx.audit };
+      const pol = await enforce(s, tc);
+      let content;
+      if (pol?.refused) {
+        content = `Not run: policy ${pol.id} (${pol.rule}): ${pol.refused}`;
+        pat.trailAdd({ t: Date.now(), ...ctx.by(), tool: tc.function.name, shape: 'policy-refused', via: 'policy', ok: false, chars: content.length, ms: 0 });
+      } else {
+        if (pol) await relog(s, tc, pol.to);
+        content = await execTool(pol ? { ...tc, function: { ...tc.function, arguments: pol.to } } : tc, ctx, pol ? 'policy' : undefined);
+        if (pol) content = `[policy ${pol.id}: call rewritten]\n` + content;
+      }
+      if (pol) smell(s, { kind: pol.refused ? 'policy-refused' : 'policy-rewritten', tool: tc.function.name, policy: pol.id, rule: pol.rule, model: pol.model, from: pol.from.slice(0, 300), to: pol.to?.slice(0, 300), why: pol.refused });
+      else if (/^(Tool error|Error:)/.test(content)) smell(s, { kind: 'tool-error', tool: tc.function.name, detail: content.split('\n')[0].slice(0, 200) });
+      if (/\n\[timed out after/.test(content)) smell(s, { kind: 'tool-timeout', tool: tc.function.name, detail: content.slice(-120) });
+      const m = { role: 'tool', tool_call_id: tc.id, content };
+      if (ctx.audit || pol) m.x = { ...(ctx.audit ? { audit: ctx.audit } : {}), ...(pol ? { policy: pol } : {}) };
       push(s, m);
     }
   }
   notice(s, `Stopped after ${MAX_STEPS} tool rounds.`);
   return 'limit';
+}
+
+// ---------- policies (policy.js) ----------
+
+// Check a call against the policies; on a match ask the policy model for a repair.
+// Returns null (no policy applies), {..., to} (run this instead) or {..., refused}.
+async function enforce(s, tc) {
+  const set = state.meta.settings;
+  const pols = policy.parse(set.policies ?? policy.DEFAULT_POLICIES);
+  let args = tc.function.arguments || '{}';
+  try {
+    const a = JSON.parse(args);
+    if (typeof a.ref === 'string' && Object.keys(a).every(k => k === 'ref' || k === 'name' || k === 'want')) args = (await get(a.ref).catch(() => null)) || args;
+  } catch {}
+  const p = policy.broken(pols, tc.function.name, args)[0];
+  if (!p) return null;
+  const def = defsFor(s).find(d => d.function.name === tc.function.name);
+  const model = set.policyModel || set.helper || set.model;
+  const rec = { id: p.id, rule: p.rule, model, from: args };
+  let fix = null;
+  try { fix = policy.readFix(await aux(s, model, policy.FIX_SYSTEM, policy.fixPrompt(p, tc.function.name, def?.function.parameters, args), 'policy')); } catch (e) { return { ...rec, refused: 'repair failed: ' + (e.message || e) }; }
+  if (!fix || fix.refuse) return { ...rec, refused: fix?.refuse || 'no usable repair' };
+  const to = JSON.stringify(fix.arguments);
+  const still = policy.broken(pols, tc.function.name, to)[0];
+  return still ? { ...rec, to, refused: `the repair still breaks ${still.id}` } : { ...rec, to };
+}
+
+// The rewritten call replaces the original in the log (that message has not been
+// sent back yet, so no cached byte changes); long arguments are swapped as usual.
+async function relog(s, tc, to) {
+  const m = s.messages.findLast(m => m.tool_calls?.some(c => c.id === tc.id));
+  const c = m?.tool_calls.find(c => c.id === tc.id);
+  if (!c) return;
+  let a = {};
+  try { a = JSON.parse(to); } catch {}
+  c.function.arguments = SWAPPABLE.has(c.function.name) && to.length > ARG_MAX
+    ? JSON.stringify({ ref: await put(to), name: String(a.name || '').slice(0, 60) || undefined, want: a.want ? String(a.want).slice(0, 160) : undefined })
+    : to;
+  saveSession(s);
+}
+
+// Record a smell with the steering it happened under. Nothing is changed here:
+// steering is reviewed later, across sessions (review below), before any change
+// reaches a session's cached prefix.
+function steerOf(s) {
+  const set = state.meta.settings;
+  return smells.fp([s.core || 0, s.keep ? 1 : 0, s.edge || '', s.system || '', set.policies ?? policy.DEFAULT_POLICIES, JSON.stringify(defsFor(s).map(d => d.function.name + d.function.description))].join('\u0000'));
+}
+function smell(s, row) {
+  const r = smells.add({ session: s.id, model: state.meta.settings.model, steer: steerOf(s), ...row });
+  link?.emit('smell', r);
+  renderSmells();
+}
+
+function renderSmells() {
+  const box = $('#smells');
+  if (!box) return;
+  const list = smells.all();
+  const steer = smells.bySteer(state.meta.order.map(id => state.sessions[id]).filter(Boolean).map(x => ({ steer: steerOf(x), requests: x.ledger.filter(e => !e.helper).length }))).filter(o => o.smells || o.requests);
+  const props = smells.proposals();
+  box.replaceChildren(
+    h('p', { class: 'note', text: list.length ? smells.summary(list).map(([k, n]) => `${k} ×${n}`).join(' · ') : 'Nothing recorded.' }),
+    h('table', { class: 'audit' }, h('tr', {}, ...['steering', 'requests', 'smells', 'per request'].map(t => h('th', { text: t }))),
+      ...steer.map(o => h('tr', {}, h('td', { text: o.steer + (o.steer === steerOf(cur()) ? ' (this session)' : '') }), h('td', { text: String(o.requests) }), h('td', { text: String(o.smells) }), h('td', { text: o.rate == null ? '-' : o.rate.toFixed(3) })))),
+    ...props.filter(p => p.status === 'pending').map(p => h('div', { class: 'smell', 'data-kind': 'proposal' },
+      h('b', { text: 'proposal ' + p.id }), h('pre', { text: p.text }),
+      h('button', { 'data-act': 'propose', 'data-id': p.id, 'data-to': 'adopted', text: 'adopt' }), ' ',
+      h('button', { 'data-act': 'propose', 'data-id': p.id, 'data-to': 'dismissed', text: 'dismiss' }))),
+    ...list.slice(-20).reverse().map(r => h('div', { class: 'smell', 'data-kind': r.kind },
+      h('b', { text: r.kind + (r.policy ? ' ' + r.policy : '') }), h('span', { class: 'note', text: ` ${new Date(r.t).toLocaleTimeString()} ${r.tool || ''} ${r.why || r.detail || r.rule || ''}`.slice(0, 220) }),
+      ...(r.from ? [h('details', {}, h('summary', { text: 'call' }), h('pre', { text: 'from: ' + r.from + (r.to ? '\nto:   ' + r.to : '') }))] : []))));
+}
+
+// One request to a side model (policy repair); traced, with its own ledger row.
+async function aux(s, model, system, content, kind) {
+  const set = state.meta.settings, p = provider();
+  const body = { model, messages: [{ role: 'system', content: system }, { role: 'user', content }], stream: true };
+  let out = '', usage = null;
+  for await (const ev of p.stream(body, state.keys[set.provider], ctl?.signal, opt())) {
+    if (ev.error) throw new Error(ev.error.message || kind + ' failed');
+    if (ev.usage) usage = ev.usage;
+    out += ev.choices?.[0]?.delta?.content || '';
+  }
+  const entry = report({ t: Date.now(), model, helper: true, kind, chars: content.length, kept: null, prevChars: null }, usage);
+  s.ledger.push(entry);
+  saveSession(s);
+  if (s.id === state.meta.active) $('#ledger tbody').append(ledgerRow(entry, s.ledger.length - 1));
+  return out.trim();
 }
 
 // ---------- helper model ----------
@@ -826,8 +947,8 @@ const download = (name, obj) => {
 };
 
 const actions = {
-  trace() { download('webharness-' + new Date().toISOString().replace(/[:.]/g, '-') + '.trace', { kind: 'webharness.trace', version: 1, build: VERSION, exchanges: trace, trail: pat.trail() }); },
-  new() { const s = newSession({ keep: true, core: 2, edge: 'marks', ...(() => { const t = [...(gh.mode() ? ['repo'] : []), ...(vmWanted() && vmReady() ? ['vm'] : [])]; return t.length ? { tools: t } : {}; })() }); $('#sessions').prepend(sessionRow(s)); activate(s.id); $('#input').focus(); },
+  trace() { download('webharness-' + new Date().toISOString().replace(/[:.]/g, '-') + '.trace', { kind: 'webharness.trace', version: 1, build: VERSION, exchanges: trace, trail: pat.trail(), smells: smells.all(), proposals: smells.proposals() }); },
+  new() { logSync('session start'); const s = newSession({ keep: true, core: 2, edge: 'marks', ...(() => { const t = [...(gh.mode() ? ['repo'] : []), ...(vmWanted() && vmReady() ? ['vm'] : [])]; return t.length ? { tools: t } : {}; })() }); $('#sessions').prepend(sessionRow(s)); activate(s.id); $('#input').focus(); },
   import() { $('#file').click(); },
   async export() {
     const s = cur(), bundle = exportBundle(s), blobs = {};
@@ -837,6 +958,38 @@ const actions = {
     if (pat.all().length) bundle.patterns = pat.all();
     download((s.title.replace(/[^\w\- ]+/g, '').trim() || 'session') + '.session', bundle);
   },
+  smellsclear() { smells.clear(); renderSmells(); },
+  async logsetup() {
+    const set = state.meta.settings, stat = $('#logstat'), l = logs();
+    if (!l) { stat.textContent = 'Enter owner/name first.'; return; }
+    try {
+      stat.textContent = 'checking ' + l.repo + '…';
+      let st = await l.status();
+      if (st.state === 'missing') {
+        if (!confirm(`${l.repo} does not exist (or this credential cannot see it). Create it as a private repository now?`)) { stat.textContent = 'Not created.'; return; }
+        stat.textContent = (await l.create()).split('\n')[0];
+        st = await l.status();
+      }
+      if (st.state === 'empty') { stat.textContent = 'writing the layout…'; await l.init(); st = await l.status(); }
+      set.logReady = st.state === 'ready'; saveMeta();
+      stat.textContent = set.logReady ? `${l.repo}: ready (schema ${st.manifest.schema})` : `${l.repo}: ${st.state}`;
+      if (set.logReady) await logSync('set up');
+    } catch (e) { stat.textContent = e.message; }
+  },
+  logsync() { return logSync('by hand'); },
+  async review() {
+    const s = cur(), set = state.meta.settings;
+    const model = set.policyModel || set.helper || set.model;
+    const steer = smells.bySteer(state.meta.order.map(id => state.sessions[id]).filter(Boolean).map(x => ({ steer: steerOf(x), requests: x.ledger.filter(e => !e.helper).length })));
+    const rows = smells.all().slice(-200).map(r => ({ kind: r.kind, steer: r.steer, tool: r.tool, policy: r.policy, why: r.why, detail: r.detail?.slice(0, 120) }));
+    const input = `STEERING VERSIONS:\n${JSON.stringify(steer)}\n\nRECENT ROWS:\n${rows.map(r => JSON.stringify(r)).join('\n')}\n\nCURRENT CONVENTIONS:\n${corePrompt(s)}\n\nCURRENT POLICIES:\n${set.policies ?? policy.DEFAULT_POLICIES}\n\nCURRENT SYSTEM PROMPT:\n${s.system || '(empty)'}`;
+    const text = await aux(s, model, smells.REVIEW_SYSTEM, input, 'review').catch(e => 'review failed: ' + (e.message || e));
+    const list = smells.proposals();
+    list.push({ id: 'r' + Date.now().toString(36), t: Date.now(), model, text, status: 'pending', basis: { rows: rows.length, steer: steer.length } });
+    smells.saveProposals(list);
+    renderSmells();
+  },
+  propose(el) { const list = smells.proposals(); const p = list.find(x => x.id === el.dataset.id); if (p) { p.status = el.dataset.to; p.decided = Date.now(); smells.saveProposals(list); } renderSmells(); },
   async ghcheck() {
     const who = $('#ghwho');
     who.textContent = 'checking…';
@@ -945,6 +1098,15 @@ function bind() {
     s.tools = e.target.checked ? [...new Set([...(s.tools || []), 'vm'])] : (s.tools || []).filter(t => t !== 'vm');
     saveSession(s);
   });
+  const showPol = () => { $('#polerr').textContent = policy.parse($('#policies').value).filter(p => p.error).map(p => p.id + ': ' + p.error).join('; '); };
+  $('#policies').value = state.meta.settings.policies ?? policy.DEFAULT_POLICIES;
+  $('#polmodel').value = state.meta.settings.policyModel || '';
+  showPol();
+  $('#policies').addEventListener('change', e => { state.meta.settings.policies = e.target.value; saveMeta(); showPol(); });
+  $('#polmodel').addEventListener('change', e => { state.meta.settings.policyModel = e.target.value.trim(); saveMeta(); });
+  $('#logrepo').value = state.meta.settings.logRepo || '';
+  $('#logrepo').addEventListener('change', e => { state.meta.settings.logRepo = e.target.value.trim(); state.meta.settings.logReady = false; saveMeta(); $('#logstat').textContent = 'press "set up"'; });
+  if (state.meta.settings.logReady) $('#logstat').textContent = state.meta.settings.logRepo + ': ready';
   $('#vmon').checked = vmWanted();
   $('#vmon').addEventListener('change', e => { try { localStorage.setItem('wh:vm', e.target.checked ? '1' : '0'); } catch {} location.reload(); });
   $('#wire').addEventListener('change', e => { const s = cur(); s.wire = e.target.value; saveSession(s); showCore(); });
@@ -1034,6 +1196,7 @@ export function boot(env) {
   showBase();
   renderPatterns();
   renderPads();
+  renderSmells();
   applyInspector();
   bind();
   if (!state.sessions[state.meta.active]) state.meta.active = state.meta.order[0] || '';
@@ -1066,6 +1229,36 @@ function vm() {
     },
   });
   return vmInst;
+}
+
+// ---------- log repo (logrepo.js) ----------
+
+// Tracking over time in a private repo of the user's: written by the harness
+// alone (system writes, no approval card), synced at session start and on demand.
+function logs() {
+  const repo = state.meta.settings.logRepo;
+  if (!repo) return null;
+  const redact = t => [...Object.values(state.keys).filter(v => typeof v === 'string' && v.length > 8), ...gh.secrets()].reduce((x, k) => x.split(k).join('[key]'), t);
+  return logRepo({ git: gitClient({ token: gh.token, trace, get, confirm: async () => true }), repo, redact });
+}
+function logPayload(since) {
+  const list = state.meta.order.map(id => state.sessions[id]).filter(Boolean);
+  const sm = smells.all();
+  const steering = [...new Map(list.map(x => [steerOf(x), x])).entries()].map(([fp, x]) => ({ fp, core: corePrompt(x), system: x.system || '', policies: state.meta.settings.policies ?? policy.DEFAULT_POLICIES, tools: defsFor(x).map(d => d.function.name) }));
+  const sessions = list.filter(x => (x.ledger.at(-1)?.t || x.created) > since).map(x => {
+    const sum = k => x.ledger.reduce((n, e) => n + (Number(e[k]) || 0), 0);
+    return { session: x.id, parent: x.parent?.id || null, created: x.created, model: x.ledger.at(-1)?.model || null, steer: steerOf(x), tools: x.tools || [], requests: x.ledger.filter(e => !e.helper).length, side: x.ledger.filter(e => e.helper).length, prompt: sum('prompt'), cached: sum('cached'), completion: sum('completion'), cost: +sum('cost').toFixed(6), smells: sm.filter(r => r.session === x.id).length };
+  });
+  return { smells: sm, sessions, steering, proposals: smells.proposals() };
+}
+let logBusy = null;
+async function logSync(why) {
+  const l = logs();
+  if (!l || !state.meta.settings.logReady || logBusy) return logBusy;
+  const since = (() => { try { return JSON.parse(localStorage.getItem('wh:logsync') || '{}')[l.repo]?.t || 0; } catch { return 0; } })();
+  $('#logstat').textContent = 'syncing (' + why + ')…';
+  logBusy = l.sync(logPayload(since)).then(r => { $('#logstat').textContent = `${l.repo}: ${r}`; }, e => { $('#logstat').textContent = `${l.repo}: sync failed: ${e.message}`; smells.add({ kind: 'log-sync-failed', detail: e.message.slice(0, 200) }); }).finally(() => { logBusy = null; });
+  return logBusy;
 }
 
 // ---------- approvals for outward-facing writes ----------
@@ -1142,6 +1335,7 @@ async function startBridge(pair, env) {
       session: ({ id }) => exportBundle(state.sessions[id || state.meta.active]),
       trace: ({ from = 0 }) => trace.slice(from),
       trail: () => pat.trail(),
+      smells: () => smells.all(),
       dom: ({ sel, html, max = 20 }) => [...document.querySelectorAll(sel)].slice(0, max).map(e => (html ? e.outerHTML : e.textContent).slice(0, 4000)),
       run: ({ code, timeout = 5000 }) => runJs({ code }, null, timeout),
       act: ({ name }) => { if (!BRIDGE_ACTS.has(name)) throw new Error('act allows: ' + [...BRIDGE_ACTS].join(' ')); actions[name](); return state.meta.active; },

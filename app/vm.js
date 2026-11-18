@@ -80,7 +80,14 @@ export function machine(env) {
     }
     input('stty -echo 2>/dev/null; export PS1= PS2=; cd /root\r');
     await new Promise(r => setTimeout(r, 500));
-    say('ready');
+    // the network stack (a second wasm) can come up after the shell: wait for its
+    // proxy port (polled every second, stops as soon as it answers, at most ~60 s)
+    // so the first networked command does not race it
+    say('waiting for the network');
+    const net = waitFor(/__WH_NET_(up|down)__/, 75e3);
+    input(`n=0; until timeout 1 bash -c '</dev/tcp/192.168.127.253/80' 2>/dev/null; do n=$((n+1)); [ $n -gt 60 ] && break; sleep 1; done; [ $n -gt 60 ] && echo __WH_NET_down__ || echo __WH_NET_up__\r`);
+    const r = await net.catch(() => null);
+    say(r?.m[1] === 'up' ? 'ready' : 'ready (no network)');
   }
 
   function waitFor(re, ms) {

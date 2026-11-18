@@ -22,7 +22,7 @@ import { randomBytes, webcrypto } from 'node:crypto';
 const args = process.argv.slice(2);
 const flag = (n, d) => { const i = args.indexOf('--' + n); return i >= 0 ? args.splice(i, 2)[1] : d; };
 const dir = flag('dir', join(homedir(), '.webharness-bridge'));
-const page = flag('page', 'https://glyphharness.github.io/web/');
+const page = flag('page', 'https://glyphharness.github.io/Web/');
 const repoArg = flag('repo', '');
 const remoteArg = flag('remote', ''); // tests: a local bare repo instead of github.com
 const wait = Number(flag('wait', 90));
