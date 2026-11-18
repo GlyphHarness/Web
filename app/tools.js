@@ -189,6 +189,10 @@ export const repoTools = [
     'Open a pull request from head into base (default branch if omitted). The user approves it.',
     { repo: { type: 'string' }, head: { type: 'string' }, base: { type: 'string' }, title: { type: 'string' }, body: { type: 'string' }, draft: { type: 'boolean' } }, ['repo', 'head', 'title'],
     (a, ctx) => ctx.git ? ctx.git.pr(a) : noRepo),
+  fn('repo_create',
+    'Create a new repository, private unless private is false, with a README unless readme is false. owner is an organization; omit it for the account itself. The user approves it.',
+    { name: { type: 'string' }, owner: { type: 'string' }, private: { type: 'boolean' }, description: { type: 'string' }, readme: { type: 'boolean' } }, ['name'],
+    (a, ctx) => ctx.git ? ctx.git.create(a) : noRepo),
 ];
 const all = () => [...tools, ...repoTools];
 

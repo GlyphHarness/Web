@@ -171,5 +171,14 @@ export function client(env) {
     return `#${p.number} ${p.head.ref} -> ${p.base.ref}\n${p.html_url}`;
   }
 
-  return { read, commit, pr, call };
+  // New repository under an organization (or the token's own account when owner is omitted).
+  async function create(a) {
+    if (!/^[\w.-]+$/.test(a.name || '')) throw new Error('name must be a plain repository name');
+    if (a.owner && !/^[\w.-]+$/.test(a.owner)) throw new Error('owner must be an account or organization name');
+    const body = { name: a.name, private: a.private !== false, description: a.description || '', auto_init: a.readme !== false };
+    if (!(await env.confirm({ what: 'repository', repo: (a.owner ? a.owner + '/' : '') + a.name, title: body.private ? 'private' : 'PUBLIC', head: '', base: '', body: body.description }))) return 'Not created: the user declined.';
+    const r = await call('POST', a.owner ? `/orgs/${a.owner}/repos` : '/user/repos', body);
+    return `${r.full_name} (${r.private ? 'private' : 'public'}, default branch ${r.default_branch})\n${r.html_url}`;
+  }
+  return { read, commit, pr, create, call };
 }

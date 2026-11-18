@@ -15,7 +15,7 @@ import * as pat from './patterns.js';
 import { put, get, handlesIn } from './outstore.js';
 import { buildRequest, measure, report, padAttachment, inherit, imitatesNote, keptLines, corePrompt, EDGE_MIN, markedOnly, edgeReplies, turnOf, KINDS } from './context.js';
 
-export const VERSION = '0.16.0';
+export const VERSION = '0.17.0';
 const MAX_STEPS = 8; // model <-> tool round trips per user turn
 const MAX_BRANCHES = 6; // concerns per fan_out
 const FOLD_MAX = 2000; // chars of a fold handed back to the source
@@ -1011,7 +1011,8 @@ function approve(s, what) {
     const head = what.what === 'commit'
       ? `${what.repo} ${what.branch}${what.newBranchFrom ? ' (new, from ' + what.newBranchFrom + ')' : ''}\n${what.message}\n\n${what.files.join('\n')}`
       : `${what.repo} ${what.head} -> ${what.base}\n${what.title}\n\n${what.body}`;
-    card.append(h('b', { text: what.what === 'commit' ? 'Commit to GitHub?' : 'Open a pull request?' }), h('pre', { text: head }));
+    const ask = { commit: 'Commit to GitHub?', 'pull request': 'Open a pull request?', repository: 'Create a GitHub repository?' }[what.what];
+    card.append(h('b', { text: ask }), h('pre', { text: what.what === 'repository' ? `${what.repo} (${what.title})\n${what.body}` : head }));
     for (const f of what.preview || []) {
       const d = h('details', {}, h('summary', { text: f.path }), h('pre', { class: 'full', text: f.text.length > 20000 ? f.text.slice(0, 20000) + '\n…' : f.text }));
       card.append(d);
@@ -1024,6 +1025,31 @@ function approve(s, what) {
     scrollDown();
   });
 }
+
+// ---------- paired agent as the model ----------
+
+// Provider "agent": each request goes up the bridge as a turn event and the
+// paired agent answers it with an `answer` directive ({turn, content, tool_calls:
+// [{name, args}]}). Everything after that (tool runs, approvals, the log) is the
+// harness's ordinary path.
+const waiting = new Map();
+providers.agent = {
+  label: 'Paired agent (bridge)', needsKey: false,
+  async models() { return [{ id: 'agent', name: 'Paired agent', ctx: 1e6, tools: true, pricing: { prompt: '0', completion: '0' } }]; },
+  async *stream(body, _key, signal) {
+    if (!link) throw new Error('No bridge is paired: open the page with a #bridge= link.');
+    const turn = uid('t');
+    const last = body.messages.slice(-3);
+    link.emit('turn', { turn, messages: body.messages.length, tail: last, tools: (body.tools || []).map(t => t.function.name) });
+    const r = await new Promise((ok, no) => {
+      waiting.set(turn, ok);
+      signal?.addEventListener('abort', () => { waiting.delete(turn); no(new DOMException('Aborted', 'AbortError')); });
+    });
+    const calls = (r.tool_calls || []).map((c, index) => ({ index, id: 'call_' + uid('c'), type: 'function', function: { name: c.name, arguments: JSON.stringify(c.args || {}) } }));
+    yield { choices: [{ delta: { content: r.content || '', ...(calls.length ? { tool_calls: calls } : {}) } }] };
+    yield { choices: [{ delta: {}, finish_reason: calls.length ? 'tool_calls' : 'stop' }], usage: { prompt_tokens: 0, completion_tokens: 0, prompt_tokens_details: { cached_tokens: 0 }, cost: 0 } };
+  },
+};
 
 // ---------- debug bridge (bridge.js) ----------
 
@@ -1038,6 +1064,12 @@ async function startBridge(pair, env) {
     gated: new Set(['send', 'set', 'reload']),
     directives: {
       ping: hello,
+      answer({ turn, content, tool_calls }) {
+        const w = waiting.get(turn);
+        if (!w) throw new Error('no turn waiting with id ' + turn + '; waiting: ' + [...waiting.keys()].join(' '));
+        waiting.delete(turn); w({ content, tool_calls });
+        return { answered: turn };
+      },
       state: () => ({ active: state.meta.active, busy, settings: { ...set }, sessions: state.meta.order.map(id => { const s = state.sessions[id]; return { id, title: s.title, parent: s.parent?.id || null, messages: s.messages.length, ledger: s.ledger?.length || 0 }; }) }),
       session: ({ id }) => exportBundle(state.sessions[id || state.meta.active]),
       trace: ({ from = 0 }) => trace.slice(from),

@@ -67,6 +67,7 @@ function api(method, path, q, body, headers) {
     br.sha = sha();
     return [200, { data: { createCommitOnBranch: { commit: { oid: br.sha, url: 'https://github.com/o/r/commit/' + br.sha } } } }];
   }
+  if (path === '/orgs/neworg/repos' && method === 'POST') return [201, { full_name: 'neworg/' + body.name, private: body.private, default_branch: 'main', html_url: 'https://github.com/neworg/' + body.name }];
   if (path === '/repos/o/r/pulls' && method === 'POST') return [201, { number: 7, head: { ref: body.head }, base: { ref: body.base }, html_url: 'https://github.com/o/r/pull/7' }];
   return [404, { message: 'no fake for ' + method + ' ' + path }];
 }
@@ -166,6 +167,23 @@ const pend = directive('send', { text: 'hello' });
 await page.waitForSelector('#bridgebar [data-bask] button');
 await page.click('#bridgebar [data-bask] button:has-text("deny")');
 check('bridge: send waits for a click; deny is reported', /declined by the user/.test((await pend)?.error || ''));
+// the paired agent acts as the model: a turn goes up, the answer comes down as tool calls
+await page.evaluate(() => { const k = JSON.parse(localStorage['wh:keys']); }); // keys unchanged
+await page.selectOption('#provider', 'agent');
+await page.fill('#model', 'agent'); await page.dispatchEvent('#model', 'change');
+await page.click('[data-act=new]');
+await page.fill('#input', 'create the repo'); await page.press('#input', 'Enter');
+const turn = await until(async () => (await upEvents()).find(e => e.type === 'turn' && !e.seen)?.data);
+check('agent provider: the request goes up as a turn with the tool list', turn?.tools?.includes('repo_create'));
+const ans = await directive('answer', { turn: turn.turn, content: 'Creating it.', tool_calls: [{ name: 'repo_create', args: { owner: 'neworg', name: 'lab', description: 'made by the paired agent' } }] });
+await page.waitForSelector('.thread:visible .msg[data-role=approve]:not([data-done]) button');
+check('agent provider: answer accepted; approval card for the repository', ans?.ok && /neworg\/lab \(private\)/.test(await thread().locator('.msg[data-role=approve]').last().textContent()));
+await thread().locator('.msg[data-role=approve]:not([data-done]) button', { hasText: 'allow' }).click();
+const turn2 = await until(async () => (await upEvents()).filter(e => e.type === 'turn').at(-1)?.data?.turn !== turn.turn && (await upEvents()).filter(e => e.type === 'turn').at(-1).data);
+check('repo_create: result goes back to the agent as the next turn', /neworg\/lab \(private, default branch main\)/.test(JSON.stringify(turn2?.tail)));
+await directive('answer', { turn: turn2.turn, content: 'Done.' });
+await page.waitForSelector('#app:not([data-busy])', { state: 'attached' });
+await page.selectOption('#provider', 'mock');
 const unknown = await directive('eval', { code: '1' });
 check('bridge: unknown directives are refused', unknown && !unknown.ok && /unknown directive/.test(unknown.error));
 
