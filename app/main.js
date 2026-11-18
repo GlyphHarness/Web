@@ -15,7 +15,7 @@ import * as pat from './patterns.js';
 import { put, get, handlesIn } from './outstore.js';
 import { buildRequest, measure, report, padAttachment, inherit, imitatesNote, keptLines, corePrompt, EDGE_MIN, markedOnly, edgeReplies, turnOf, KINDS } from './context.js';
 
-export const VERSION = '0.17.1';
+export const VERSION = '0.18.0';
 const MAX_STEPS = 8; // model <-> tool round trips per user turn
 const MAX_BRANCHES = 6; // concerns per fan_out
 const FOLD_MAX = 2000; // chars of a fold handed back to the source
@@ -98,6 +98,7 @@ const SHELL = `
     <select id="wire"><option value="calls">calls: structured, as the model made them</option><option value="notes">notes: one text line per call, results as text</option></select>
     <label>Replies, when first sent back to the model</label>
     <select id="edge"><option value="off">off: sent whole</option><option value="marks">marks: a long reply with "!" lines is sent as those lines</option><option value="helper">helper: marks, else condensed by the helper model</option></select>
+    <label><input type="checkbox" id="repotools"> Repository tools (repo_read, repo_commit, repo_pr, repo_create; needs GitHub access in Settings). Turning this on or off changes the tool list, which breaks the cached prefix once.</label>
     <label><input type="checkbox" id="keep"> Keep marks: the model flags lines to keep with "!" (adds one sentence to the system prompt)</label>
     <p class="note">First bytes of every request. Editing it mid-session breaks the cached prefix; the ledger will show it.</p>
   </details>
@@ -274,7 +275,7 @@ function ledgerRow(e, i) {
   const hit = e.kept == null ? '' : e.kept === e.prevChars ? 'full' : 'broken';
   const n = v => v == null ? '-' : String(v);
   return h('tr', {},
-    h('td', { text: String(i + 1) }), h('td', { 'data-hit': hit, title: `${e.broke ? 'first difference in ' + e.broke + '; ' : ''}${n(e.kept)} of ${n(e.prevChars)} chars; request ${e.chars} chars; ${e.model}`, text: pct }),
+    h('td', { text: String(i + 1) }), h('td', { 'data-hit': hit, title: `${e.broke ? 'first difference in ' + e.broke + '; ' : ''}${n(e.kept)} of ${n(e.prevChars)} chars; request ${e.chars} chars; ${e.model}${e.upstream ? ' via ' + e.upstream : ''}`, text: pct }),
     h('td', { text: n(e.prompt) }), h('td', { text: n(e.cached) }), h('td', { text: n(e.completion) }),
     h('td', { text: e.cost == null ? '-' : Number(e.cost).toFixed(5) }));
 }
@@ -310,6 +311,7 @@ function activate(id) {
   $('#title').value = s.title;
   $('#system').value = s.system;
   $('#wire').value = s.wire || 'calls';
+  $('#repotools').checked = !!s.tools?.includes('repo');
   $('#keep').checked = !!s.keep;
   $('#edge').value = s.edge || 'off';
   showCore();
@@ -596,6 +598,9 @@ async function turns(s, depth, onFirst) {
   };
   for (let step = 0; step < MAX_STEPS; step++) {
     const body = buildRequest(s, set.model, defsFor(s));
+    // Cache affinity: ask OpenRouter for the upstream that served this session last, so
+    // its prefix cache is warm. Fallbacks stay allowed. Outside the messages, so the prefix is unchanged.
+    if (set.provider === 'openrouter' && s.upstream && s.pin !== false) body.provider = { order: [s.upstream], allow_fallbacks: true };
     s.sent = s.messages.length; // everything in the log has now gone out; its wire form is fixed
     const entry = measure(s.id, body);
     if (shown()) { $('#req').textContent = JSON.stringify(body, null, 2); $('#events').textContent = ''; }
@@ -612,6 +617,7 @@ async function turns(s, depth, onFirst) {
         if (shown()) $('#events').append(JSON.stringify(ev) + '\n');
         if (ev.error) throw new Error(ev.error.message || JSON.stringify(ev.error));
         if (ev.usage) acc.usage = ev.usage;
+        if (typeof ev.provider === 'string') acc.upstream = ev.provider; // OpenRouter names the upstream that served it
         const d = ev.choices?.[0]?.delta;
         if (!d) continue;
         if (d.reasoning) { acc.reasoning += d.reasoning; think.append(d.reasoning); }
@@ -640,11 +646,12 @@ async function turns(s, depth, onFirst) {
       }
       const m = { role: 'assistant', content: acc.content || null };
       if (calls.length) m.tool_calls = calls;
-      m.x = { model: set.model, usage: acc.usage };
+      m.x = { model: set.model, usage: acc.usage, ...(acc.upstream ? { upstream: acc.upstream } : {}) };
+      if (acc.upstream && s.pin !== false) s.upstream = acc.upstream;
       if (acc.reasoning) m.x.reasoning = acc.reasoning;
       push(s, m);
     }
-    s.ledger.push(report(entry, acc.usage));
+    s.ledger.push({ ...report(entry, acc.usage), ...(acc.upstream ? { upstream: acc.upstream } : {}) });
     saveSession(s);
     if (shown()) $('#ledger tbody').append(ledgerRow(entry, s.ledger.length - 1));
     ledgerSum();
@@ -919,6 +926,13 @@ function bind() {
   $('#system').addEventListener('change', e => { const s = cur(); s.system = e.target.value; saveSession(s); });
   $('#edge').addEventListener('change', e => { const s = cur(); s.edge = e.target.value; saveSession(s); showCore(); });
   $('#keep').addEventListener('change', e => { const s = cur(); s.keep = e.target.checked; saveSession(s); showCore(); });
+  $('#repotools').addEventListener('change', e => {
+    const s = cur();
+    s.tools = e.target.checked ? [...new Set([...(s.tools || []), 'repo'])] : (s.tools || []).filter(t => t !== 'repo');
+    saveSession(s);
+    // said once in the log, where it is cacheable from then on, rather than rewriting the first message
+    if (e.target.checked && s.messages.length) { const n = ghNote(s).trim(); if (n) push(s, { role: 'user', content: n }); }
+  });
   $('#wire').addEventListener('change', e => { const s = cur(); s.wire = e.target.value; saveSession(s); showCore(); });
   $('#model').addEventListener('change', e => { state.meta.settings.model = e.target.value.trim(); saveMeta(); showPrice(); });
   $('#model').addEventListener('input', showPicker);

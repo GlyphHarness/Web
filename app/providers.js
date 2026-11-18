@@ -154,7 +154,7 @@ const mock = {
       }
     } else text = 'Mock reply. Say "tool", "big", "widget", "form", "chart" or "fan out" to see a tool call.\n\n```js\nconst echo = ' + JSON.stringify(String(last.content).slice(0, 60)) + ';\n```';
     for (const w of text.split(/(?<=\s)/)) { await tick(); yield { choices: [{ delta: { content: w } }] }; }
-    yield { choices: [{ delta: {}, finish_reason: 'stop' }], usage: { prompt_tokens: prompt, completion_tokens: Math.ceil(text.length / 4), prompt_tokens_details: { cached_tokens: cached }, cost: 0 } };
+    yield { provider: 'MockCloud', choices: [{ delta: {}, finish_reason: 'stop' }], usage: { prompt_tokens: prompt, completion_tokens: Math.ceil(text.length / 4), prompt_tokens_details: { cached_tokens: cached }, cost: 0 } };
   },
 };
 

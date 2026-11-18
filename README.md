@@ -2,7 +2,7 @@
 
 A client-side LLM chat harness served straight from this repo with GitHub Pages. No server, no build step: the browser holds the API key, the sessions and the tools.
 
-Status: working skeleton (v0.17.1). The OpenRouter path is written from the OpenAI-compatible conventions and has not yet been run against the live API.
+Status: working skeleton (v0.18.0). The OpenRouter path is written from the OpenAI-compatible conventions and has not yet been run against the live API.
 
 ## Run
 
@@ -43,6 +43,10 @@ The cache ledger shows two numbers per request:
 - **cached**: input tokens the provider reports as cache hits (`usage.prompt_tokens_details.cached_tokens`).
 
 Editing the system prompt or switching model mid-session is allowed, and shows up as a broken prefix. Scratchpads marked "in context" are attached to the next user message only when new or changed, so they never rewrite earlier bytes.
+
+### Upstream pinning
+
+OpenRouter names the upstream provider that served each response. The ledger shows it (hover a row), and later requests in the session ask for the same upstream first (`provider.order`, fallbacks allowed), so its prefix cache stays warm. Requests that land on different upstreams were the cause of low cached counts in real sessions. Untested against the live API.
 
 ### Trace and replay
 
@@ -164,7 +168,7 @@ A page can call `api.github.com` (it answers any origin) but not git's own HTTP 
   - a fine-grained personal access token limited to the repos it may touch (Contents read/write, Pull requests read/write, Metadata read). GitHub has no API for creating these; they are made in the web UI.
   - a GitHub App (App ID + private key). For each request the page mints an installation token for exactly the repository that request touches, with only the permission it needs (contents read, contents write, or pull requests write), valid one hour. Commits are attributed to the app's bot account. The installation is looked up per repository, so one app installed on several repos or orgs works.
 - Credentials are stored with the other keys, never exported, masked in the trace and redacted from the bridge. "check" shows the account or app.
-- **Tools:** sessions created while a token is set get `repo_read` (file, tree, log, diff, branches, prs), `repo_commit`, `repo_pr` and `repo_create`. Older sessions keep their tool list, so their cached prefix is unchanged.
+- **Tools:** sessions created while a token is set get `repo_read` (file, tree, log, diff, branches, prs), `repo_commit`, `repo_pr` and `repo_create`. Older sessions keep their tool list, so their cached prefix is unchanged; the "Repository tools" switch under the system prompt adds or removes them for one session (one prefix break, shown in the ledger).
 - **Commits:** one commit per call through GraphQL `createCommitOnBranch`, guarded by the branch head it read. A change is whole `content`, `edits` (exact find/replace, each match unique), `from` (an `os:` handle) or `delete`. A missing branch is created from `from` or the default branch.
 - **Approval:** every commit and pull request waits for a click on a card showing what will be written, built from the resolved files rather than the model's description.
 

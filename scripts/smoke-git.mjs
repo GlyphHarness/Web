@@ -145,6 +145,14 @@ await thread().locator('.msg[data-role=approve]:not([data-done]) button', { hasT
 await idle();
 check('repo_pr: declined means nothing is opened', /Not opened: the user declined/.test(await thread().locator('.msg[data-role=tool] pre').last().textContent()) && !seen.some(([m, p]) => p === '/repos/o/r/pulls'));
 
+await page.uncheck('#repotools');
+await say('hello'); await idle();
+const toolNames = async () => (JSON.parse(await page.textContent('#req')).tools || []).map(t => t.function.name);
+check('repository tools switch: off removes them from the next request', !(await toolNames()).includes('repo_commit'));
+await page.check('#repotools');
+await say('hello'); await idle();
+check('repository tools switch: on adds them back, with the access line once in the log', (await toolNames()).includes('repo_commit') && /^github access: /m.test(await thread().locator('.msg[data-role=user]').nth(-2).textContent()));
+
 // ---- sandbox ----
 const run = code => page.evaluate(async c => (await import('./app/tools.js')).runJs({ code: c }), code);
 check('sandbox: code runs', await run('return 6*7') === '42');
