@@ -377,3 +377,7 @@ ol.xlines li::marker { color: var(--dim); font-size: 10px; }
 .vmact .vmt, .vmact .vmm { color: var(--dim); font-size: 11px; }
 .vmact .vml { overflow-wrap: anywhere; }
 .vmact[data-kind=policy] .vml { color: #e0a040; }
+#machine .vmpty { max-height: 70vh; min-height: 260px; overflow: auto; background: #0b0c0e; color: #d8dde6; padding: 8px; border-radius: 6px; margin: 6px 0; font: 12px/1.35 ui-monospace, monospace; white-space: pre; }
+#machine .vmpty[hidden], .vmptybar[hidden] { display: none; }
+.vmptybar { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+.vmptybar button { margin-left: auto; font-size: 11px; padding: 1px 8px; }

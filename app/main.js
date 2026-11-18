@@ -27,7 +27,7 @@ import * as pat from './patterns.js';
 import { put, get, handlesIn, setFallback } from './outstore.js';
 import { buildRequest, measure, report, padAttachment, inherit, imitatesNote, keptLines, corePrompt, EDGE_MIN, markedOnly, edgeReplies, turnOf, KINDS } from './context.js';
 
-export const VERSION = '0.42.0';
+export const VERSION = '0.43.0';
 const MAX_STEPS = 8; // model <-> tool round trips per user turn
 const MAX_BRANCHES = 6; // concerns per fan_out
 const FOLD_MAX = 2000; // chars of a fold handed back to the source
@@ -1149,7 +1149,7 @@ async function turns(s, depth, onFirst) {
     knownRef: r => !!state.sessions[r] || s.messages.some(m => typeof m.content === 'string' && m.content.includes(r)),
     onPatterns: renderPatterns,
     helper: set.helper ? (want, text) => helper(s, want, text) : null,
-    vm: s.tools?.includes('vm') ? vm() : null,
+    vm: s.tools?.includes('vm') ? shellRunner() : null,
     fsMark: () => fsMark(s),
     ask: a => askCard(s, a),
     values: valueTools(s, () => ctx.by()),
@@ -2228,6 +2228,36 @@ async function openExplorer() {
   draw();
 }
 
+// ---------- agent pty: the model's commands in a tmux session ----------
+
+// With settings.vmTmux on, the model's shell calls run in a persistent tmux
+// session "agent": typed into its pane, output recorded from the pane, completion
+// signalled with tmux wait-for. The person can watch the pane and type into it.
+const TMUX = 'agent';
+let tmuxReady = null;
+const shq = t => "'" + String(t).replace(/'/g, "'\\''") + "'";
+function ensureTmux() {
+  return tmuxReady ??= vm().run(`command -v tmux >/dev/null || wh-install tmux; tmux has-session -t ${TMUX} 2>/dev/null || tmux new-session -d -s ${TMUX} -x 160 -y 48; tmux set -g history-limit 5000 >/dev/null; echo tmux-ok`, 300, { quiet: true, label: 'start the agent pty (tmux)' })
+    .then(r => { if (!/tmux-ok/.test(r.out)) { tmuxReady = null; throw new Error('tmux did not start: ' + r.out.slice(-200)); } });
+}
+async function agentRun(cmd, timeoutS) {
+  await ensureTmux();
+  const id = Math.random().toString(36).slice(2, 10), d = '/tmp/.wh';
+  const script = `mkdir -p ${d}; cat > ${d}/c-${id}.sh <<'WH_EOF_${id}'\n${cmd}\nWH_EOF_${id}\n: > ${d}/o-${id}\n`
+    + `tmux pipe-pane -t ${TMUX} -o ${shq(`cat >> ${d}/o-${id}`)}\n`
+    + `tmux send-keys -t ${TMUX} ${shq(`bash ${d}/c-${id}.sh; echo $? > ${d}/r-${id}; tmux wait-for -S d-${id}`)} Enter\n`
+    + `timeout ${timeoutS} tmux wait-for d-${id} || { tmux send-keys -t ${TMUX} C-c; sleep 1; echo "[timed out after ${timeoutS}s; interrupted]" >> ${d}/o-${id}; }\n`
+    + `tmux pipe-pane -t ${TMUX}\n`
+    + `sed -e 's/\\x1b\\[[0-9;?]*[ -\\/]*[@-~]//g' -e 's/\\x1b[()][0-9A-B]//g' -e 's/\\r//g' ${d}/o-${id} | grep -v ${shq(`c-${id}.sh`)}\n`
+    + `exit $(cat ${d}/r-${id} 2>/dev/null || echo 124)`;
+  const r = await vm().run(script, timeoutS + 30, { display: cmd });
+  return { ...r, timedOut: /\[timed out after \d+s; interrupted\]/.test(r.out) || r.timedOut };
+}
+// what the shell tool runs on: the plain shell, or the agent pty
+function shellRunner() {
+  return state.meta.settings.vmTmux ? { run: (cmd, t) => agentRun(cmd, t) } : vm();
+}
+
 // ---------- machine status: what is on, what is missing, and why ----------
 
 // Each condition the machine needs, checked as it stands now, for the current session.
@@ -2269,16 +2299,33 @@ function vm() {
       // Terminal: what went in and what came out, in order. Harness activity: its own list.
       const term = h('div', { class: 'vmout', role: 'log', 'aria-label': 'terminal' });
       const acts = h('div', { class: 'vmacts', role: 'log', 'aria-label': 'harness activity', hidden: '' });
-      const tabT = btn('terminal', { class: 'vmtab', 'data-on': '' }), tabH = btn('harness activity', { class: 'vmtab' });
+      const tabT = btn('terminal', { class: 'vmtab', 'data-on': '' }), tabH = btn('harness activity', { class: 'vmtab' }), tabP = btn('agent pty', { class: 'vmtab', title: 'the tmux session the model’s commands run in' });
+      const ptyView = h('pre', { class: 'vmpty', 'aria-label': 'agent pty', hidden: '' }), ptyIn = h('input', { class: 'vmin', placeholder: 'type into the agent pty; Enter sends (Ctrl-C button interrupts)', hidden: '' });
+      const ptyBar = h('div', { class: 'vmptybar', hidden: '' }, h('label', { class: 'check' }, Object.assign(h('input', { type: 'checkbox', id: 'vmtmux' }), { checked: !!state.meta.settings.vmTmux }), ' run the model’s commands in this pty (tmux)'), btn('Ctrl-C', { 'data-pty': 'C-c' }));
+      let ptyTimer = null;
+      const ptyPoll = async () => {
+        if (ptyView.hidden) { ptyTimer = null; return; }
+        try { await ensureTmux(); const r = await vm().run(`tmux capture-pane -p -t ${TMUX} -S -200`, 20, { quiet: true, silent: true }); ptyView.textContent = r.out.replace(/\x1b\[[0-9;?]*[ -\/]*[@-~]|\r/g, ''); ptyView.scrollTop = ptyView.scrollHeight; }
+        catch (e) { ptyView.textContent = 'The agent pty is not available: ' + (e.message || e); }
+        ptyTimer = setTimeout(ptyPoll, 1500);
+      };
+      ptyIn.addEventListener('keydown', async e => { if (e.key === 'Enter') { const v = ptyIn.value; ptyIn.value = ''; await ensureTmux(); await vm().run(`tmux send-keys -t ${TMUX} -l ${shq(v)}; tmux send-keys -t ${TMUX} Enter`, 20, { quiet: true, label: 'typed into the agent pty' }); } });
+      ptyBar.addEventListener('click', async e => { const k = e.target.dataset?.pty; if (k) { await ensureTmux(); await vm().run(`tmux send-keys -t ${TMUX} ${k}`, 20, { quiet: true, label: 'sent ' + k + ' to the agent pty' }); } });
+      ptyBar.querySelector('#vmtmux').addEventListener('change', e => { state.meta.settings.vmTmux = e.target.checked; saveMeta(); });
       const nAct = h('span', { class: 'count slot' });
       tabH.append(' ', nAct);
-      const pick = which => { term.hidden = which !== 'term'; line.hidden = which !== 'term'; acts.hidden = which !== 'acts'; tabT.toggleAttribute('data-on', which === 'term'); tabH.toggleAttribute('data-on', which === 'acts'); };
-      tabT.onclick = () => pick('term'); tabH.onclick = () => pick('acts');
+      const pick = which => {
+        term.hidden = which !== 'term'; line.hidden = which !== 'term'; acts.hidden = which !== 'acts';
+        ptyView.hidden = ptyIn.hidden = ptyBar.hidden = which !== 'pty';
+        tabT.toggleAttribute('data-on', which === 'term'); tabH.toggleAttribute('data-on', which === 'acts'); tabP.toggleAttribute('data-on', which === 'pty');
+        if (which === 'pty' && !ptyTimer) ptyPoll();
+      };
+      tabT.onclick = () => pick('term'); tabH.onclick = () => pick('acts'); tabP.onclick = () => pick('pty');
       const line = h('input', { class: 'vmin', placeholder: 'type a command for the machine and press Enter' });
       line.addEventListener('keydown', e => { if (e.key === 'Enter') { vmInst.typed(line.value); type(line.value + '\r'); line.value = ''; } });
       const raw = Object.assign(h('input', { type: 'checkbox', id: 'vmraw' }), { checked: !!state.meta.settings.vmShowHarness });
       raw.addEventListener('change', () => { state.meta.settings.vmShowHarness = raw.checked; saveMeta(); });
-      box.replaceChildren(h('div', { class: 'vmtabs' }, tabT, tabH, h('label', { class: 'check vmrawsw', title: 'debug: also draw the harness’s own commands in the terminal' }, raw, ' raw')), term, line, acts);
+      box.replaceChildren(h('div', { class: 'vmtabs' }, tabT, tabH, tabP, h('label', { class: 'check vmrawsw', title: 'debug: also draw the harness’s own commands in the terminal' }, raw, ' raw')), term, line, acts, ptyBar, ptyView, ptyIn);
       let carry = '', count = 0;
       const addAct = (label, meta, kind = '') => { count++; slot(nAct, count); acts.append(h('div', { class: 'vmact', 'data-kind': kind }, h('span', { class: 'vmt', text: new Date().toLocaleTimeString() }), h('span', { class: 'vml', text: label }), h('span', { class: 'vmm', text: meta || '' }))); acts.scrollTop = acts.scrollHeight; };
       vmInst.onEvent(e => addAct(e.label, e.ms != null ? `${e.ms} ms · ${e.bytes} chars${e.timedOut ? ' · timed out' : e.code ? ' · exit ' + e.code : ''}` : '', e.kind));

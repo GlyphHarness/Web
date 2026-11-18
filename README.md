@@ -2,7 +2,7 @@
 
 A client-side LLM chat harness served straight from this repo with GitHub Pages. No server, no build step: the browser holds the API key, the sessions and the tools.
 
-Status: working skeleton (v0.42.0). The OpenRouter path is written from the OpenAI-compatible conventions and has not yet been run against the live API.
+Status: working skeleton (v0.43.0). The OpenRouter path is written from the OpenAI-compatible conventions and has not yet been run against the live API.
 
 ## Run
 
@@ -286,6 +286,7 @@ Settings → "Linux machine" gives new sessions a `shell` tool: an x86_64 Alpine
 - **Cost of use:** about 200 MB, downloaded once in 45 MB parts and kept in the browser's Cache API. In headless Chromium here, boot plus a first command took about 30 s, and a `gh api` call about 20 s. It is slow, but it is a real machine.
 - **Isolation:** the emulator needs SharedArrayBuffer, so the switch registers `coi-serviceworker` (MIT), which adds COOP/COEP headers that Pages cannot send. Switching it off removes the service worker. COEP `credentialless` keeps CDN scripts and third-party media loading; Safari falls back to `require-corp`.
 - **Network:** the guest's HTTP(S) goes through container2wasm's network stack and leaves as the page's own `fetch`. Only hosts that allow cross-origin requests answer. `api.github.com` does, so `gh api ...` works; git's smart HTTP does not, so `git clone`/`push` over HTTPS do not.
+- **Agent pty (tmux):** with "run the model's commands in this pty" on (Machine → *agent pty*), the model's shell calls run in a persistent tmux session `agent` instead of a fresh non-interactive bash: the command is typed into the pane, its output recorded from the pane (`pipe-pane`), completion signalled with `tmux wait-for`, and the exit status returned as before; a timeout sends Ctrl-C to the pane. tmux comes from the package shelf on first use. The *agent pty* tab mirrors the pane while open (polled quietly, not logged as activity), and what you type there, or the Ctrl-C button, goes into the same session: you can answer a prompt or stop a program the model started.
 - **Package shelf:** `wh-install <name>` installs Alpine packages kept next to the image on the page's own site (`app/vm/image/pkgs/`, from the `vm-image` branch). The machine's network can reach its own site (same origin) but not Alpine's mirrors, which do not allow cross-origin requests. `pkgs/index.txt` lists each package and its files; they are fetched and installed offline (`apk --no-network`). The shelf holds what you put there: currently `tmux`.
 - **Credentials:** the guest's `GH_TOKEN` is the placeholder `wh-placeholder-token`. The page replaces it on requests to `api.github.com` with the configured credential (minted per repository and permission in app mode). No token exists inside the machine, so a model that runs `env` finds nothing.
 - **Status, for the current session:** the Machine pane lists what the machine needs and whether each holds: switched on in Defaults; the page cross-origin isolated (with the service worker's state, and what to do if it stays off); this session has the shell tool; its scope allows the machine; and whether it has started (it starts on first use, or with "start now").

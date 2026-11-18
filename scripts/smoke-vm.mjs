@@ -112,6 +112,23 @@ check('explorer: deleted files are found against the baseline', /\/root\/gone\.t
 await page.keyboard.press('Escape');
 check('explorer: Escape closes it', !(await page.$('#explorer')));
 
+// ---- agent pty: the model's commands in a tmux session the person can watch and type into ----
+await page.click('[data-pane=machine]');
+await page.click('#machine .vmtab:has-text("agent pty")');
+await page.check('#vmtmux');
+await page.click('[data-pane=insp]');
+const inTmux = await run('echo in-tmux-$((6*7)); tty; [ -n "$TMUX" ] && echo has-tmux-env');
+check('agent pty: the model\'s command runs in tmux on a pty, its output comes back', /in-tmux-42/.test(inTmux) && /\/dev\/pts\//.test(inTmux) && /has-tmux-env/.test(inTmux) && /\[exit 0\]/.test(inTmux), JSON.stringify(inTmux.slice(0, 300)));
+await page.click('[data-pane=machine]');
+await page.click('#machine .vmtab:has-text("agent pty")');
+await page.waitForFunction(() => /in-tmux-42/.test(document.querySelector('#machine .vmpty').textContent), null, { timeout: 60000 });
+check('agent pty: the tab mirrors the pane', true);
+await page.fill('#machine .vmpty + .vmin', 'echo typed-into-pty');
+await page.press('#machine .vmpty + .vmin', 'Enter');
+await page.waitForFunction(() => /typed-into-pty\n.*typed-into-pty|typed-into-pty[^]*typed-into-pty/.test(document.querySelector('#machine .vmpty').textContent), null, { timeout: 60000 });
+check('agent pty: typing into it reaches the same session', true);
+await page.click('[data-pane=insp]');
+
 const code = await run('false');
 check('shell: exit status is reported', /\[exit 1\]/.test(code));
 check('machine pane shows the guest output', /gh version/.test(await page.textContent('#machine .vmout')));

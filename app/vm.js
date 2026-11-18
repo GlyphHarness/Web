@@ -159,12 +159,12 @@ export function machine(env) {
   async function exec(cmd, timeoutS = 120, opt = {}) {
     if (!booted) booted = boot().catch(e => { booted = null; say('failed: ' + e.message); throw e; });
     await booted;
-    if (!opt.quiet) view({ k: 'in', text: cmd, by: opt.by || 'model' });
+    if (!opt.quiet) view({ k: 'in', text: opt.display ?? cmd, by: opt.by || 'model' });
     const t0 = Date.now();
     if (opt.quiet) quiet++;
     let r;
     try { return r = await execInner(cmd, timeoutS); }
-    finally { if (opt.quiet) { quiet--; event({ label: opt.label || 'harness command', ms: Date.now() - t0, bytes: (r?.out || '').length, code: r?.code, timedOut: r?.timedOut }); } }
+    finally { if (opt.quiet) { quiet--; if (!opt.silent) event({ label: opt.label || 'harness command', ms: Date.now() - t0, bytes: (r?.out || '').length, code: r?.code, timedOut: r?.timedOut }); } }
   }
   async function execInner(cmd, timeoutS) {
     await booted;
