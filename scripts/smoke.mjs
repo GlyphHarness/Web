@@ -38,6 +38,8 @@ check('picker: "cheap tools" sorts by input price among tool-capable models', (a
 await page.fill('#model', 'mock <1');
 await page.locator('#picker .row[data-model]').first().dispatchEvent('mousedown');
 check('picker: choosing a row sets the model and its price panel', await page.inputValue('#model') === 'mock-1' && /cached input\$0.003/.test(await page.locator('#price').textContent()) && await slotOf('#pricesum') === 'Models · main $0.15 / $0.003 / $0.6' && !(await page.locator('#price').isVisible()));
+check('sessions: a first visit starts empty, with a way to begin', await page.isVisible('#empty'));
+await page.click('#empty [data-act=new]');
 await page.fill('#system', 'You are a test assistant. '.repeat(40));
 await page.dispatchEvent('#system', 'change');
 
@@ -485,6 +487,39 @@ await page.fill('#input', 'a concern for a branch');
 await page.click('[data-act=branch]');
 await page.waitForSelector('#app:not([data-busy])', { state: 'attached', timeout: 20000 });
 check('profiles: a branch inherits its source\'s profile', await page.evaluate(() => { const m = JSON.parse(localStorage['wh:meta']); const s = JSON.parse(localStorage['wh:s:' + m.active]); return !!s.parent && s.profile === JSON.parse(localStorage['wh:s:' + s.parent.id]).profile; }));
+
+// ---- paste config: the full setup payload (settings, profile with harness properties, values, new-session profile) ----
+const setup = {"settings": {"provider": "openrouter", "model": "meta/muse-ember", "helper": "inclusionai/ling-3.0-tiny", "policyModel": "tencent/hy4-flash", "pace": "run", "branchBudget": 150000, "ghlabel": "fine-grained token: Glyphharness repos, contents + PRs", "logRepo": "Glyphharness/harness-logs", "logTranscripts": true, "newProfile": "glyphharness"}, "profiles": [{"name": "glyphharness", "color": "#7fb4ff", "mutable": true, "settings": {"logRepo": "Glyphharness/harness-logs", "logTranscripts": true}, "caps": {"repo": "write", "vm": true, "ask": true, "fanout": true, "run_js": true}}], "values": [{"label": "org", "role": "config", "value": "Glyphharness", "purpose": "GitHub organization the work lives in", "scope": "profile:glyphharness"}, {"label": "frontend repo", "role": "config", "value": "Glyphharness/Web", "purpose": "the WebHarness frontend itself", "scope": "profile:glyphharness"}], "policies": [{"name": "bounded-waits", "on": true}]};
+await page.evaluate(() => document.querySelector('[data-act=cfgpaste]').click());
+await page.fill('.modal textarea', JSON.stringify(setup));
+const sp = await page.textContent('.modal .cfgplan');
+check('setup payload: previews settings, the profile, its values and the new-session profile with nothing refused', /profile glyphharness[^]*added/.test(sp) && /value org \(profile:glyphharness\)/.test(sp) && /newProfile/.test(sp) && !/refused/.test(sp), sp.slice(0, 400));
+await page.click('.modal .primary');
+const applied = await page.evaluate(() => { const m = JSON.parse(localStorage['wh:meta']); const p = m.profiles.find(x => x.name === 'glyphharness'); return { newProfile: m.settings.newProfile === p.id, logRepo: p.settings.logRepo, vals: (m.values || []).filter(v => v.scope.kind === 'profile' && v.scope.id === p.id).map(v => v.revs.at(-1).label + '=' + v.revs.at(-1).value + ':' + v.revs.at(-1).by.who) }; });
+check('setup payload: applied (profile log repo, values in the profile scope by "config", new sessions use it)', applied.newProfile && applied.logRepo === 'Glyphharness/harness-logs' && applied.vals.join() === 'org=Glyphharness:config,frontend repo=Glyphharness/Web:config', JSON.stringify(applied));
+await page.evaluate(() => document.querySelector('[data-act=cfgpaste]').click());
+await page.fill('.modal textarea', JSON.stringify({ values: [{ label: 'org', value: 'Glyphharness', scope: 'profile:glyphharness', purpose: 'GitHub organization the work lives in' }, { label: 'token', value: 'github_pat_' + 'x'.repeat(20), scope: 'defaults' }] }));
+const sp2 = await page.textContent('.modal .cfgplan');
+check('setup payload: pasting it again changes nothing; credential-like values are refused', /Nothing would change/.test(sp2) && /value token[^]*refused/.test(sp2), sp2.slice(0, 300));
+await page.click('.modal button:not(.primary)');
+await page.evaluate(() => document.querySelector('[data-act=cfgpaste]').click());
+await page.fill('.modal textarea', JSON.stringify({ settings: { provider: 'mock', model: 'mock-1' } }));
+await page.click('.modal .primary');
+await page.evaluate(() => { const m = document.querySelector('#newprofile'); m.value = ''; m.dispatchEvent(new Event('change')); });
+
+// ---- zero sessions is a valid state ----
+const dropAll = async () => { for (;;) { const id = await page.evaluate(() => document.querySelector('#sessions [data-id]')?.dataset.id); if (!id) break; await page.evaluate(id => document.querySelector(`#sessions [data-id="${id}"] [data-act=drop]`).click(), id); await page.waitForSelector('.modal .primary'); await page.click('.modal .primary'); await page.waitForTimeout(50); } };
+await dropAll();
+check('sessions: deleting the last one leaves none (no session is made behind your back)', await page.evaluate(() => document.querySelectorAll('#sessions [data-id]').length === 0 && JSON.parse(localStorage['wh:meta']).order.length === 0));
+check('sessions: the empty state says so and offers one; session-only controls are hidden', await page.isVisible('#empty') && /No sessions/.test(await page.textContent('#empty')) && !(await page.isVisible('#title')) && !(await page.isVisible('[data-act=export]')));
+await page.reload();
+await page.waitForSelector('#app', { state: 'attached' });
+await page.waitForTimeout(300);
+check('sessions: a reload with none stays empty', await page.evaluate(() => JSON.parse(localStorage['wh:meta']).order.length === 0) && await page.isVisible('#empty'));
+await page.fill('#input', 'hello from nothing');
+await page.click('#send');
+await page.waitForSelector('#app:not([data-busy])', { state: 'attached', timeout: 20000 });
+check('sessions: sending with none creates one and sends', await page.evaluate(() => JSON.parse(localStorage['wh:meta']).order.length === 1) && !(await page.isVisible('#empty')) && /hello from nothing/.test(await visible().locator('.msg[data-role=user]').first().textContent()));
 
 await page.evaluate(() => { const m = JSON.parse(localStorage['wh:meta']); m.schema = 99; localStorage['wh:meta'] = JSON.stringify(m); });
 await page.reload();

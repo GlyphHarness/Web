@@ -2,7 +2,7 @@
 
 A client-side LLM chat harness served straight from this repo with GitHub Pages. No server, no build step: the browser holds the API key, the sessions and the tools.
 
-Status: working skeleton (v0.37.0). The OpenRouter path is written from the OpenAI-compatible conventions and has not yet been run against the live API.
+Status: working skeleton (v0.38.0). The OpenRouter path is written from the OpenAI-compatible conventions and has not yet been run against the live API.
 
 ## Run
 
@@ -206,10 +206,14 @@ Named values a session can use (an endpoint, a region, a naming rule, a decision
 
 ### Paste config
 
-Settings → "paste config" takes a JSON block (for example one an agent writes in a reply) and merges it into the settings after showing every change as `field: old → new`. Only the fields named change. Accepted: `provider`, `model`, `helper`, `policyModel`, `base` (`{provider: url}`), `ghlabel`, `logRepo`, `branchBudget`, `pace`, `machine` (reloads), and `policies`, merged by name (a known name takes the fields given, a new one needs `pattern` and `rule`, `"remove": true` drops it). Anything that looks like a credential is refused and listed, never applied; tokens and keys are only ever typed into their own fields. "copy config" gives the current non-secret configuration in the same shape.
+Settings → "paste config" takes a JSON block (for example one an agent writes in a reply) and merges it into the settings after showing every change as `field: old → new`. Only the fields named change. Accepted: `provider`, `model`, `helper`, `policyModel`, `base` (`{provider: url}`), `ghlabel`, `logRepo`, `branchBudget`, `pace`, `machine` (reloads), and `policies`, merged by name (a known name takes the fields given, a new one needs `pattern` and `rule`, `"remove": true` drops it). Anything that looks like a credential is refused and listed, never applied; tokens and keys are only ever typed into their own fields. `newProfile` (by name) sets the profile new sessions use, and `values` adds scoped values (`{label, value, role, purpose, scope: "defaults" | "profile:<name>" | "session", expose}`), merged by label within their scope: a known label gets a new revision, made by "config". "copy config" gives the current non-secret configuration in the same shape.
 
     {"settings": {"model": "deepseek/deepseek-v4.1-flash-1017", "helper": "tencent/hy4-flash", "logRepo": "owner/name"},
      "policies": [{"name": "bounded-waits", "on": true}]}
+
+### Zero sessions
+
+Having no sessions is a valid state: a first visit, or deleting the last one, shows "No sessions." with a way to start one, and controls that only make sense for a session are hidden. Typing a message and sending it creates a session. Nothing is created behind your back.
 
 ### Handoff blocks
 

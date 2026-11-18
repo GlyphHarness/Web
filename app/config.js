@@ -18,6 +18,7 @@ export const FIELDS = {
   base: { check: v => v && typeof v === 'object' && Object.values(v).every(x => S(x) && (x === '' || /^https?:\/\//.test(x))), hint: '{provider: url}' },
   machine: { check: v => typeof v === 'boolean', hint: 'true/false; reloads the page' },
   logTranscripts: { check: v => typeof v === 'boolean' },
+  newProfile: { check: v => typeof v === 'string', hint: 'a profile name' },
 };
 const SECRET = /token|key|pem|secret|passw|credential|auth|bearer/i;
 const POLICY_FIELDS = ['name', 'tool', 'pattern', 'flags', 'rule', 'on'];
@@ -91,7 +92,33 @@ export function plan(text, current) {
       }
     }
   }
-  return { changes, refused, next: { settings, policies, machine, profiles } };
+  // scoped values merge by label within their scope: a known label gets a new
+  // revision, a new one is created. scope: "defaults" | "profile:<name>" | "session"
+  let values = null;
+  if (j.values != null) {
+    if (!Array.isArray(j.values)) refused.push({ path: 'values', why: 'must be a list' });
+    else {
+      values = [];
+      const pnames = new Set([...(current.profiles || []).map(p => p.name), ...(profiles || []).map(p => p.name)]);
+      for (const [i, v] of j.values.entries()) {
+        const path = `value ${v?.label || '#' + (i + 1)}`;
+        if (!v || !S(v.label) || !v.label.trim() || v.value === undefined) { refused.push({ path, why: 'needs label and value' }); continue; }
+        if (SECRET.test(v.label) || (S(v.value) && /^(ghp_|gho_|ghs_|github_pat_|sk-)[\w-]{8,}/.test(v.value))) { refused.push({ path, why: 'looks like a credential' }); continue; }
+        const scope = v.scope || 'defaults';
+        if (!(scope === 'defaults' || scope === 'session' || (scope.startsWith('profile:') && pnames.has(scope.slice(8))))) { refused.push({ path, why: 'scope is defaults, session or profile:<an existing name>' }); continue; }
+        if (v.expose && !['value', 'purpose', 'hidden'].includes(v.expose)) { refused.push({ path, why: 'expose is value, purpose or hidden' }); continue; }
+        const hit = (current.values || []).find(x => x.scope === scope && x.label.toLowerCase() === v.label.trim().toLowerCase());
+        if (hit && JSON.stringify(hit.value) === JSON.stringify(v.value) && (!v.purpose || hit.purpose === v.purpose)) continue;
+        values.push({ id: hit?.id || null, scope, label: v.label.trim().slice(0, 60), role: S(v.role) ? v.role : 'config', value: v.value, purpose: S(v.purpose) ? v.purpose : '', expose: v.expose, notes: S(v.notes) ? v.notes : undefined });
+        changes.push({ path: `${path} (${scope})`, from: hit ? hit.value : '(none)', to: v.value });
+      }
+    }
+  }
+  if (settings.newProfile != null) {
+    const ok = [...(current.profiles || []), ...(profiles || [])].some(p => p.name === settings.newProfile);
+    if (!ok) { refused.push({ path: 'newProfile', why: 'no profile named ' + settings.newProfile }); changes.splice(changes.findIndex(x => x.path === 'newProfile'), 1); delete settings.newProfile; }
+  }
+  return { changes, refused, next: { settings, policies, machine, profiles, values } };
 }
 
 // The current non-secret configuration, in the same shape plan() reads.
@@ -103,6 +130,7 @@ export function snapshot(current) {
   }
   const name = id => (current.profiles || []).find(p => p.id === id)?.name;
   return { webharness: 'config', v: 1, settings, policies: current.policies.map(p => Object.fromEntries(POLICY_FIELDS.filter(f => p[f] != null).map(f => [f, p[f]]))),
+    values: (current.values || []).map(v => ({ label: v.label, value: v.value, scope: v.scope, ...(v.purpose ? { purpose: v.purpose } : {}) })),
     profiles: (current.profiles || []).map(p => ({ name: p.name, ...(p.mutable === false ? { mutable: false } : {}), ...(p.parent ? { parent: name(p.parent) } : {}), color: p.color, settings: p.settings, caps: p.caps, ...(p.repos ? { repos: p.repos } : {}), locks: p.locks })) };
 }
 

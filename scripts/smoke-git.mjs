@@ -194,7 +194,7 @@ const directive = async (name, args = {}) => {
   return until(async () => (await upEvents()).find(e => e.type === 'reply' && e.data.re === id)?.data, 20000);
 };
 const st = await directive('state');
-check('bridge: state directive answered', st?.ok && st.data.sessions.length >= 2);
+check('bridge: state directive answered', st?.ok && st.data.sessions.length >= 1);
 check('bridge: replies never carry the token', !(await upEvents()).some(e => JSON.stringify(e).includes(TOKEN)) && JSON.stringify(await directive('dom', { sel: '#ghkey', html: true })).includes('ghkey'));
 const tr = await directive('trace');
 check('bridge: trace has the GitHub calls without the Authorization header', tr?.ok && tr.data.some(r => /graphql/.test(r.url)) && !JSON.stringify(tr.data).includes(TOKEN));

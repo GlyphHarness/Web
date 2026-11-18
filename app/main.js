@@ -26,7 +26,7 @@ import * as pat from './patterns.js';
 import { put, get, handlesIn, setFallback } from './outstore.js';
 import { buildRequest, measure, report, padAttachment, inherit, imitatesNote, keptLines, corePrompt, EDGE_MIN, markedOnly, edgeReplies, turnOf, KINDS } from './context.js';
 
-export const VERSION = '0.37.0';
+export const VERSION = '0.38.0';
 const MAX_STEPS = 8; // model <-> tool round trips per user turn
 const MAX_BRANCHES = 6; // concerns per fan_out
 const FOLD_MAX = 2000; // chars of a fold handed back to the source
@@ -51,13 +51,13 @@ const SHELL = `
 </aside>
 <main>
   <header id="bar">
-    <input id="title" aria-label="Session title">
+    <input id="title" class="needs-session" aria-label="Session title">
     <select id="provider" aria-label="Provider"></select>
     <span id="modelbox"><input id="model" placeholder="model: type to filter" aria-label="Model" autocomplete="off"><div id="picker"></div></span>
     <datalist id="models"></datalist>
-    <button data-act="export">export .session</button>
-    <button data-act="branch" title="Fork this session at its tail to work the text in the message box as one concern">branch</button>
-    <button data-act="epoch" title="Replace this conversation with a short pocket in a new session">fold session</button>
+    <button data-act="export" class="needs-session">export .session</button>
+    <button data-act="branch" class="needs-session" title="Fork this session at its tail to work the text in the message box as one concern">branch</button>
+    <button data-act="epoch" class="needs-session" title="Replace this conversation with a short pocket in a new session">fold session</button>
     <button data-act="foldback" title="Append this branch's last reply to its source as a fold">fold back</button>
     <button data-act="inspector">inspector</button>
     <button class="qbar slot" id="queuebar" data-act="q-show" title="custodial queue"></button>
@@ -77,7 +77,7 @@ const SHELL = `
   <div id="insp">
   <details open><summary>Profiles <span class="count" id="profcount"></span></summary>
     <p class="note">Scopes for sessions, by configuration level. A session in a profile resolves its settings down the chain (a locked setting cannot be overridden below), its capabilities only narrow, its repositories must be allowed at every level that lists them, and policies add up. Branches stay in their profile or one below it.</p>
-    <details class="item" id="sessioncard" open>
+    <details class="item needs-session" id="sessioncard" open>
       <summary><span class="chip">session</span><span class="name" id="sessname"></span><span class="meta" id="scopecount"></span></summary>
       <div class="body">
         <div class="row2"><label class="field"><span title="Only this profile or one below it. Changing it can change the tools, which breaks the cached prefix once.">profile (this one or below)</span><select id="sprofile"></select></label></div>
@@ -134,7 +134,7 @@ const SHELL = `
     <input id="budget" type="number" min="1000" step="1000">
     <p class="note" id="build"></p>
   </details>
-  <details><summary>Values <span class="count" id="valcount"></span></summary>
+  <details class="needs-session"><summary>Values <span class="count" id="valcount"></span></summary>
     <p class="note">Named values in this session's scope: its own, its profile chain's and settings-wide ones. Every change is a new revision; hiding is one too. The model is told each value's label and purpose (and the value, if visible) once, when it is new or changed; notes are never sent.</p>
     <div class="items" id="values"></div>
     <button data-act="val-add">+ value</button>
@@ -157,7 +157,7 @@ const SHELL = `
     <table id="price"></table>
     <button data-act="models">refresh list</button> <span class="note" id="modelsn"></span>
   </details>
-  <details open><summary>System prompt</summary>
+  <details open class="needs-session"><summary>System prompt</summary>
     <label>Core prompt (sent first; follows the two settings below)</label>
     <pre id="core"></pre>
     <label>Your system prompt</label>
@@ -468,14 +468,15 @@ const ask2 = (title, text, yes = 'OK', no = 'Cancel') => modal({ title, body: te
 
 // ---------- paste-to-configure (config.js) ----------
 
-const cfgCurrent = () => ({ settings: state.meta.settings, policies: policyList(), profiles: profiles(), providers: Object.keys(providers), machine: vmWanted() });
+const cfgCurrent = () => ({ settings: { ...state.meta.settings, newProfile: profiles().find(p => p.id === state.meta.settings.newProfile)?.name }, policies: policyList(), profiles: profiles(), providers: Object.keys(providers), machine: vmWanted(),
+  values: allValues().map(v => { const r = vals.current(v); return { id: v.id, scope: v.scope.kind === 'global' ? 'defaults' : v.scope.kind === 'session' ? 'session' : 'profile:' + (profiles().find(p => p.id === v.scope.id)?.name || v.scope.id), label: r.label, value: r.value, purpose: r.purpose }; }) });
 // Inputs re-read from state after a merge.
 function showSettings() {
   const set = state.meta.settings;
   $('#provider').value = set.provider; $('#model').value = set.model || ''; $('#helper').value = set.helper || '';
   $('#polmodel').value = set.policyModel || ''; $('#ghlabel').value = set.ghlabel || ''; $('#logrepo').value = set.logRepo || '';
   $('#budget').value = set.branchBudget || BRANCH_BUDGET; $('#pace').value = pace();
-  showBase(); renderPolicies(); renderProfiles(); redrawSessions(); showPrice(); renderScope();
+  showBase(); renderPolicies(); renderProfiles(); redrawSessions(); showPrice(); renderScope(); renderValues();
 }
 async function pasteConfig(prefill = '') {
   const ta = h('textarea', { rows: '10', class: 'mono', spellcheck: 'false', placeholder: '{"settings": {"model": "...", "helper": "..."}, "policies": [{"name": "...", "rule": "..."}]}' });
@@ -498,8 +499,17 @@ async function pasteConfig(prefill = '') {
   setTimeout(() => ta.focus());
   const go = await modal({ title: 'Paste config', body: [ta, out], actions: [{ text: 'Cancel', value: false, cancel: true }, { text: 'Apply', value: true, primary: true }] });
   if (!go || !last || last.error || !last.changes.length) return;
-  const { settings, policies, machine, profiles: nextProfiles } = last.next;
+  const { settings, policies, machine, profiles: nextProfiles, values: nextValues } = last.next;
   if (nextProfiles) state.meta.profiles = nextProfiles;
+  if (settings.newProfile) settings.newProfile = profiles().find(p => p.name === settings.newProfile)?.id;
+  for (const v of nextValues || []) {
+    const scope = v.scope === 'defaults' ? { kind: 'global' } : v.scope === 'session' ? { kind: 'session', id: cur()?.id } : { kind: 'profile', id: profiles().find(p => p.name === v.scope.slice(8))?.id };
+    if (!scope.id && scope.kind !== 'global') continue;
+    const by = { who: 'config', session: cur()?.id, title: cur()?.title };
+    const old = v.id && allValues().find(x => x.id === v.id);
+    if (old) vals.revise(old, { value: v.value, purpose: v.purpose || undefined, role: v.role, expose: v.expose, why: 'paste config' }, by);
+    else vals.create(state.meta, scope, { label: v.label, role: v.role, value: v.value, purpose: v.purpose, expose: v.expose, notes: v.notes, why: 'paste config' }, by);
+  }
   Object.assign(state.meta.settings, settings);
   if ('logRepo' in settings) state.meta.settings.logReady = false;
   if (policies) state.meta.settings.policyList = policies;
@@ -832,6 +842,7 @@ function renderPolicies() {
 const renderPads = () => { $('#pads').replaceChildren(...state.meta.pads.map(padNode)); slot($('#padcount'), state.meta.pads.length || ''); };
 
 function activate(id) {
+  app.removeAttribute('data-empty');
   state.meta.active = id;
   saveMeta();
   const s = cur();
@@ -1510,6 +1521,7 @@ async function relog(s, tc, to) {
 // steering is reviewed later, across sessions (review below), before any change
 // reaches a session's cached prefix.
 function steerOf(s) {
+  if (!s) return '';
   const set = state.meta.settings;
   return smells.fp([s.core || 0, s.keep ? 1 : 0, s.edge || '', s.system || '', eff(s).path, JSON.stringify(policiesFor(s)), JSON.stringify(toolsFor(s).map(d => d.function.name + d.function.description))].join('\u0000'));
 }
@@ -1551,6 +1563,7 @@ async function aux(s, model, system, content, kind, maxOut) {
     out += ev.choices?.[0]?.delta?.content || '';
   }
   const entry = report({ t: Date.now(), model, helper: true, kind, chars: content.length, kept: null, prevChars: null }, usage);
+  if (!s) return out.trim(); // no session to record it against
   s.ledger.push(entry);
   saveSession(s);
   if (s.id === state.meta.active) $('#ledger tbody').append(ledgerRow(entry, s.ledger.length - 1));
@@ -1701,6 +1714,7 @@ const actions = {
   new() { logSync('session start'); const np = profiles().some(p => p.id === state.meta.settings.newProfile) ? state.meta.settings.newProfile : undefined; const s = newSession({ keep: true, core: 3, edge: 'marks', ...(np ? { profile: np } : {}), ...(() => { const t = ['ask', 'values', ...(gh.mode() ? ['repo'] : []), ...(vmWanted() && vmReady() ? ['vm'] : [])]; return t.length ? { tools: t } : {}; })() }); redrawSessions(); activate(s.id); $('#input').focus(); },
   import() { $('#file').click(); },
   async export() {
+    if (!cur()) return;
     const s = cur(), bundle = exportBundle(s), blobs = {};
     // carry the stored outputs these sessions cite, so handles still resolve after import
     for (const hd of new Set(bundle.sessions.flatMap(x => x.messages.flatMap(m => [...handlesIn(m.content), ...handlesIn(m.x?.wire), ...(m.tool_calls || []).flatMap(t => handlesIn(t.function.arguments))])))) { const t = await get(hd).catch(() => null); if (t != null) blobs[hd] = t; }
@@ -1799,7 +1813,7 @@ const actions = {
   'card-drop'(el) { el.closest('.card').remove(); },
   async epoch() {
     const src = cur();
-    if (busy || !src.messages.length) return;
+    if (busy || !src?.messages.length) return;
     // Lines the model marked with ! are the pocket: no request, no cost. Otherwise a branch writes one.
     const kept = keptLines(src);
     if (!await ask2('Fold this session?', 'A new session starts from the pocket; the original stays as it is.\n\n' + foldCase(src) + (kept.length ? `\n\n${kept.length} marked lines will be carried over; no model request is needed.` : '\n\nNo marked lines, so the model will be asked to write the pocket.'))) return;
@@ -1820,7 +1834,7 @@ const actions = {
   // Manual branch: the message box text becomes the concern.
   async branch() {
     const src = cur(), task = $('#input').value.trim();
-    if (busy) return;
+    if (busy || !src) return;
     if (!task) return notice(src, 'Type the concern for the branch in the message box first.');
     $('#input').value = '';
     const b = fork(src, task.slice(0, 30), src.messages.length);
@@ -1846,7 +1860,7 @@ const actions = {
     if (busy || !await ask2('Delete session?', `Delete "${state.sessions[id].title}" and its branches? This cannot be undone.`, 'Delete')) return;
     const gone = dropSession(id);
     for (const x of gone) { $(`#sessions [data-id="${x}"]`)?.remove(); $(`.thread[data-session="${x}"]`)?.remove(); }
-    if (gone.includes(state.meta.active)) state.meta.order.length ? activate(state.meta.order[0]) : actions.new();
+    if (gone.includes(state.meta.active)) state.meta.order.length ? activate(state.meta.order[0]) : showEmpty();
   },
   'pad-add'() { state.meta.pads.push({ id: uid('p'), label: 'pad ' + (state.meta.pads.length + 1), text: '', include: false }); saveMeta(); renderPads(); },
   'pad-drop'(el) { const id = el.closest('[data-pad]').dataset.pad; state.meta.pads = state.meta.pads.filter(p => p.id !== id); saveMeta(); renderPads(); },
@@ -1875,28 +1889,28 @@ function bind() {
     if (row) activate(row.dataset.id);
   });
 
-  $('#composer').addEventListener('submit', e => { e.preventDefault(); const i = $('#input'); const v = i.value; if (busy || !v.trim()) return; i.value = ''; send(v); });
+  $('#composer').addEventListener('submit', e => { e.preventDefault(); const i = $('#input'); const v = i.value; if (busy || !v.trim()) return; if (!cur()) actions.new(); i.value = ''; send(v); });
   // Enter is a new line; only the send button sends.
 
-  $('#title').addEventListener('change', e => { const s = cur(); s.title = e.target.value || 'Untitled'; s.autoTitle = false; saveSession(s); $(`#sessions [data-id="${s.id}"] span`).textContent = s.title; });
-  $('#system').addEventListener('change', e => { const s = cur(); s.system = e.target.value; saveSession(s); });
-  $('#edge').addEventListener('change', e => { const s = cur(); s.edge = e.target.value; saveSession(s); showCore(); });
-  $('#keep').addEventListener('change', e => { const s = cur(); s.keep = e.target.checked; saveSession(s); showCore(); });
+  $('#title').addEventListener('change', e => { const s = cur(); if (!s) return; s.title = e.target.value || 'Untitled'; s.autoTitle = false; saveSession(s); $(`#sessions [data-id="${s.id}"] span`).textContent = s.title; });
+  $('#system').addEventListener('change', e => { const s = cur(); if (!s) return; s.system = e.target.value; saveSession(s); });
+  $('#edge').addEventListener('change', e => { const s = cur(); if (!s) return; s.edge = e.target.value; saveSession(s); showCore(); });
+  $('#keep').addEventListener('change', e => { const s = cur(); if (!s) return; s.keep = e.target.checked; saveSession(s); showCore(); });
   $('#repotools').addEventListener('change', e => {
-    const s = cur();
+    const s = cur(); if (!s) return;
     s.tools = e.target.checked ? [...new Set([...(s.tools || []), 'repo'])] : (s.tools || []).filter(t => t !== 'repo');
     saveSession(s);
     // said once in the log, where it is cacheable from then on, rather than rewriting the first message
     if (e.target.checked && s.messages.length) { const n = ghNote(s).trim(); if (n) push(s, { role: 'user', content: n }); }
   });
-  $('#sprivate').addEventListener('change', e => { const s = cur(); s.private = e.target.checked || undefined; saveSession(s); });
+  $('#sprivate').addEventListener('change', e => { const s = cur(); if (!s) return; s.private = e.target.checked || undefined; saveSession(s); });
   $('#logtx').checked = state.meta.settings.logTranscripts !== false;
   $('#logtx').addEventListener('change', e => { state.meta.settings.logTranscripts = e.target.checked; saveMeta(); });
   // outputs the browser no longer has come back from the log repo
   // try the ready log repos in turn: the defaults' first, then those profiles use
   setFallback(async hd => { for (const repo of [state.meta.settings.logRepo, ...Object.keys(state.meta.logRepos || {})].filter(repoReady)) { const t = await logs(repo).artifact(hd).catch(() => null); if (t != null) return t; } return null; });
   $('#vmtools').addEventListener('change', e => {
-    const s = cur();
+    const s = cur(); if (!s) return;
     s.tools = e.target.checked ? [...new Set([...(s.tools || []), 'vm'])] : (s.tools || []).filter(t => t !== 'vm');
     saveSession(s);
   });
@@ -1928,9 +1942,9 @@ function bind() {
     const open = card.open; renderProfiles(); const again = $(`#profiles [data-prof="${p.id}"]`); if (again) again.open = open;
     redrawSessions();
   });
-  $('#smutable').addEventListener('change', e => { const s = cur(); s.frozen = e.target.checked ? undefined : true; saveSession(s); renderScope(); showScope(); });
+  $('#smutable').addEventListener('change', e => { const s = cur(); if (!s) return; s.frozen = e.target.checked ? undefined : true; saveSession(s); renderScope(); showScope(); });
   $('#sprofile').addEventListener('change', async e => {
-    const s = cur(), to = e.target.value || undefined, before = toolsFor(s).map(d => d.function.name).join();
+    const s = cur(), to = e.target.value || undefined, before = toolsFor(s).map(d => d.function.name).join(); if (!s) return;
     const after = (() => { const o = s.profile; s.profile = to; const t = toolsFor(s).map(d => d.function.name).join(); s.profile = o; return t; })();
     if (before !== after && s.messages.length && !await ask2('Change profile?', `This changes the session's tools (${after.split(',').length} instead of ${before.split(',').length}), which breaks the cached prefix once.`, 'Change')) { showScope(); return; }
     s.profile = to; saveSession(s); redrawSessions(); showScope(); renderProfiles();
@@ -1961,9 +1975,9 @@ function bind() {
   if (state.meta.settings.logReady) slot($('#logstat'), state.meta.settings.logRepo + ': ready');
   $('#vmon').checked = vmWanted();
   $('#vmon').addEventListener('change', e => { try { localStorage.setItem('wh:vm', e.target.checked ? '1' : '0'); } catch {} location.reload(); });
-  $('#wire').addEventListener('change', e => { const s = cur(); s.wire = e.target.value; saveSession(s); showCore(); });
+  $('#wire').addEventListener('change', e => { const s = cur(); if (!s) return; s.wire = e.target.value; saveSession(s); showCore(); });
   // a session whose profile supplies the model gets its own override; otherwise the Settings value changes
-  $('#model').addEventListener('change', e => { const s = cur(), e2 = eff(s), v = e.target.value.trim(); if (e2.from.model && e2.from.model !== 'this session' || s?.over?.model) { if (s.frozen) { modal({ title: 'Session is frozen', body: 'Switch "mutable" back on in this session\'s card to change its model.' }); showScope(); return; } (s.over ??= {}).model = v; saveSession(s); } else { state.meta.settings.model = v; saveMeta(); } showPrice(); showScope(); });
+  $('#model').addEventListener('change', e => { const s = cur(), e2 = eff(s), v = e.target.value.trim(); if (!s) { state.meta.settings.model = v; saveMeta(); showPrice(); return; } if (e2.from.model && e2.from.model !== 'this session' || s?.over?.model) { if (s.frozen) { modal({ title: 'Session is frozen', body: 'Switch "mutable" back on in this session\'s card to change its model.' }); showScope(); return; } (s.over ??= {}).model = v; saveSession(s); } else { state.meta.settings.model = v; saveMeta(); } showPrice(); showScope(); });
   $('#model').addEventListener('input', showPicker);
   $('#model').addEventListener('focus', e => { e.target.select(); showPicker(); });
   $('#model').addEventListener('blur', () => app.removeAttribute('data-picking'));
@@ -2019,6 +2033,18 @@ function bind() {
 }
 
 // Sidebar rows: top-level sessions in order, each followed by its branches.
+// No sessions is a valid state: the thread area says so and offers one; controls
+// that only make sense for a session are hidden (#app[data-empty]).
+function showEmpty() {
+  state.meta.active = ''; saveMeta();
+  app.setAttribute('data-empty', '');
+  rule('active', `.thread,.stagebox{display:none}`);
+  let e = $('#empty');
+  if (!e) { e = h('div', { id: 'empty' }, h('p', { text: 'No sessions.' }), h('p', { class: 'note', text: 'Start one, or just type a message below: sending creates a session.' }), btn('+ session', { 'data-act': 'new', class: 'primary' })); $('#threads').append(e); }
+  slot($('#scopecount'), ''); slot($('#sessname'), '');
+  $('#title').value = '';
+}
+
 // Sidebar: top-level sessions grouped by profile (in profile-tree order), each
 // followed by its branches. A header names the scope; a badge marks a branch that
 // was moved to a subordinate profile.
@@ -2071,7 +2097,7 @@ export function boot(env) {
   bind();
   uptext();
   if (!state.sessions[state.meta.active]) state.meta.active = state.meta.order[0] || '';
-  state.meta.active ? activate(state.meta.active) : actions.new();
+  state.meta.active ? activate(state.meta.active) : showEmpty();
   loadModels();
   const pair = bridge.pairing();
   if (pair) startBridge(pair, env).catch(e => console.error('bridge:', e));
@@ -2335,6 +2361,7 @@ function queueCondense() {
     inChars: STEWARD_SYSTEM.length + items.reduce((n, it) => n + it.text.length + 12, 0), model: helperModel, price: priceOf(helperModel) });
 }
 function reviewInput(s) {
+  s ||= { core: 3, keep: true, edge: 'marks', system: '' }; // no session: the defaults new sessions get
   const steer = smells.bySteer(state.meta.order.map(id => state.sessions[id]).filter(Boolean).map(x => ({ steer: steerOf(x), requests: x.ledger.filter(e => !e.helper).length })));
   const rows = smells.all().slice(-200).map(r => ({ kind: r.kind, steer: r.steer, tool: r.tool, policy: r.policy, why: r.why, detail: r.detail?.slice(0, 120) }));
   return { steer, rows, text: `STEERING VERSIONS:\n${JSON.stringify(steer)}\n\nRECENT ROWS:\n${rows.map(r => JSON.stringify(r)).join('\n')}\n\nCURRENT CONVENTIONS:\n${corePrompt(s)}\n\nCURRENT POLICIES:\n${policyList().map(p => `${p.name} [${p.tool}${p.on === false ? ', off' : ''}] /${p.pattern}/${p.flags || ''} ${p.rule}`).join('\n')}\n\nCURRENT SYSTEM PROMPT:\n${s.system || '(empty)'}` };
@@ -2350,7 +2377,7 @@ function considerReview(r) {
     inChars: smells.REVIEW_SYSTEM.length + reviewInput(s).text.length, model, price: priceOf(model) });
 }
 async function runReview() {
-  const s = cur(), set = state.meta.settings, model = set.policyModel || set.helper || set.model;
+  const s = cur() || Object.values(state.sessions)[0], set = state.meta.settings, model = set.policyModel || set.helper || set.model;
   const inp = reviewInput(s);
   const text = await aux(s, model, smells.REVIEW_SYSTEM, inp.text, 'review', cust.TYPES.review.maxOut).catch(e => 'review failed: ' + (e.message || e));
   const list = smells.proposals();
