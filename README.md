@@ -2,7 +2,7 @@
 
 A client-side LLM chat harness served straight from this repo with GitHub Pages. No server, no build step: the browser holds the API key, the sessions and the tools.
 
-Status: working skeleton (v0.30.0). The OpenRouter path is written from the OpenAI-compatible conventions and has not yet been run against the live API.
+Status: working skeleton (v0.31.0). The OpenRouter path is written from the OpenAI-compatible conventions and has not yet been run against the live API.
 
 ## Run
 
@@ -186,7 +186,8 @@ Sessions can belong to a profile (Inspector → Profiles). Access is decided by 
 - **Policies** add up: Settings policies first, then each profile's; a lower profile cannot replace one above it.
 - **Hierarchy of sessions:** branches and folded sessions inherit their source's profile, and a session can only be moved to its profile or one below it. "New sessions use" picks the profile for new sessions.
 - **In the sidebar** sessions are grouped under their scope path (`org / research`), with a coloured edge and badge.
-- **The inspector is per session.** Its first section, "This session's scope", lists every setting and capability as this session resolves it, with the level it comes from (this session, a named profile, or defaults) and a lock mark where one applies. "edit" opens a row to set the value at a chosen level from this session up; levels below a lock are disabled. Capabilities can be narrowed for this one session (never widened). The former Settings section is "Defaults and connections": the bottom of every chain, plus keys and connections.
+- **The inspector is per session, and the session is a profile level.** Profiles is the first inspector section. Its first card is the current session itself: its profile (only that one or one below it), every setting and capability as the session resolves it, with the level it comes from (this session, a named profile, or defaults) and a lock mark, an "edit" row to set a value at a level from this session up (levels below a lock are disabled), and import. The profiles in its chain come next ("in this session"), then the others. Capabilities can be narrowed for one session, never widened. The former Settings section is "Defaults and connections", the bottom of every chain.
+- **Mutable state.** Every profile, and each session, has a "mutable" toggle. Mutable (the default) can be changed as you work: from its card, the scope table, import, or the top-bar model and pace. Frozen is read-only: the card's fields are disabled, the level cannot be chosen anywhere, paste config and import refuse to change it, and a frozen session refuses its own changes and says why. Switching it back is always allowed.
 - Profiles are part of paste config (merged by name, `parent` by name) and of steering fingerprints and log-repo session rows.
 
 ### Scoped values

@@ -394,6 +394,26 @@ const toolsNow = (JSON.parse(await page.textContent('#req')).tools || []).map(t 
 check('scope: a session can narrow its own capabilities', arow.value === 'no' && arow.from === 'this session' && !toolsNow.includes('ask') && !toolsNow.includes('value_set'), toolsNow.join(','));
 await page.evaluate(() => { const tr = document.querySelector('#scope tr.scope-edit[data-row="ask"]'); tr.querySelector('[data-sv]').value = ''; tr.querySelector('[data-act="scope-set"]').click(); });
 
+// mutable state: a frozen profile or session is read-only until switched back
+const freezeProfile = (name, on) => page.evaluate(([name, on]) => { const c = [...document.querySelectorAll('#profiles [data-prof]')].find(x => x.querySelector('.name').textContent.endsWith(name)); const t = c.querySelector('[data-pf=mutable]'); t.checked = !on; t.dispatchEvent(new Event('change', { bubbles: true })); }, [name, on]);
+check('mutable: this session is the first card in Profiles, its chain next', await page.evaluate(() => document.querySelector('#sessioncard') && [...document.querySelectorAll('#profiles .item .chip')].slice(0, 2).every(c => c.textContent === 'in this session')));
+await freezeProfile('research', true);
+const frozenCard = await page.evaluate(() => { const c = [...document.querySelectorAll('#profiles [data-prof]')].find(x => x.querySelector('.name').textContent.endsWith('research')); return { frozen: c.hasAttribute('data-frozen'), inputsDisabled: [...c.querySelectorAll('.body input, .body select')].every(i => i.disabled), toggle: !c.querySelector('[data-pf=mutable]').disabled }; });
+check('mutable: a frozen profile card is read-only except its toggle', frozenCard.frozen && frozenCard.inputsDisabled && frozenCard.toggle, JSON.stringify(frozenCard));
+check('mutable: a frozen level cannot be chosen in the scope table', await page.evaluate(() => [...document.querySelectorAll('#scope tr.scope-edit[data-row="helper"] [data-sl] option')].some(o => /research \(frozen\)/.test(o.textContent) && o.disabled)));
+await page.evaluate(() => document.querySelector('[data-act=cfgpaste]').click());
+await page.fill('.modal textarea', JSON.stringify({ profiles: [{ name: 'research', settings: { helper: 'mock-pro' } }] }));
+check('mutable: paste config refuses to change a frozen profile', /frozen: set "mutable": true first/.test(await page.textContent('.modal .cfgplan')));
+await page.click('.modal button:not(.primary)');
+await freezeProfile('research', false);
+check('mutable: switching it back makes it editable again', await page.evaluate(() => { const c = [...document.querySelectorAll('#profiles [data-prof]')].find(x => x.querySelector('.name').textContent.endsWith('research')); return !c.hasAttribute('data-frozen') && !c.querySelector('[data-pf=name]').disabled; }));
+await page.evaluate(() => { const t = document.querySelector('#smutable'); t.checked = false; t.dispatchEvent(new Event('change')); });
+await page.evaluate(() => { const tr = document.querySelector('#scope tr.scope-edit[data-row="pace"]'); tr.querySelector('[data-sl]').value = 'session'; tr.querySelector('[data-sv]').value = 'tools'; tr.querySelector('[data-act="scope-set"]').click(); });
+await page.waitForSelector('.modal');
+check('mutable: a frozen session refuses its own changes, and says why', /this session is frozen/.test(await page.textContent('.modal')) && await page.evaluate(() => !(JSON.parse(localStorage['wh:s:' + JSON.parse(localStorage['wh:meta']).active]).over || {}).pace));
+await page.click('.modal button');
+await page.evaluate(() => { const t = document.querySelector('#smutable'); t.checked = true; t.dispatchEvent(new Event('change')); });
+
 await page.fill('#input', 'a concern for a branch');
 await page.click('[data-act=branch]');
 await page.waitForSelector('#app:not([data-busy])', { state: 'attached', timeout: 20000 });

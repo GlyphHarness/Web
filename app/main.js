@@ -24,7 +24,7 @@ import * as pat from './patterns.js';
 import { put, get, handlesIn, setFallback } from './outstore.js';
 import { buildRequest, measure, report, padAttachment, inherit, imitatesNote, keptLines, corePrompt, EDGE_MIN, markedOnly, edgeReplies, turnOf, KINDS } from './context.js';
 
-export const VERSION = '0.30.0';
+export const VERSION = '0.31.0';
 const MAX_STEPS = 8; // model <-> tool round trips per user turn
 const MAX_BRANCHES = 6; // concerns per fan_out
 const FOLD_MAX = 2000; // chars of a fold handed back to the source
@@ -72,10 +72,21 @@ const SHELL = `
   <div id="stage"></div>
   <div id="machine"><p class="note" id="vmstat">The machine is off. Switch it on in Settings.</p><div id="vmterm"></div></div>
   <div id="insp">
-  <details open><summary>This session's scope <span class="count" id="scopecount"></span></summary>
-    <p class="note">Every setting and capability as this session resolves it, and the level it comes from: this session, a profile in its chain, or the defaults. Set a value at any level from this session up; a lock stops the levels below it. Capabilities can be narrowed for this session only, never widened.</p>
-    <table class="scope" id="scope"></table>
-    <div class="cfgbar"><button data-act="cfgimport">import labels and values…</button></div>
+  <details open><summary>Profiles <span class="count" id="profcount"></span></summary>
+    <p class="note">Scopes for sessions, by configuration level. A session in a profile resolves its settings down the chain (a locked setting cannot be overridden below), its capabilities only narrow, its repositories must be allowed at every level that lists them, and policies add up. Branches stay in their profile or one below it.</p>
+    <details class="item" id="sessioncard" open>
+      <summary><span class="chip">session</span><span class="name" id="sessname"></span><span class="meta" id="scopecount"></span></summary>
+      <div class="body">
+        <div class="row2"><label class="field"><span title="Only this profile or one below it. Changing it can change the tools, which breaks the cached prefix once.">profile (this one or below)</span><select id="sprofile"></select></label></div>
+        <p class="note" id="sscope"></p>
+        <table class="scope" id="scope"></table>
+      </div>
+      <div class="actions"><label class="check" title="Frozen: read-only; nothing can change this session's own settings"><input type="checkbox" id="smutable"> mutable</label><button data-act="cfgimport">import labels and values…</button></div>
+    </details>
+    <label>New sessions use</label>
+    <select id="newprofile"></select>
+    <div class="items" id="profiles"></div>
+    <button data-act="prof-add">+ profile</button>
   </details>
   <details open><summary>Defaults and connections</summary>
     <div class="cfgbar"><button data-act="cfgimport">import</button><button data-act="cfgpaste">paste config</button><button data-act="cfgcopy">copy config</button></div>
@@ -106,13 +117,6 @@ const SHELL = `
     <label>Branch token budget (prompt + output, per fan_out branch)</label>
     <input id="budget" type="number" min="1000" step="1000">
     <p class="note" id="build"></p>
-  </details>
-  <details><summary>Profiles <span class="count" id="profcount"></span></summary>
-    <p class="note">Scopes for sessions, by configuration level. A session in a profile resolves its settings down the chain (a locked setting cannot be overridden below), its capabilities only narrow, its repositories must be allowed at every level that lists them, and policies add up. Branches stay in their profile or one below it.</p>
-    <label>New sessions use</label>
-    <select id="newprofile"></select>
-    <div class="items" id="profiles"></div>
-    <button data-act="prof-add">+ profile</button>
   </details>
   <details><summary>Values <span class="count" id="valcount"></span></summary>
     <p class="note">Named values in this session's scope: its own, its profile chain's and settings-wide ones. Every change is a new revision; hiding is one too. The model is told each value's label and purpose (and the value, if visible) once, when it is new or changed; notes are never sent.</p>
@@ -146,9 +150,6 @@ const SHELL = `
     <select id="wire"><option value="calls">calls: structured, as the model made them</option><option value="notes">notes: one text line per call, results as text</option></select>
     <label>Replies, when first sent back to the model</label>
     <select id="edge"><option value="off">off: sent whole</option><option value="marks">marks: a long reply with "!" lines is sent as those lines</option><option value="helper">helper: marks, else condensed by the helper model</option></select>
-    <label>Profile (scope): what this session may use. Only this profile or one below it can be chosen; changing it can change the tool list, which breaks the cached prefix once.</label>
-    <select id="sprofile"></select>
-    <p class="note" id="sscope"></p>
     <label><input type="checkbox" id="sprivate"> Keep this session out of the log repo (no transcript, no artifacts)</label>
     <label><input type="checkbox" id="repotools"> Repository tools (repo_read, repo_commit, repo_pr, repo_create; needs GitHub access in Settings). Turning this on or off changes the tool list, which breaks the cached prefix once.</label>
     <label><input type="checkbox" id="vmtools"> Linux machine (shell tool). Changes the tool list, which breaks the cached prefix once.</label>
@@ -498,13 +499,14 @@ async function pasteConfig(prefill = '') {
 async function importLines() {
   const s = cur(), levels = scopeLevels(s);
   const ta = h('textarea', { rows: '8', class: 'mono', spellcheck: 'false', placeholder: 'model: …\nhelper model: …\nlog repo: owner/name\nregion = eu-west-1\n| main | some/model | … |' });
-  const lv = h('select', {}, ...levels.map((l, i) => Object.assign(h('option', { value: l.id, text: l.id === 'session' ? 'this session' : l.id === 'default' ? 'defaults (all sessions)' : 'profile ' + l.name }), { selected: i === 0 })));
+  const lv = h('select', {}, ...levels.map((l, i) => Object.assign(h('option', { value: l.id, text: (l.id === 'session' ? 'this session' : l.id === 'default' ? 'defaults (all sessions)' : 'profile ' + l.name) + (levelFrozen(s, l.id) ? ' (frozen)' : '') }), { selected: i === 0, disabled: levelFrozen(s, l.id) })));
   const out = h('div', { class: 'cfgplan' });
   let rows = [];
   const plan = () => {
     const visibleVals = valuesFor(s).map(v => { const r = vals.current(v); return { id: v.id, label: r.label, value: typeof r.value === 'string' ? r.value : JSON.stringify(r.value) }; });
     rows = config.planImport(ta.value, { settings: state.meta.settings, current: k => eff(s).settings[k], values: visibleVals, providers: Object.keys(providers) });
     const level = lv.value, e = eff(s);
+    if (levelFrozen(s, level)) for (const r of rows) if (r.target?.kind === 'setting' && r.target.level === 'chosen') { r.action = 'refused'; r.why = 'that level is frozen'; }
     out.replaceChildren(h('p', { class: 'note', text: rows.length ? `${rows.filter(r => r.action === 'update' || r.action === 'create').length} to apply · uncheck a line to leave it out` : 'Paste lines of label and value.' }), ...rows.map((r, i) => {
       const lockBy = r.target?.kind === 'setting' && r.target.level === 'chosen' ? e.locked.get(r.target.key) : null;
       const li = levels.findIndex(l => l.id === level), lk = lockBy ? levels.findIndex(l => l.name === lockBy) : -1;
@@ -597,7 +599,7 @@ function renderScope() {
     const lockBy = row.kind === 'set' ? e.locked.get(k) : null;
     // a lock held by profile P allows P and the levels above it; nothing below
     const lockIdx = lockBy ? levels.findIndex(l => l.name === lockBy) : -1;
-    const lv = h('select', { 'data-sl': k }, ...levels.map((l, i) => opt(l.id, l.name, i === 0 && lockIdx < 0 || i === lockIdx, (lockIdx >= 0 && i < lockIdx) || (row.kind === 'cap' && l.id === 'default'))));
+    const lv = h('select', { 'data-sl': k }, ...levels.map((l, i) => opt(l.id, l.name + (levelFrozen(s, l.id) ? ' (frozen)' : ''), i === 0 && lockIdx < 0 || i === lockIdx, (lockIdx >= 0 && i < lockIdx) || (row.kind === 'cap' && l.id === 'default') || levelFrozen(s, l.id))));
     const input = row.kind === 'set'
       ? h('input', { 'data-sv': k, value: s.over?.[k] ?? '', placeholder: 'blank = inherit', list: /model|helper/i.test(k) ? 'models' : '', class: 'mono' })
       : k === 'repo' ? h('select', { 'data-sv': k }, opt('', 'inherit', true), ...['none', 'read', 'write'].map(x => opt(x, x)))
@@ -610,10 +612,15 @@ function renderScope() {
       h('td', {}, h('span', { class: 'from', 'data-from': from === 'this session' ? 'session' : from === 'defaults' ? 'default' : 'profile', text: from }), lockBy ? h('span', { class: 'lock', title: 'locked by ' + lockBy, text: ' 🔒' }) : ''),
       h('td', {}, toggle)), edit];
   }));
-  slot($('#scopecount'), e.path || 'defaults');
+  slot($('#scopecount'), (s.frozen ? 'frozen · ' : '') + (e.path || 'no profile'));
+  slot($('#sessname'), s.title);
+  $('#smutable').checked = !s.frozen;
+  $('#sessioncard').toggleAttribute('data-frozen', !!s.frozen);
 }
 // set one scoped setting at a level relative to the session; returns an error or null
+const levelFrozen = (s, level) => level === 'session' ? !!s.frozen : level.startsWith('p:') ? profiles().find(p => 'p:' + p.id === level)?.mutable === false : false;
 function setAt(s, level, k, v, kind = 'set') {
+  if (levelFrozen(s, level)) return level === 'session' ? 'this session is frozen' : `profile ${profiles().find(p => 'p:' + p.id === level)?.name} is frozen`;
   const e = eff(s), lockBy = kind === 'set' ? e.locked.get(k) : null, levels = scopeLevels(s);
   const at = levels.findIndex(l => l.id === level), lockIdx = lockBy ? levels.findIndex(l => l.name === lockBy) : -1;
   if (lockIdx >= 0 && at < lockIdx) return `locked by profile ${lockBy}`;
@@ -626,14 +633,11 @@ function setAt(s, level, k, v, kind = 'set') {
 function scopeSet(el) {
   const s = cur(), tr = el.closest('[data-row]'), k = tr.dataset.row, row = SCOPE_ROWS.find(r => r.k === k);
   const level = tr.querySelector('[data-sl]').value, raw = tr.querySelector('[data-sv]').value.trim();
-  const e = eff(s), lockBy = row.kind === 'set' ? e.locked.get(k) : null, levels = scopeLevels(s);
-  const at = levels.findIndex(l => l.id === level), lockIdx = lockBy ? levels.findIndex(l => l.name === lockBy) : -1;
-  if (lockIdx >= 0 && at < lockIdx) return modal({ title: 'Locked', body: `${SCOPE_LABEL[k]} is locked by profile ${lockBy}; set it there or above.` });
   const v = row.kind === 'cap' ? (raw === '' ? null : k === 'repo' ? raw : raw === '1') : raw === '' ? null : k === 'branchBudget' ? Number(raw) || null : raw;
-  const assign = (obj, key) => { if (v == null) delete obj[key]; else obj[key] = v; };
-  if (level === 'session') { s.over ??= {}; if (row.kind === 'cap') { s.over.caps ??= {}; assign(s.over.caps, k); } else assign(s.over, k); saveSession(s); }
-  else if (level === 'default') { if (row.kind === 'set') { assign(state.meta.settings, k); saveMeta(); showSettings(); } }
-  else { const p = profiles().find(x => 'p:' + x.id === level); if (row.kind === 'cap') { p.caps ??= {}; assign(p.caps, k); } else { p.settings ??= {}; assign(p.settings, k); } saveMeta(); renderProfiles(); }
+  const err = setAt(s, level, k, v, row.kind);
+  if (err) return modal({ title: 'Not changed', body: `${SCOPE_LABEL[k]}: ${err}.` });
+  if (level === 'default') showSettings();
+  else if (level !== 'session') renderProfiles();
   renderScope(); showScope();
 }
 
@@ -644,9 +648,11 @@ function renderProfiles() {
   const ps = profiles();
   const opt = (v, t, sel) => Object.assign(h('option', { value: v, text: t }), { selected: sel });
   const tri = (k, v) => h('select', { 'data-pf': 'cap.' + k }, opt('', 'inherit', v == null), opt('1', 'allow', v === true), opt('0', 'deny', v === false));
-  $('#profiles').replaceChildren(...ps.map(p => {
-    const e = prof.effective(ps, p.id, state.meta.settings);
-    return item({ kind: 'profile', name: e.path, meta: `${state.meta.order.filter(id => state.sessions[id]?.profile === p.id).length} sessions`, attrs: { 'data-prof': p.id, style: `--pc:${p.color}` }, tone: '',
+  const chainIds = cur() ? eff(cur()).chain.map(p => p.id) : [];
+  const ordered = [...chainIds.slice().reverse().map(id => ps.find(p => p.id === id)), ...ps.filter(p => !chainIds.includes(p.id))].filter(Boolean);
+  $('#profiles').replaceChildren(...ordered.map(p => {
+    const e = prof.effective(ps, p.id, state.meta.settings), frozen = p.mutable === false;
+    const card = item({ kind: chainIds.includes(p.id) ? 'in this session' : 'profile', name: e.path, meta: `${frozen ? 'frozen · ' : ''}${state.meta.order.filter(id => state.sessions[id]?.profile === p.id).length} sessions`, attrs: { 'data-prof': p.id, style: `--pc:${p.color}`, ...(frozen ? { 'data-frozen': '' } : {}) }, tone: frozen ? 'off' : '',
       body: [
         h('div', { class: 'row2' }, field('name', h('input', { 'data-pf': 'name', value: p.name })), field('parent', h('select', { 'data-pf': 'parent' }, opt('', '(top level)', !p.parent), ...ps.filter(x => x.id !== p.id && !prof.chain(ps, x.id).some(a => a.id === p.id)).map(x => opt(x.id, prof.chain(ps, x.id).map(c => c.name).join(' / '), p.parent === x.id)))), field('colour', h('input', { type: 'color', 'data-pf': 'color', value: p.color, class: 'narrow' }))),
         h('p', { class: 'note', text: 'Settings (blank = inherit; lock = no profile or session below may change it)' }),
@@ -657,7 +663,9 @@ function renderProfiles() {
         field('allowed repositories (owner/name or owner/*, comma separated; blank = inherit)', h('input', { 'data-pf': 'repos', value: (p.repos || []).join(', '), class: 'mono' })),
         h('p', { class: 'note', text: `resolved: ${Object.entries(e.caps).map(([k, v]) => `${CAP_LABEL[k] || k} ${v === true ? 'yes' : v === false ? 'no' : v}`).join(' · ')}${e.repoLists.length ? ' · repos ' + e.repoLists.map(r => r.list.join('|')).join(' ∩ ') : ''}${(p.policies || []).length ? ' · own policies: ' + p.policies.map(x => x.name).join(', ') : ''}` }),
       ],
-      actions: [btn('delete', { 'data-act': 'prof-drop' })] });
+      actions: [h('label', { class: 'check', title: 'Frozen: read-only until switched back' }, Object.assign(h('input', { type: 'checkbox', 'data-pf': 'mutable' }), { checked: !frozen }), ' mutable'), btn('delete', { 'data-act': 'prof-drop', ...(frozen ? { disabled: '' } : {}) })] });
+    if (frozen) for (const el of card.querySelectorAll('.body input, .body select, .body textarea')) el.disabled = true;
+    return card;
   }));
   slot($('#profcount'), ps.length || '');
   renderScope();
@@ -671,6 +679,7 @@ function showScope() {
   const ps = profiles(), e = eff(s);
   const choices = prof.assignable(ps, s.profile);
   const opt = (v, t, sel) => Object.assign(h('option', { value: v, text: t }), { selected: sel });
+  $('#sprofile').disabled = !!s.frozen;
   $('#sprofile').replaceChildren(...(s.profile ? [] : [opt('', '(no profile)', true)]), ...choices.map(p => opt(p.id, prof.chain(ps, p.id).map(c => c.name).join(' / '), p.id === s.profile)));
   slot($('#sscope'), e.chain.length ? `model ${e.settings.model || '-'}${e.from.model ? ' (' + e.from.model + ')' : ''}${e.locked.size ? ' · locked: ' + [...e.locked.keys()].join(', ') : ''} · tools ${toolsFor(s).length}` : '');
   const lockedModel = e.locked.has('model');
@@ -717,7 +726,7 @@ function activate(id) {
   $('#system').value = s.system;
   showScope();
   renderValues();
-  renderScope();
+  renderProfiles(); // this session's card and chain come first
   $('#wire').value = s.wire || 'calls';
   $('#repotools').checked = !!s.tools?.includes('repo');
   $('#sprivate').checked = !!s.private;
@@ -819,7 +828,7 @@ function showPicker() {
   app.setAttribute('data-picking', '');
 }
 
-function pickModelSession(id) { const s = cur(), e = eff(s); if (e.from.model && e.from.model !== 'this session' || s?.over?.model) { (s.over ??= {}).model = id; saveSession(s); return true; } return false; }
+function pickModelSession(id) { const s = cur(), e = eff(s); if (e.from.model && e.from.model !== 'this session' || s?.over?.model) { if (s.frozen) { modal({ title: 'Session is frozen', body: 'Switch "mutable" back on in this session\'s card to change its model.' }); showScope(); return true; } (s.over ??= {}).model = id; saveSession(s); return true; } return false; }
 function pickModel(id) {
   $('#model').value = id;
   if (!pickModelSession(id)) { state.meta.settings.model = id; saveMeta(); }
@@ -1771,7 +1780,9 @@ function bind() {
     const f = e.target.dataset.pf, card = e.target.closest('[data-prof]');
     if (!f || !card) return;
     const p = profiles().find(x => x.id === card.dataset.prof), v = e.target.type === 'checkbox' ? e.target.checked : e.target.value.trim();
-    if (f === 'name') p.name = v || p.name;
+    if (f === 'mutable') p.mutable = v ? undefined : false;
+    else if (p.mutable === false) { renderProfiles(); return; }
+    else if (f === 'name') p.name = v || p.name;
     else if (f === 'parent') p.parent = v || undefined;
     else if (f === 'color') p.color = v;
     else if (f === 'repos') p.repos = v ? v.split(/[\s,]+/).filter(Boolean) : undefined;
@@ -1782,6 +1793,7 @@ function bind() {
     const open = card.open; renderProfiles(); const again = $(`#profiles [data-prof="${p.id}"]`); if (again) again.open = open;
     redrawSessions();
   });
+  $('#smutable').addEventListener('change', e => { const s = cur(); s.frozen = e.target.checked ? undefined : true; saveSession(s); renderScope(); showScope(); });
   $('#sprofile').addEventListener('change', async e => {
     const s = cur(), to = e.target.value || undefined, before = toolsFor(s).map(d => d.function.name).join();
     const after = (() => { const o = s.profile; s.profile = to; const t = toolsFor(s).map(d => d.function.name).join(); s.profile = o; return t; })();
@@ -1809,7 +1821,7 @@ function bind() {
   $('#vmon').addEventListener('change', e => { try { localStorage.setItem('wh:vm', e.target.checked ? '1' : '0'); } catch {} location.reload(); });
   $('#wire').addEventListener('change', e => { const s = cur(); s.wire = e.target.value; saveSession(s); showCore(); });
   // a session whose profile supplies the model gets its own override; otherwise the Settings value changes
-  $('#model').addEventListener('change', e => { const s = cur(), e2 = eff(s), v = e.target.value.trim(); if (e2.from.model && e2.from.model !== 'this session' || s?.over?.model) { (s.over ??= {}).model = v; saveSession(s); } else { state.meta.settings.model = v; saveMeta(); } showPrice(); showScope(); });
+  $('#model').addEventListener('change', e => { const s = cur(), e2 = eff(s), v = e.target.value.trim(); if (e2.from.model && e2.from.model !== 'this session' || s?.over?.model) { if (s.frozen) { modal({ title: 'Session is frozen', body: 'Switch "mutable" back on in this session\'s card to change its model.' }); showScope(); return; } (s.over ??= {}).model = v; saveSession(s); } else { state.meta.settings.model = v; saveMeta(); } showPrice(); showScope(); });
   $('#model').addEventListener('input', showPicker);
   $('#model').addEventListener('focus', e => { e.target.select(); showPicker(); });
   $('#model').addEventListener('blur', () => app.removeAttribute('data-picking'));
