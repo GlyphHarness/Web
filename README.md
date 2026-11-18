@@ -9,3 +9,5 @@ workflow on `main`. Kept off `main` so its history does not grow by the image si
 
 container2wasm is Apache-2.0 (https://github.com/ktock/container2wasm); the image
 bundles Bochs (LGPL) and Alpine packages under their own licences.
+
+- `pkgs/`: the package shelf. Alpine 3.20 packages the machine installs with `wh-install <name>` from the page's own site (Alpine's mirrors do not allow cross-origin requests). `pkgs/index.txt` lists each name and its files; packages already in the image are left out.
