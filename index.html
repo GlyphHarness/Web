@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>WebHarness</title>
+</head>
+<body>
+<div id="app"></div>
+<script type="module">
+// Shell: the only file that is always served from the Pages branch.
+// Everything else loads from ./app/ (this branch) or from a pinned git ref
+// (tag, branch or commit) of the repo via jsDelivr. Data stays on this origin
+// either way, so a pinned build reads the same localStorage.
+const REPO = 'glyphcore/WebHarness';
+const q = new URLSearchParams(location.search);
+if (q.has('ref')) localStorage.setItem('wh:ref', q.get('ref'));
+let ref = localStorage.getItem('wh:ref') || '';
+if (!/^[\w.\-\/]{1,80}$/.test(ref)) ref = '';
+const base = ref ? `https://cdn.jsdelivr.net/gh/${REPO}@${ref}/app/` : new URL('./app/', location.href).href;
+
+const css = document.createElement('link');
+css.rel = 'stylesheet';
+css.href = base + 'app.css';
+document.head.append(css);
+
+import(base + 'main.js').then(m => m.boot({ base, ref, repo: REPO })).catch(err => {
+  const el = document.getElementById('app');
+  el.textContent = '';
+  const pre = document.createElement('pre');
+  pre.textContent = `WebHarness failed to start${ref ? ` (pinned ref: ${ref})` : ''}\n\n${err && err.stack || err}`;
+  const a = document.createElement('a');
+  a.href = '?ref=';
+  a.textContent = 'Load the default build';
+  el.append(pre, a);
+});
+</script>
+</body>
+</html>
