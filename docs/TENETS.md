@@ -24,6 +24,12 @@ Origins: `L` = glyphcore/lodestar (`CLAUDE.md`, `docs/design/`), `S` = glyphcore
 | 15 | **Folding the source opens a new epoch.** The old session is never edited; a branch writes a pocket and a new session starts from it. The break-even is shown before any spend. | `epoch` action, `foldCase`, `POCKET_REQUEST`; smoke test "fold session" | L11, L12 |
 | 16 | **The stage is derived from the log.** Widgets are rebuilt from `show_widget` calls; a slot shows its latest call. | `showWidget`; smoke tests "widget", "slot reuse" | W |
 | 17 | **No remote load without a click.** A model-chosen URL is fetched only after the user presses its button. | `widgets.js` `remote` | W |
+| 18 | **Every action leaves a trail row.** One row per tool call (tool, argument shape, outcome, size, time, session), written by the harness whatever the model says. | `tools.js` `execTool`, `patterns.js` `trailAdd`; smoke test "trail" | L6, L11, W |
+| 19 | **Attribution is not self-reported.** A stored pattern's author (session, message, model, time) is written by the harness; refs that do not exist in the authoring session are dropped. | `patterns.js` `put`, `ctx.by`, `ctx.knownRef`; smoke test "attribution" | W, L9 |
+| 20 | **Link by handle, never embed.** Patterns point at outputs and branches by handle. | `put` (`refs`) | L7 |
+| 21 | **Patterns are exposed progressively.** Index line first (session start, `pattern_find`), body on request (`pattern_get`). | `patterns.js` `index`, `line` | L2 |
+| 22 | **Structures become slots.** A recipe is a stored tool call with `{{slot}}` placeholders; the model supplies only the values. | `patterns.js` `fill`, `pattern_run`; smoke test "recipe" | W |
+| 23 | **Same content, same id.** A pattern's id is a fingerprint of its content; replacement is by `supersedes`, not edit. | `put` (hash id, `superseded_by`) | L4 |
 | 12 | **Secrets stay out of records.** The API key is never in a session file or trace. | `store.js` key separation, `providers.js` trace record | L9 |
 
 ## Concerns (no enforcer yet)
@@ -40,8 +46,12 @@ Origins: `L` = glyphcore/lodestar (`CLAUDE.md`, `docs/design/`), `S` = glyphcore
 | Widget library | Built-ins are fixed in `widgets.js`; no way to register one from a context file or the repo yet. | W |
 | Model per branch | A cheaper model for lookups breaks the shared prefix; measure before adopting. | L, S |
 | Progressive exposure of context files | Index line in the prefix, bodies fetched by handle. Not built. | L2 |
-| Trail of attempts | Terse rows (tried, failed with retry-if, worked, settled) so a later branch does not re-explore. | L11 |
-| Catalog before choosing; steer gates | Approaches as append-only rows; proposals as default + alternatives + metric. | L3, L4 |
+| Storing a pattern is the model's choice | The trail is automatic, but `pattern_put` only happens if the model calls it. Candidate enforcer: require a pattern line in the fold shape, or have the harness propose recipes from repeated trail shapes. | W |
+| Route by trail shape | Repeated identical argument shapes in the trail are recipe candidates; nothing mines them yet. | W |
+| Pattern quality and decay | No check that a stored solution is right, no retirement of unused or failing patterns beyond manual delete. | S |
+| Index growth | The session-start index is the top 20 by use; beyond that the model must search. Measure whether it does. | L2 |
+| Recipes span one tool call | No multi-step recipes or recipe-of-recipes. | W |
+| Steer gates | Proposals as default + alternatives + metric. | L3 |
 | Separate critic for "done" | A fold's OUTCOME is the branch's own claim; nothing checks it. | S |
 | Provider cache facts | Cache floor, TTL, write timing and breakpoint limits per provider are unmeasured. The ledger is the probe. | L `shim.md` |
 | Rewind does not undo tool effects | Applies once rewind exists. | L `output-store.md` |

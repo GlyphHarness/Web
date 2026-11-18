@@ -8,10 +8,11 @@ import { rule } from './styles.js';
 import { providers } from './providers.js';
 import { toolDefs, execTool } from './tools.js';
 import { render } from './widgets.js';
+import * as pat from './patterns.js';
 import { put, get, handlesIn } from './outstore.js';
 import { buildRequest, measure, report, padAttachment, inherit } from './context.js';
 
-export const VERSION = '0.5.0';
+export const VERSION = '0.6.0';
 const MAX_STEPS = 8; // model <-> tool round trips per user turn
 const MAX_BRANCHES = 6; // concerns per fan_out
 const FOLD_MAX = 2000; // chars of a fold handed back to the source
@@ -81,6 +82,11 @@ const SHELL = `
     <p class="note">"In context" pads are attached to your next message when new or changed.</p>
     <div id="pads"></div>
     <button data-act="pad-add">+ pad</button>
+  </details>
+  <details><summary>Patterns</summary>
+    <p class="note">Solutions, gotchas and recipes the model stored, with where each came from. The trail is one automatic row per tool call.</p>
+    <div id="patterns"></div>
+    <p class="note" id="patn"></p>
   </details>
   <details open><summary>Cache ledger</summary>
     <p class="note">kept = how much of the previous request this one repeats byte-for-byte (local). cached = input tokens the provider reports as cache hits.</p>
@@ -233,6 +239,17 @@ function padNode(p) {
       h('button', { 'data-act': 'pad-drop', type: 'button', text: '×' })),
     Object.assign(h('textarea', { 'data-f': 'text', rows: '4' }), { value: p.text }));
 }
+function renderPatterns() {
+  const list = pat.live().sort((a, b) => b.by.t - a.by.t);
+  $('#patterns').replaceChildren(...list.map(p => h('details', { class: 'pat', 'data-pat': p.id },
+    h('summary', {}, h('span', { class: 'kind', text: p.kind }), ' ' + p.title),
+    h('p', { class: 'note', text: `${p.id} · ${p.labels.map(l => '#' + l).join(' ') || 'no labels'} · used ${p.uses} · from ${state.sessions[p.by.session]?.title || p.by.session}, message ${p.by.message}, ${p.by.model}` }),
+    h('pre', { text: p.recipe ? JSON.stringify(p.recipe, null, 1) + (p.body ? '\n\n' + p.body : '') : p.body }),
+    p.refs?.length ? h('p', { class: 'note', text: 'refs: ' + p.refs.join(' ') }) : '',
+    h('button', { type: 'button', 'data-act': 'pat-drop', text: 'delete' }))));
+  $('#patn').textContent = `${list.length} patterns · ${pat.trail().length} trail rows`;
+}
+
 const renderPads = () => $('#pads').replaceChildren(...state.meta.pads.map(padNode));
 
 function activate(id) {
@@ -329,7 +346,8 @@ async function send(text) {
   const s = cur();
   if (busy || !text.trim()) return;
   if (s.title === 'New session') retitle(s, text.trim().slice(0, 40));
-  push(s, { role: 'user', content: text + padAttachment(s, state.meta.pads) });
+  // a new session opens with the pattern index; it is part of the first message from then on
+  push(s, { role: 'user', content: text + (s.messages.length ? '' : pat.index()) + padAttachment(s, state.meta.pads) });
   await run(s);
 }
 
@@ -358,6 +376,10 @@ async function turns(s, depth, onFirst) {
   const ctx = {
     pads: state.meta.pads, savePads: () => { saveMeta(); renderPads(); },
     depth, fanOut: args => fanOut(s, args, ctx), branchRead,
+    // attribution and reference checks come from the harness's view of the session
+    by: () => ({ session: s.id, message: s.messages.length - 1, model: set.model, t: Date.now() }),
+    knownRef: r => !!state.sessions[r] || s.messages.some(m => typeof m.content === 'string' && m.content.includes(r)),
+    onPatterns: renderPatterns,
   };
   for (let step = 0; step < MAX_STEPS; step++) {
     const body = buildRequest(s, set.model, toolDefs);
@@ -550,7 +572,7 @@ const download = (name, obj) => {
 };
 
 const actions = {
-  trace() { download('webharness-' + new Date().toISOString().replace(/[:.]/g, '-') + '.trace', { kind: 'webharness.trace', version: 1, build: VERSION, exchanges: trace }); },
+  trace() { download('webharness-' + new Date().toISOString().replace(/[:.]/g, '-') + '.trace', { kind: 'webharness.trace', version: 1, build: VERSION, exchanges: trace, trail: pat.trail() }); },
   new() { const s = newSession(); $('#sessions').prepend(sessionRow(s)); activate(s.id); $('#input').focus(); },
   import() { $('#file').click(); },
   async export() {
@@ -558,11 +580,13 @@ const actions = {
     // carry the stored outputs these sessions cite, so handles still resolve after import
     for (const hd of new Set(bundle.sessions.flatMap(x => x.messages.flatMap(m => handlesIn(m.content))))) { const t = await get(hd).catch(() => null); if (t != null) blobs[hd] = t; }
     if (Object.keys(blobs).length) bundle.blobs = blobs;
+    if (pat.all().length) bundle.patterns = pat.all();
     download((s.title.replace(/[^\w\- ]+/g, '').trim() || 'session') + '.session', bundle);
   },
   inspector() { state.meta.settings.inspector = !state.meta.settings.inspector; saveMeta(); applyInspector(); },
   stop() { ctl?.abort(); },
   pane(el) { setPane(el.dataset.pane); saveMeta(); },
+  'pat-drop'(el) { pat.drop(el.closest('[data-pat]').dataset.pat); renderPatterns(); },
   'card-drop'(el) { el.closest('.card').remove(); },
   async epoch() {
     const src = cur();
@@ -671,6 +695,8 @@ function bind() {
       const obj = JSON.parse(await f.text());
       const added = importBundle(obj);
       for (const t of Object.values(obj.blobs || {})) await put(String(t));
+      pat.merge(obj.patterns);
+      renderPatterns();
       $('#sessions').replaceChildren(...rows());
       renderPads();
       const top = added.find(s => !s.parent) || added[0];
@@ -702,6 +728,7 @@ export function boot(env) {
   $('#budget').value = set.branchBudget || BRANCH_BUDGET;
   setPane(set.pane || 'insp');
   showBase();
+  renderPatterns();
   renderPads();
   applyInspector();
   bind();

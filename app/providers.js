@@ -98,7 +98,11 @@ const mock = {
     else if (last.role === 'tool') text = 'The tool returned:\n\n```text\n' + last.content + '\n```';
     else if (/^<widget_event/.test(last.content || '')) text = 'Got the event: ' + last.content.split('\n')[1];
     else if (/^<pocket_request/.test(last.content || '')) text = '## Goal\nmock goal\n## Settled\n- mock decision\n## Open\n- none';
-    else if (/read (os:\w+)/.test(last.content || '')) {
+    else if (/run pattern (pt:\w+)/.test(last.content || '')) {
+      yield { choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_' + Date.now(), type: 'function', function: { name: 'pattern_run', arguments: JSON.stringify({ id: /run pattern (pt:\w+)/.exec(last.content)[1], values: { a: 6, b: 7 } }) } }] } }] };
+    } else if (/store pattern/.test(last.content || '')) {
+      yield { choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_' + Date.now(), type: 'function', function: { name: 'pattern_put', arguments: JSON.stringify({ kind: 'recipe', title: 'multiply two numbers', labels: ['math'], slots: ['a', 'b'], recipe: { tool: 'run_js', args: { code: 'return {{a}} * {{b}}' } }, refs: ['os:doesnotexist'] }) } }] } }] };
+    } else if (/read (os:\w+)/.test(last.content || '')) {
       yield { choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_' + Date.now(), type: 'function', function: { name: 'output_read', arguments: JSON.stringify({ handle: /read (os:\w+)/.exec(last.content)[1], find: 'line 399' }) } }] } }] };
     } else if (/big/i.test(last.content || '')) {
       yield { choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_' + Date.now(), type: 'function', function: { name: 'run_js', arguments: JSON.stringify({ code: "return Array.from({length:400},(_,i)=>'line '+i).join('\\n')" }) } }] } }] };

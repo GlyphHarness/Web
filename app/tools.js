@@ -1,9 +1,10 @@
 // Tools the model can call. Definitions are sent in a fixed order (they sit in
 // the cacheable prefix) and are worded without reference to where they run.
 //   { def: <OpenAI tool schema>, run(args, ctx) -> string | Promise<string> }
-import { view, read } from './outstore.js';
+import { view, read, handlesIn } from './outstore.js';
+import * as pat from './patterns.js';
 
-// ctx = { pads, savePads, depth, fanOut, branchRead } from the host.
+// ctx = { pads, savePads, depth, fanOut, branchRead, by(), knownRef(h), onPatterns() } from the host.
 
 const WORKER = `
 const fmt = v => { if (typeof v === 'string') return v; try { return JSON.stringify(v); } catch { return String(v); } };
@@ -80,13 +81,52 @@ export const tools = [
     'Read the working transcript behind a fold, by its branch id. Use only when the fold lacks a needed detail.',
     { branch: { type: 'string' } }, ['branch'],
     (args, ctx) => ctx.branchRead(args)),
+  fn('pattern_find',
+    'Search stored solutions, gotchas, patterns, philosophies and recipes before working something out again. Returns one line per match.',
+    { query: { type: 'string' }, labels: { type: 'array', items: { type: 'string' } }, kind: { type: 'string', enum: pat.KINDS } }, [],
+    args => { const hits = pat.find(args); return hits.length ? hits.map(pat.line).join('\n') : 'No matches.'; }),
+  fn('pattern_get',
+    'Read one stored pattern in full, by id.',
+    { id: { type: 'string' } }, ['id'],
+    ({ id }) => { const p = pat.get(id); return p ? JSON.stringify({ ...p, by: undefined }) : `No pattern "${id}".`; }),
+  fn('pattern_put',
+    'Store what was learned once something non-obvious works or a quirk costs time: the approach, the gotcha, the design reason, or a recipe. Terse. A recipe is a stored call {tool, args} whose string values may hold {{slot}} placeholders named in `slots`. `refs` are handles of outputs or branches that show it. `supersedes` replaces an earlier id.',
+    { kind: { type: 'string', enum: pat.KINDS }, title: { type: 'string' }, body: { type: 'string' }, labels: { type: 'array', items: { type: 'string' } }, slots: { type: 'array', items: { type: 'string' } }, recipe: { type: 'object', properties: { tool: { type: 'string' }, args: { type: 'object' } } }, refs: { type: 'array', items: { type: 'string' } }, supersedes: { type: 'string' } }, ['kind', 'title'],
+    (args, ctx) => {
+      if (args.kind === 'recipe' && (!tools.some(t => t.def.function.name === args.recipe?.tool) || /^pattern_/.test(args.recipe.tool))) return 'recipe.tool must name an existing non-pattern tool.';
+      const r = pat.put(args, ctx.by(), ctx.knownRef);
+      ctx.onPatterns?.();
+      return r.error ? 'Not stored: ' + r.error : r.existed ? `Already stored as ${r.id}.` : `Stored ${r.id}.`;
+    }),
+  fn('pattern_run',
+    'Run a stored recipe with concrete slot values.',
+    { id: { type: 'string' }, values: { type: 'object' } }, ['id'],
+    async ({ id, values }, ctx) => {
+      const p = pat.get(id);
+      if (!p?.recipe) return `No recipe "${id}".`;
+      const f = pat.fill(p.recipe.args, p.slots, values || {});
+      if (f.error) return f.error;
+      pat.used(id);
+      ctx.onPatterns?.();
+      return execTool({ function: { name: p.recipe.tool, arguments: JSON.stringify(f.args) } }, ctx, id);
+    }),
 ];
 
-const WHOLE = new Set(['fan_out', 'output_read', 'branch_read']);
+const WHOLE = new Set(['fan_out', 'output_read', 'branch_read', 'pattern_find', 'pattern_get', 'pattern_put', 'pattern_run']);
 
 export const toolDefs = tools.map(t => t.def);
 
-export async function execTool(call, ctx) {
+// Every call leaves a trail row written by the harness: tool, argument shape, outcome, size, time.
+export async function execTool(call, ctx, via) {
+  const t0 = performance.now();
+  const out = await exec(call, ctx);
+  let args = {};
+  try { args = JSON.parse(call.function.arguments || '{}'); } catch {}
+  pat.trailAdd({ t: Date.now(), ...ctx.by?.(), tool: call.function.name, shape: pat.shape(call.function.name, args), via: via || undefined, ok: !/^(Tool error|Error:|Unknown tool|Invalid JSON|Not stored|No )/.test(out), chars: out.length, out: handlesIn(out)[0], ms: Math.round(performance.now() - t0) });
+  return out;
+}
+
+async function exec(call, ctx) {
   const t = tools.find(t => t.def.function.name === call.function.name);
   if (!t) return `Unknown tool: ${call.function.name}`;
   let args;

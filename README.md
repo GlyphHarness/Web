@@ -2,7 +2,7 @@
 
 A client-side LLM chat harness served straight from this repo with GitHub Pages. No server, no build step: the browser holds the API key, the sessions and the tools.
 
-Status: working skeleton (v0.5.0). The OpenRouter path is written from the OpenAI-compatible conventions and has not yet been run against the live API.
+Status: working skeleton (v0.6.0). The OpenRouter path is written from the OpenAI-compatible conventions and has not yet been run against the live API.
 
 ## Run
 
@@ -21,6 +21,7 @@ Status: working skeleton (v0.5.0). The OpenRouter path is written from the OpenA
 | `app/providers.js` | Pluggable providers: OpenRouter (OpenAI-compatible SSE) and an offline mock. |
 | `app/tools.js` | Tools the model can call, and the Worker that runs code. |
 | `app/widgets.js` | Built-in widget kinds for the stage. |
+| `app/patterns.js` | Pattern store, recipes with slots, automatic trail. |
 | `app/outstore.js` | Handle-addressed store for large tool output. |
 | `app/store.js` | localStorage layout, `.session` export and import. |
 | `app/migrate.js` | Schema number and forward migrations. |
@@ -92,9 +93,24 @@ A tool result over 1,500 characters is stored whole in the browser (IndexedDB) u
 
 "fold session" asks the model, in a branch, for a pocket of at most 30 lines (Goal, Settled, Worked, Do not retry, Open), then starts a new session from that pocket. The original is untouched. Before spending anything it shows the context size before and after, and how many turns the fold needs to pay for itself at the model's prices.
 
+### Pattern store and trail
+
+Two records build up in the browser as the model works:
+
+- **Trail (automatic):** one row per tool call: tool, argument shape, outcome, size, time, session. The harness writes it; the model is not asked. It is included in `.trace` exports.
+- **Patterns (authored):** solutions, gotchas, patterns, philosophies and recipes the model stores with `pattern_put`. Each is at most 1,200 characters, labelled, and linked to outputs or branches by handle. Its id is a fingerprint of its content. Who stored it (session, message, model, time) is recorded by the harness.
+
+How the model uses them:
+
+- A new session's first message carries a one-line-per-pattern index of the 20 most used.
+- `pattern_find` searches by words, labels or kind; `pattern_get` returns one in full.
+- A **recipe** is a stored tool call with `{{slot}}` placeholders. `pattern_run(id, values)` fills the slots and runs it, so a solved problem costs a few tokens the next time.
+
+The Patterns section of the inspector lists every pattern with its origin and use count, and lets you delete one. Patterns travel in `.session` exports.
+
 ### Tools
 
-Tool definitions make no mention of where they run. Current set: `run_js`, `scratchpad_read`, `scratchpad_write`, `show_widget`, `output_read`, `fan_out`, `branch_read`.
+Tool definitions make no mention of where they run. Current set: `run_js`, `scratchpad_read`, `scratchpad_write`, `show_widget`, `output_read`, `fan_out`, `branch_read`, `pattern_find`, `pattern_get`, `pattern_put`, `pattern_run`.
 
 - `run_js` runs in a dedicated Worker: no DOM, no localStorage (so no API key), killed after 5 s. It is not a network sandbox; code can still call `fetch`.
 - An `html` widget runs in an iframe with `sandbox="allow-scripts"`, which cannot read the page or its storage. An `embed` is a third-party page and gets its own origin.

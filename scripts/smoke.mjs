@@ -60,6 +60,15 @@ check('ledger: every follow-up request keeps the full prefix', kept.length >= 5 
 const cached = await page.locator('#ledger tbody tr td:nth-child(4)').allTextContents();
 check('ledger: provider-reported cached tokens grow', Number(cached.at(-1)) > Number(cached[1]) && Number(cached[1]) > 0, cached.join(' '));
 
+await say('store pattern');
+const stored = /pt:[a-z0-9]+/.exec(await visible().locator('.msg[data-role=tool] pre').last().textContent())?.[0];
+await say('run pattern ' + stored);
+check('patterns: recipe stored, then run with slot values', !!stored && (await visible().locator('.msg[data-role=tool] pre').last().textContent()) === '42');
+const rec = await page.evaluate(id => JSON.parse(localStorage['wh:patterns']).find(p => p.id === id), stored);
+check('patterns: attribution is harness-written, unknown refs dropped, use counted', rec.by.session && rec.by.model === 'mock-1' && rec.refs.length === 0 && rec.uses === 1, JSON.stringify(rec.by));
+const trailRows = await page.evaluate(() => JSON.parse(localStorage['wh:trail']));
+check('trail: one row per tool call, recipe run attributed to its pattern', trailRows.some(r => r.tool === 'run_js' && r.via === stored) && trailRows.every(r => r.shape && r.session), `${trailRows.length} rows`);
+
 await say('fan out please');
 const folds = await visible().locator('.msg[data-role=tool] pre').last().textContent();
 check('fan_out: three branches fold back, the dependent one received two folds', (folds.match(/<fold /g) || []).length === 3 && /concern="c"[^]*folds received: 2/.test(folds) && await page.locator('#sessions [data-parent]').count() === 3, folds.slice(0, 120));
@@ -95,6 +104,10 @@ check('reload: state restored from localStorage', await page.locator('#sessions 
 
 await page.click('[data-act=epoch]');
 await page.waitForFunction(() => /epoch 2/.test(document.querySelector('#title').value), null, { timeout: 20000 });
+await page.click('[data-act=new]');
+await say('hello again');
+check('patterns: a new session opens with the index', /<patterns [^]*\[recipe\] multiply two numbers #math \(slots: a, b\)/.test(await visible().locator('.msg[data-role=user]').first().textContent()));
+await page.locator('#sessions > div:not([data-parent])').nth(1).click();
 check('fold session: new epoch starts from the pocket, source kept', /<pocket from=[^]*## Settled/.test(await visible().locator('.msg').first().textContent()) && await visible().locator('.msg').count() === 1);
 
 await page.evaluate(() => { const m = JSON.parse(localStorage['wh:meta']); m.schema = 99; localStorage['wh:meta'] = JSON.stringify(m); });
