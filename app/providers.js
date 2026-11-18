@@ -133,6 +133,15 @@ const mock = {
     } else if (/long script/.test(last.content || '')) {
       const code = "const out = []; for (let i = 0; i < 300; i++) { out.push('row ' + i + '   '); if (i === 150) out.push('total=4950'); } out.push('same', 'same', 'same'); return out.join('\\n'); // " + 'padding '.repeat(60);
       yield { choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_' + Date.now(), type: 'function', function: { name: 'run_js', arguments: JSON.stringify({ code, name: 'sum rows', want: 'total' }) } }] } }] };
+    } else if (/ask me/.test(last.content || '')) {
+      yield { choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_' + Date.now(), type: 'function', function: { name: 'ask', arguments: JSON.stringify({ questions: [
+        { id: 'name', prompt: 'Repo name?', type: 'text' },
+        { id: 'size', prompt: 'How many?', type: 'number', min: 1, max: 5 },
+        { id: 'vis', prompt: 'Visibility?', type: 'choice', options: ['private', 'public'], default: 'private' },
+        { id: 'tags', prompt: 'Labels?', type: 'multi', options: ['bug', 'docs', 'ci'] },
+        { id: 'go', prompt: 'Proceed?', type: 'confirm' },
+        { id: 'cfg', prompt: 'Config?', type: 'json', schema: { type: 'object', required: ['port'], properties: { port: { type: 'integer', minimum: 1 } } } },
+      ] }) } }] } }] };
     } else if (/loop forever/.test(last.content || '')) {
       const code = /refuse me/.test(last.content) ? 'while (true) {} // refuse me' : 'let i = 0; while (true) { if (++i > 5) break } return i';
       yield { choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_' + Date.now(), type: 'function', function: { name: 'run_js', arguments: JSON.stringify({ code }) } }] } }] };

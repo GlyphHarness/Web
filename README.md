@@ -2,7 +2,7 @@
 
 A client-side LLM chat harness served straight from this repo with GitHub Pages. No server, no build step: the browser holds the API key, the sessions and the tools.
 
-Status: working skeleton (v0.21.0). The OpenRouter path is written from the OpenAI-compatible conventions and has not yet been run against the live API.
+Status: working skeleton (v0.22.0). The OpenRouter path is written from the OpenAI-compatible conventions and has not yet been run against the live API.
 
 ## Run
 
@@ -176,9 +176,16 @@ A page can call `api.github.com` (it answers any origin) but not git's own HTTP 
 
 `run_js` runs in a Worker started inside a hidden `sandbox="allow-scripts"` iframe whose CSP is `default-src 'none'`. The code cannot fetch, open sockets, import scripts or reach the page's storage. It is killed on timeout. `html` widgets get the same no-network CSP, so remote media goes only through the click-gated kinds. Verified in Chromium (`scripts/smoke-git.mjs`); Firefox and Safari are untested.
 
+### Pacing, questions and card metrics
+
+- **Metrics in every card header**, from the harness's records: replies show model, input tokens (cached part), output tokens, cost, time and upstream; tool results show the tool, time, size, ok or failed, and the policy if one applied.
+- **Pace** (top bar): *run*, *hold model requests*, *hold tool calls* or *hold both*. A held step waits as a card showing what will go out: the request's model, message count and size, or the tool call as it will run (after any policy repair). **release** sends it, **skip** drops it (a skipped tool call returns "Not run: skipped by the user"), **release all** switches back to *run* and lets everything waiting go. The bridge sends held steps up as `held` events; the paired agent can `release` them.
+- **`ask` tool** (new sessions): the model puts typed questions on a card and waits. Types: `text`, `number` (min, max), `choice` and `multi` (options), `confirm`, `json` (a JSON Schema subset: type, enum, const, required, properties, additionalProperties false, items, min/max, length and item counts). Answers are validated on the card, the same way whoever answers, and go back as JSON keyed by question id; "decline" returns that the person declined. Over the bridge the paired agent gets an `ask` event and can answer with `answer_ask`.
+- **No browser dialogs:** confirmations and errors use an in-page modal; the tests fail if a native `alert`/`confirm`/`prompt` ever appears.
+
 ### Policies: repair before a call runs
 
-Inspector → Policies holds rules checked against every tool call's arguments before it runs. Each is its own card: a name (what smells and the thread refer to), the tool (`*` for any), a pattern matched against the call's arguments as JSON, the rule in plain words, and on/off; the card shows how often it has fired. Policies written in the earlier one-line text form are converted once. A call that breaks one is not just blocked: the policy model (Settings; else the helper, else the session's model) gets a small fixed context (the rule, the tool's schema and the call) and returns corrected arguments. The repair is checked again and runs instead. The log keeps the repaired call (that message has not been sent back yet, so no cached byte changes), the result starts with `[policy p1: call rewritten]`, and the thread shows the original beside it. No repair, or one that still breaks the rule, means `Not run: policy ...`. The default policy turns long fixed `sleep`s in `shell` into bounded waits on a condition.
+Inspector → Policies holds rules checked against every tool call's arguments before it runs. Each is its own card: a name (what smells and the thread refer to), the tool (`*` for any), a pattern matched against the call's arguments as JSON, the rule in plain words, and on/off; the card shows how often it has fired. Policies written in the earlier one-line text form are converted once. A call that breaks one is not just blocked: the policy model (Settings; else the helper, else the session's model) gets a small fixed context (the rule, the tool's schema and the call) and returns corrected arguments. The repair is checked again and runs instead. The log keeps the repaired call (that message has not been sent back yet, so no cached byte changes), the result starts with `[policy p1: call rewritten]`, and the thread shows the original beside it. No repair, or one that still breaks the rule, means `Not run: policy ...`. The default policy turns long fixed `sleep`s in `shell` into bounded waits on a condition. Because a pattern only sees the literal call (`s=sleep; $s 60` gets past it), the machine also has a `sleep` ahead of the real one on `PATH` that refuses fixed waits of 20 s or more however they are spelled, tells the model what to do instead, and leaves a marker the harness strips from the output and records as a `policy-runtime` smell under the same policy.
 
 ### Smells and review: steering quality over time
 

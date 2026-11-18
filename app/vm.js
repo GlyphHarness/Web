@@ -17,6 +17,24 @@ const ROOT = new URL('./vm/', new URL('./app/', location.href)).href; // the pag
 const IMAGE = ROOT + 'image/out.parts.json';
 const NET = ROOT + 'image/c2w-net-proxy.wasm';
 const PLACEHOLDER = 'wh-placeholder-token';
+export const RUNTIME_MARK = /__WH_RUNTIME_POLICY (\S+) ([^\n]*?)__\n?/g;
+export const SLEEP_LIMIT = 20; // seconds; matches the bounded-waits policy
+const SLEEP_SHIM = `#!/bin/sh
+# Installed by the harness (policy bounded-waits): fixed waits of ${SLEEP_LIMIT}s or more are refused.
+t=0
+for a in "$@"; do
+  case "$a" in *[!0-9.smhd]*|'') continue;; esac
+  u=\${a##*[0-9.]}; v=\${a%"$u"}; v=\${v%%.*}; [ -z "$v" ] && v=0
+  case "$u" in m) v=$((v*60));; h) v=$((v*3600));; d) v=$((v*86400));; esac
+  t=$((t+v))
+done
+if [ "$t" -ge ${SLEEP_LIMIT} ]; then
+  echo "sleep: refused: a fixed wait of \${t}s. Wait on the condition instead: until <check> || [ \\$SECONDS -gt 300 ]; do sleep 3; done" >&2
+  echo "__WH_RUNTIME_POLICY bounded-waits sleep $*__" >&2
+  exit 1
+fi
+exec /bin/sleep "$@"
+`;
 const ANSI = /\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b[()][0-9A-B]|\x1b[=>]|\r/g;
 
 export const vmWanted = () => { try { return localStorage.getItem('wh:vm') === '1'; } catch { return false; } };
@@ -80,6 +98,9 @@ export function machine(env) {
     }
     input('stty -echo 2>/dev/null; export PS1= PS2=; cd /root\r');
     await new Promise(r => setTimeout(r, 500));
+    // runtime policy: a sleep ahead of the real one on PATH refuses long fixed waits
+    // however they are spelled (the argument check only sees the literal call)
+    input(`mkdir -p /usr/local/bin && echo ${btoa(SLEEP_SHIM)} | base64 -d > /usr/local/bin/sleep && chmod +x /usr/local/bin/sleep; hash -r\r`);
     // the network stack (a second wasm) can come up after the shell: wait for its
     // proxy port (polled every second, stops as soon as it answers, at most ~60 s)
     // so the first networked command does not race it

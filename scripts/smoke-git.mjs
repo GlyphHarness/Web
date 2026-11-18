@@ -161,7 +161,7 @@ const toolNames = async () => (JSON.parse(await page.textContent('#req')).tools 
 check('repository tools switch: off removes them from the next request', !(await toolNames()).includes('repo_commit'));
 await page.check('#repotools');
 await say('hello'); await idle();
-check('repository tools switch: on adds them back, with the access line once in the log', (await toolNames()).includes('repo_commit') && /^github access: /m.test(await thread().locator('.msg[data-role=user]').nth(-2).textContent()));
+check('repository tools switch: on adds them back, with the access line once in the log', (await toolNames()).includes('repo_commit') && /^github access: /m.test(await thread().locator('.msg[data-role=user] .txt').nth(-2).textContent()));
 
 // ---- sandbox ----
 const run = code => page.evaluate(async c => (await import('./app/tools.js')).runJs({ code: c }), code);
@@ -211,8 +211,10 @@ check('bridge: unknown directives are refused', unknown && !unknown.ok && /unkno
 
 // ---- log repo: cold start (create, layout), sync at session start, read-only for agents ----
 await page.evaluate(() => { const i = document.querySelector('#logrepo'); i.value = 'o/logs'; i.dispatchEvent(new Event('change')); });
-page.once('dialog', d => d.accept());
 await page.evaluate(() => document.querySelector('[data-act=logsetup]').click());
+await page.waitForSelector('.modal .primary');
+check('log repo: creating it is asked in an in-page modal', /Create the log repo/.test(await page.textContent('.modal h3')));
+await page.click('.modal .primary');
 const ready = await until(async () => /ready \(schema 1\)|sync|failed|Not/.test(await page.textContent('#logstat')) && /sync [^(]|nothing new|failed/.test(await page.textContent('#logstat')) && await page.textContent('#logstat'), 20000);
 const L = repos['o/logs']?.main?.files || {};
 check('log repo: created private and laid out on a cold start', !!repos['o/logs'] && JSON.parse(L['.harness/manifest.json'] || '{}').schema === 1 && /only writer/.test(L['README.md'] || ''), ready);

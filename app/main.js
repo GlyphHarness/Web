@@ -13,13 +13,14 @@ import { machine, vmWanted, vmReady } from './vm.js';
 import * as policy from './policy.js';
 import * as smells from './smells.js';
 import { logRepo } from './logrepo.js';
+import * as asks from './ask.js';
 import * as bridge from './bridge.js';
 import { render } from './widgets.js';
 import * as pat from './patterns.js';
 import { put, get, handlesIn } from './outstore.js';
 import { buildRequest, measure, report, padAttachment, inherit, imitatesNote, keptLines, corePrompt, EDGE_MIN, markedOnly, edgeReplies, turnOf, KINDS } from './context.js';
 
-export const VERSION = '0.21.0';
+export const VERSION = '0.22.0';
 const MAX_STEPS = 8; // model <-> tool round trips per user turn
 const MAX_BRANCHES = 6; // concerns per fan_out
 const FOLD_MAX = 2000; // chars of a fold handed back to the source
@@ -53,10 +54,11 @@ const SHELL = `
     <button data-act="epoch" title="Replace this conversation with a short pocket in a new session">fold session</button>
     <button data-act="foldback" title="Append this branch's last reply to its source as a fold">fold back</button>
     <button data-act="inspector">inspector</button>
+    <label class="pace" title="Hold model requests and/or tool calls until you release them">pace <select id="pace"><option value="run">run</option><option value="requests">hold model requests</option><option value="tools">hold tool calls</option><option value="both">hold both</option></select></label>
   </header>
   <div id="threads"></div>
   <form id="composer">
-    <textarea id="input" rows="3" placeholder="Message (Enter adds a line; send with the button)"></textarea>
+    <textarea id="input" rows="3" placeholder="Message (Enter makes a new line; only "send" submits)"></textarea>
     <button id="send">send</button>
     <button type="button" data-act="stop">stop</button>
   </form>
@@ -229,8 +231,31 @@ function setPane(p) {
   rule('pane', `${hide}{display:none}\n#panes [data-pane="${p}"]{border-color:var(--accent);color:var(--accent)}`);
 }
 
+// The numbers for one card's header, from the harness's own records.
+const k = n => n == null ? '' : n >= 1e4 ? Math.round(n / 1e3) + 'k' : n >= 1e3 ? (n / 1e3).toFixed(1) + 'k' : String(n);
+function metrics(m) {
+  const x = m.x || {}, u = x.usage || {}, out = [];
+  if (m.role === 'assistant') {
+    if (x.model) out.push(['model', x.model.split('/').pop()]);
+    if (u.prompt_tokens != null) out.push(['in', k(u.prompt_tokens) + (u.prompt_tokens_details?.cached_tokens ? ` (${k(u.prompt_tokens_details.cached_tokens)} cached)` : '')]);
+    if (u.completion_tokens != null) out.push(['out', k(u.completion_tokens)]);
+    if (u.cost != null) out.push(['$', Number(u.cost).toFixed(5)]);
+    if (x.ms != null) out.push(['time', (x.ms / 1000).toFixed(1) + ' s']);
+    if (x.upstream) out.push(['via', x.upstream]);
+  } else if (m.role === 'tool') {
+    if (x.tool) out.push(['tool', x.tool]);
+    if (x.ms != null) out.push(['time', x.ms >= 1000 ? (x.ms / 1000).toFixed(1) + ' s' : x.ms + ' ms']);
+    out.push(['size', k(String(m.content || '').length) + ' chars']);
+    if (x.ok != null) out.push(['', x.ok ? 'ok' : 'failed']);
+    if (x.policy) out.push(['policy', x.policy.id]);
+  } else if (m.role === 'user' && typeof m.content === 'string') out.push(['', k(m.content.length) + ' chars']);
+  return out;
+}
+
 function messageNode(m, s) {
   const el = h('article', { class: 'msg', 'data-role': m.role });
+  el.append(h('header', { class: 'mhead' }, h('span', { class: 'role', text: m.role }),
+    ...metrics(m).map(([a, b]) => h('span', { class: 'mx' + (b === 'failed' ? ' bad' : ''), title: a, text: a && a !== '$' ? `${a} ${b}` : a + b }))));
   if (m.x?.reasoning) el.append(h('div', { class: 'think', text: m.x.reasoning }));
   if (m.role === 'tool') {
     el.append(h('details', { class: 'call' }, h('summary', { text: 'result ' + m.tool_call_id }), h('pre', { text: m.content })));
@@ -304,6 +329,27 @@ function ledgerRow(e, i) {
     h('td', { text: n(e.prompt) }), h('td', { text: n(e.cached) }), h('td', { text: n(e.completion) }),
     h('td', { text: e.cost == null ? '-' : Number(e.cost).toFixed(5) }));
 }
+
+// In-page modal instead of alert/confirm/prompt. Resolves with the value of the
+// button pressed (Escape or the backdrop = the first button marked cancel, or false).
+function modal({ title, body, actions = [{ text: 'OK', value: true }] }) {
+  return new Promise(ok => {
+    const back = h('div', { class: 'modal-back' });
+    const done = v => { back.remove(); removeEventListener('keydown', key, true); ok(v); };
+    const cancel = actions.find(a => a.cancel)?.value ?? false;
+    const key = e => { if (e.key === 'Escape') { e.stopPropagation(); done(cancel); } };
+    const box = h('div', { class: 'modal', role: 'dialog', 'aria-modal': 'true' },
+      h('h3', { text: title }),
+      ...[].concat(body || []).map(b => typeof b === 'string' ? h('p', { class: 'modal-text', text: b }) : b),
+      h('div', { class: 'actions' }, ...actions.map(a => { const b = btn(a.text, a.primary ? { class: 'primary', 'data-modal': '' } : { 'data-modal': '' }); b.onclick = () => done(a.value); return b; })));
+    back.addEventListener('mousedown', e => { if (e.target === back) done(cancel); });
+    back.append(box);
+    document.body.append(back);
+    addEventListener('keydown', key, true);
+    (box.querySelector('.primary') || box.querySelector('button'))?.focus();
+  });
+}
+const ask2 = (title, text, yes = 'OK', no = 'Cancel') => modal({ title, body: text, actions: [{ text: no, value: false, cancel: true }, { text: yes, value: true, primary: true }] });
 
 // One card for every list in the inspector (policies, patterns, scratchpads,
 // smells, proposals): a kind chip and a name in the header, a short meta line,
@@ -663,6 +709,8 @@ async function turns(s, depth, onFirst) {
     onPatterns: renderPatterns,
     helper: set.helper ? (want, text) => helper(s, want, text) : null,
     vm: s.tools?.includes('vm') ? vm() : null,
+    ask: a => askCard(s, a),
+    runtime: (id, what) => smell(s, { kind: 'policy-runtime', tool: 'shell', policy: id, detail: what.slice(0, 200), rule: policyList().find(p => p.name === id)?.rule }),
     git: s.tools?.includes('repo') ? gitClient({ token: gh.token, trace, get, confirm: what => approve(s, what), readOnly: () => [state.meta.settings.logRepo].filter(Boolean) }) : null,
   };
   for (let step = 0; step < MAX_STEPS; step++) {
@@ -670,6 +718,9 @@ async function turns(s, depth, onFirst) {
     // Cache affinity: ask OpenRouter for the upstream that served this session last, so
     // its prefix cache is warm. Fallbacks stay allowed. Outside the messages, so the prefix is unchanged.
     if (set.provider === 'openrouter' && s.upstream && s.pin !== false) body.provider = { order: [s.upstream], allow_fallbacks: true };
+    // pacing: the request waits here, before anything counts as sent
+    const go = await hold(s, 'request', `${set.model} · ${body.messages.length} messages · ${(body.tools || []).length} tools · about ${k(Math.ceil(JSON.stringify(body).length / 4))} tokens`);
+    if (go === 'skip') { notice(s, 'Model request skipped; the turn stopped here.'); return 'held'; }
     s.sent = s.messages.length; // everything in the log has now gone out; its wire form is fixed
     const entry = measure(s.id, body);
     if (shown()) { $('#req').textContent = JSON.stringify(body, null, 2); $('#events').textContent = ''; }
@@ -678,7 +729,7 @@ async function turns(s, depth, onFirst) {
     const think = h('div', { class: 'think' }), txt = h('div', { class: 'txt' });
     live.append(think, txt);
     thread(s).append(live);
-    const acc = { content: '', reasoning: '', calls: [], usage: null };
+    const acc = { content: '', reasoning: '', calls: [], usage: null, t0: performance.now() };
     let failure = null;
     try {
       for await (const ev of p.stream(body, key, ctl?.signal, opt())) {
@@ -715,7 +766,7 @@ async function turns(s, depth, onFirst) {
       }
       const m = { role: 'assistant', content: acc.content || null };
       if (calls.length) m.tool_calls = calls;
-      m.x = { model: set.model, usage: acc.usage, ...(acc.upstream ? { upstream: acc.upstream } : {}) };
+      m.x = { model: set.model, usage: acc.usage, ms: Math.round(performance.now() - acc.t0), ...(acc.upstream ? { upstream: acc.upstream } : {}) };
       if (acc.upstream && s.pin !== false) s.upstream = acc.upstream;
       if (acc.reasoning) m.x.reasoning = acc.reasoning;
       push(s, m);
@@ -742,11 +793,15 @@ async function turns(s, depth, onFirst) {
       ctx.audit = null;
       const pol = await enforce(s, tc);
       let content;
-      if (pol?.refused) {
+      // pacing: the call waits as it will run (after any policy repair)
+      const go = pol?.refused ? 'release' : await hold(s, 'tool', `${tc.function.name} ${pol ? pol.to : await fullArgs(tc)}`);
+      if (go === 'skip') content = 'Not run: skipped by the user.';
+      else if (pol?.refused) {
         content = `Not run: policy ${pol.id} (${pol.rule}): ${pol.refused}`;
         pat.trailAdd({ t: Date.now(), ...ctx.by(), tool: tc.function.name, shape: 'policy-refused', via: 'policy', ok: false, chars: content.length, ms: 0 });
       } else {
         if (pol) await relog(s, tc, pol.to);
+        tc._t0 = performance.now();
         content = await execTool(pol ? { ...tc, function: { ...tc.function, arguments: pol.to } } : tc, ctx, pol ? 'policy' : undefined);
         if (pol) content = `[policy ${pol.id}: call rewritten]\n` + content;
       }
@@ -754,12 +809,80 @@ async function turns(s, depth, onFirst) {
       else if (/^(Tool error|Error:)/.test(content)) smell(s, { kind: 'tool-error', tool: tc.function.name, detail: content.split('\n')[0].slice(0, 200) });
       if (/\n\[timed out after/.test(content)) smell(s, { kind: 'tool-timeout', tool: tc.function.name, detail: content.slice(-120) });
       const m = { role: 'tool', tool_call_id: tc.id, content };
-      if (ctx.audit || pol) m.x = { ...(ctx.audit ? { audit: ctx.audit } : {}), ...(pol ? { policy: pol } : {}) };
+      m.x = { tool: tc.function.name, ms: tc._t0 ? Math.round(performance.now() - tc._t0) : 0, ok: !/^(Tool error|Error:|Not run:|Unknown tool|Invalid JSON)/.test(content), ...(ctx.audit ? { audit: ctx.audit } : {}), ...(pol ? { policy: pol } : {}) };
+      delete tc._t0;
       push(s, m);
     }
   }
   notice(s, `Stopped after ${MAX_STEPS} tool rounds.`);
   return 'limit';
+}
+
+// ---------- pacing: hold model requests and/or tool calls ----------
+
+// settings.pace: run | requests | tools | both. A held step is a card with what
+// will go out; release, release all (back to run) or skip. The paired agent can
+// release too (bridge directive "release").
+const held = new Map();
+const pace = () => state.meta.settings.pace || 'run';
+function hold(s, kind, detail) {
+  const p = pace();
+  if (p === 'run' || (p === 'requests' && kind !== 'request') || (p === 'tools' && kind !== 'tool')) return Promise.resolve('release');
+  return new Promise(ok => {
+    const id = uid('h');
+    const card = h('article', { class: 'msg', 'data-role': 'held', 'data-held': id });
+    const done = (v, by = 'you') => { if (!held.has(id)) return; held.delete(id); card.dataset.done = v === 'skip' ? 'skipped' : 'released'; card.querySelector('.mhead .mx').textContent = `${card.dataset.done} by ${by}`; for (const b of card.querySelectorAll('button')) b.disabled = true; link?.emit('held-done', { id, by, v }); ok(v); };
+    card.append(h('header', { class: 'mhead' }, h('span', { class: 'role', text: 'held ' + (kind === 'request' ? 'model request' : 'tool call') }), h('span', { class: 'mx', text: 'waiting' })),
+      h('pre', { text: detail.length > 3000 ? detail.slice(0, 3000) + '…' : detail }),
+      h('div', { class: 'actions' }, btn('release', { 'data-hold': 'release', class: 'primary' }), btn('release all', { 'data-hold': 'all' }), btn('skip', { 'data-hold': 'skip' })));
+    card.addEventListener('click', e => { const a = e.target.dataset?.hold; if (!a) return; if (a === 'all') letLoose(); else done(a); });
+    held.set(id, { done, kind, s: s.id, detail });
+    thread(s).append(card);
+    scrollDown();
+    link?.emit('held', { id, session: s.id, kind, detail: detail.slice(0, 2000) });
+  });
+}
+function letLoose(by = 'you') {
+  state.meta.settings.pace = 'run'; saveMeta(); $('#pace').value = 'run';
+  for (const x of [...held.values()]) x.done('release', by);
+}
+async function fullArgs(tc) {
+  const a = tc.function.arguments || '{}';
+  try { const j = JSON.parse(a); if (typeof j.ref === 'string' && Object.keys(j).every(k => k === 'ref' || k === 'name' || k === 'want')) return (await get(j.ref).catch(() => null)) || a; } catch {}
+  return a;
+}
+
+// ---------- questions to the person (ask.js) ----------
+
+// The ask tool: a card with one field per question. Answers are validated before
+// they go back; the paired agent can answer instead (bridge directive "answer_ask").
+const asking = new Map();
+function askCard(s, args) {
+  const q = asks.questions(args);
+  if (q.error) return Promise.resolve('Not asked: ' + q.error);
+  return new Promise(ok => {
+    const id = uid('a');
+    const { rows, read } = asks.form(q.questions, h);
+    const err = h('p', { class: 'note bad' });
+    const card = h('article', { class: 'msg', 'data-role': 'ask', 'data-ask': id },
+      h('header', { class: 'mhead' }, h('span', { class: 'role', text: 'question' + (q.questions.length > 1 ? 's' : '') }), h('span', { class: 'mx', text: 'waiting for an answer' })),
+      h('form', { class: 'askform', novalidate: '' }, ...rows, err, h('div', { class: 'actions' }, btn('decline', { 'data-askact': 'decline' }), h('button', { type: 'submit', class: 'primary', text: 'answer' }))));
+    const finish = (out, by) => {
+      asking.delete(id);
+      card.dataset.done = by;
+      card.querySelector('.mhead .mx').textContent = out.declined ? `declined by ${by}` : `answered by ${by}`;
+      for (const e of card.querySelectorAll('input, textarea, button')) e.disabled = true;
+      link?.emit('ask-done', { id, by, ...out });
+      ok(out.declined ? 'The person declined to answer.' : JSON.stringify(out.answers));
+    };
+    const submit = (given, by) => { const v = asks.validate(q.questions, given); if (v.errors) return v; finish({ answers: v.answers }, by); return v; };
+    card.querySelector('form').addEventListener('submit', e => { e.preventDefault(); const v = submit(read(card), 'you'); err.textContent = v.errors ? v.errors.join('; ') : ''; });
+    card.querySelector('[data-askact=decline]').addEventListener('click', () => finish({ declined: true }, 'you'));
+    asking.set(id, { submit, decline: by => finish({ declined: true }, by), questions: q.questions });
+    thread(s).append(card);
+    scrollDown();
+    link?.emit('ask', { id, session: s.id, questions: q.questions });
+  });
 }
 
 // ---------- policies (policy.js) ----------
@@ -992,7 +1115,7 @@ const download = (name, obj) => {
 
 const actions = {
   trace() { download('webharness-' + new Date().toISOString().replace(/[:.]/g, '-') + '.trace', { kind: 'webharness.trace', version: 1, build: VERSION, exchanges: trace, trail: pat.trail(), smells: smells.all(), proposals: smells.proposals() }); },
-  new() { logSync('session start'); const s = newSession({ keep: true, core: 2, edge: 'marks', ...(() => { const t = [...(gh.mode() ? ['repo'] : []), ...(vmWanted() && vmReady() ? ['vm'] : [])]; return t.length ? { tools: t } : {}; })() }); $('#sessions').prepend(sessionRow(s)); activate(s.id); $('#input').focus(); },
+  new() { logSync('session start'); const s = newSession({ keep: true, core: 2, edge: 'marks', ...(() => { const t = ['ask', ...(gh.mode() ? ['repo'] : []), ...(vmWanted() && vmReady() ? ['vm'] : [])]; return t.length ? { tools: t } : {}; })() }); $('#sessions').prepend(sessionRow(s)); activate(s.id); $('#input').focus(); },
   import() { $('#file').click(); },
   async export() {
     const s = cur(), bundle = exportBundle(s), blobs = {};
@@ -1012,7 +1135,7 @@ const actions = {
       stat.textContent = 'checking ' + l.repo + '…';
       let st = await l.status();
       if (st.state === 'missing') {
-        if (!confirm(`${l.repo} does not exist (or this credential cannot see it). Create it as a private repository now?`)) { stat.textContent = 'Not created.'; return; }
+        if (!(await ask2('Create the log repo?', `${l.repo} does not exist, or this credential cannot see it. Create it now as a private repository?`, 'Create private repo'))) { stat.textContent = 'Not created.'; return; }
         stat.textContent = (await l.create()).split('\n')[0];
         st = await l.status();
       }
@@ -1052,7 +1175,7 @@ const actions = {
     if (busy || !src.messages.length) return;
     // Lines the model marked with ! are the pocket: no request, no cost. Otherwise a branch writes one.
     const kept = keptLines(src);
-    if (!confirm('Fold this session into a new one? The original stays as it is.\n\n' + foldCase(src) + (kept.length ? `\n\n${kept.length} marked lines will be carried over; no model request is needed.` : '\n\nNo marked lines, so the model will be asked to write the pocket.'))) return;
+    if (!await ask2('Fold this session?', 'A new session starts from the pocket; the original stays as it is.\n\n' + foldCase(src) + (kept.length ? `\n\n${kept.length} marked lines will be carried over; no model request is needed.` : '\n\nNo marked lines, so the model will be asked to write the pocket.'))) return;
     let pocket = kept.join('\n');
     if (!pocket) {
       const b = fork(src, 'pocket', src.messages.length);
@@ -1079,21 +1202,21 @@ const actions = {
     await run(b);
   },
   // Manual fold: appended to the source, which is not run, so several folds can be batched before the next send.
-  foldback() {
+  async foldback() {
     const b = cur(), src = state.sessions[b.parent?.id];
     if (busy || !src) return;
     const m = b.messages.at(-1);
     if (m?.role !== 'assistant' || !m.content) return notice(b, 'Nothing to fold: the branch has no final reply yet.');
-    if (b.folded && !confirm('This branch was already folded back. Append it again?')) return;
+    if (b.folded && !await ask2('Fold back again?', 'This branch was already folded back. Append it to the source again?', 'Append again')) return;
     b.folded = true;
     saveSession(b);
     push(src, { role: 'user', content: foldTag(b.parent.concern, foldOf(b, 'done', ''), b.id) });
     activate(src.id);
   },
   models() { loadModels(true); },
-  drop(el) {
+  async drop(el) {
     const id = el.closest('[data-id]').dataset.id;
-    if (busy || !confirm(`Delete "${state.sessions[id].title}"? This cannot be undone.`)) return;
+    if (busy || !await ask2('Delete session?', `Delete "${state.sessions[id].title}" and its branches? This cannot be undone.`, 'Delete')) return;
     const gone = dropSession(id);
     for (const x of gone) { $(`#sessions [data-id="${x}"]`)?.remove(); $(`.thread[data-session="${x}"]`)?.remove(); }
     if (gone.includes(state.meta.active)) state.meta.order.length ? activate(state.meta.order[0]) : actions.new();
@@ -1144,6 +1267,8 @@ function bind() {
     s.tools = e.target.checked ? [...new Set([...(s.tools || []), 'vm'])] : (s.tools || []).filter(t => t !== 'vm');
     saveSession(s);
   });
+  $('#pace').value = pace();
+  $('#pace').addEventListener('change', e => { if (e.target.value === 'run') letLoose(); else { state.meta.settings.pace = e.target.value; saveMeta(); } });
   $('#polmodel').value = state.meta.settings.policyModel || '';
   $('#toolnames').replaceChildren(...['*', ...defsFor({ tools: ['repo', 'vm'] }).map(d => d.function.name)].map(n => h('option', { value: n })));
   renderPolicies();
@@ -1213,7 +1338,7 @@ function bind() {
       renderPads();
       const top = added.find(s => !s.parent) || added[0];
       if (top) activate(top.id);
-    } catch (err) { alert('Import failed: ' + err.message); }
+    } catch (err) { modal({ title: 'Import failed', body: err.message }); }
   });
 }
 
@@ -1377,6 +1502,22 @@ async function startBridge(pair, env) {
     gated: new Set(['send', 'set', 'reload']),
     directives: {
       ping: hello,
+      held: () => [...held.entries()].map(([id, x]) => ({ id, kind: x.kind, session: x.s, detail: x.detail.slice(0, 500) })),
+      release({ id, all, skip }) {
+        if (all) { letLoose('the paired agent'); return { released: 'all', pace: 'run' }; }
+        const x = held.get(id);
+        if (!x) throw new Error('nothing held with id ' + id + '; held: ' + [...held.keys()].join(' '));
+        x.done(skip ? 'skip' : 'release', 'the paired agent');
+        return { [skip ? 'skipped' : 'released']: id };
+      },
+      answer_ask({ ask, answers, decline }) {
+        const x = asking.get(ask);
+        if (!x) throw new Error('no open question with id ' + ask);
+        if (decline) { x.decline('the paired agent'); return { declined: ask }; }
+        const v = x.submit(answers || {}, 'the paired agent');
+        if (v.errors) throw new Error(v.errors.join('; '));
+        return { answered: ask };
+      },
       answer({ turn, content, tool_calls }) {
         const w = waiting.get(turn);
         if (!w) throw new Error('no turn waiting with id ' + turn + '; waiting: ' + [...waiting.keys()].join(' '));

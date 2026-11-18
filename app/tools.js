@@ -202,15 +202,24 @@ export const vmTools = [
     async (a, ctx) => {
       if (!ctx.vm) return 'No machine is available.';
       const r = await ctx.vm.run(String(a.cmd ?? ''), Math.min(Math.max(Number(a.timeout) || 120, 5), 600));
+      // runtime policy markers (vm.js shims) are recorded by the harness and taken out of the text
+      r.out = String(r.out || '').replace(/__WH_RUNTIME_POLICY (\S+) ([^\n]*?)__\n?/g, (_, id, what) => { ctx.runtime?.(id, what); return ''; }).trimEnd();
       return (r.out || '(no output)') + (r.timedOut ? `\n[timed out after ${a.timeout || 120}s; interrupted]` : `\n[exit ${r.code}]`);
     }),
 ];
-const all = () => [...tools, ...repoTools, ...vmTools];
+// Questions to the person (or the agent orchestrating the session); ask.js.
+export const askTools = [
+  fn('ask',
+    'Ask the person you are working for one or more questions and wait for the answers. Use it when a decision is theirs or a needed fact is missing, not to report progress. Each question: {id, prompt, type: text|number|choice|multi|confirm|json, options (choice, multi), default, min, max (number), schema (json: a JSON Schema the answer must satisfy), optional}. Returns the answers as JSON keyed by id, or that they declined.',
+    { questions: { type: 'array', items: { type: 'object', properties: { id: { type: 'string' }, prompt: { type: 'string' }, type: { type: 'string', enum: ['text', 'number', 'choice', 'multi', 'confirm', 'json'] }, options: { type: 'array', items: { type: 'string' } }, default: {}, min: { type: 'number' }, max: { type: 'number' }, schema: { type: 'object' }, optional: { type: 'boolean' } }, required: ['id', 'prompt', 'type'] } } }, ['questions'],
+    (a, ctx) => ctx.ask ? ctx.ask(a) : 'No one is available to answer.'),
+];
+const all = () => [...tools, ...repoTools, ...vmTools, ...askTools];
 
-const WHOLE = new Set(['entry_read', 'fan_out', 'output_read', 'branch_read', 'pattern_find', 'pattern_get', 'pattern_put', 'pattern_run']);
+const WHOLE = new Set(['ask', 'entry_read', 'fan_out', 'output_read', 'branch_read', 'pattern_find', 'pattern_get', 'pattern_put', 'pattern_run']);
 
 export const toolDefs = tools.map(t => t.def);
-export const defsFor = s => [...toolDefs, ...(s.tools?.includes('repo') ? repoTools.map(t => t.def) : []), ...(s.tools?.includes('vm') ? vmTools.map(t => t.def) : [])];
+export const defsFor = s => [...toolDefs, ...(s.tools?.includes('ask') ? askTools.map(t => t.def) : []), ...(s.tools?.includes('repo') ? repoTools.map(t => t.def) : []), ...(s.tools?.includes('vm') ? vmTools.map(t => t.def) : [])];
 
 // Every call leaves a trail row written by the harness: tool, argument shape, outcome, size, time.
 export async function execTool(call, ctx, via) {

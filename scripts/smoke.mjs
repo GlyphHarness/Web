@@ -9,7 +9,7 @@ const shot = process.argv[3];
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
 const errors = [];
-page.on('dialog', d => d.accept());
+page.on('dialog', d => { errors.push('native dialog: ' + d.message()); d.dismiss(); }); // the app must use its own modal
 page.on('pageerror', e => errors.push(String(e)));
 page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
 const check = (name, ok, extra = '') => { console.log(`${ok ? 'PASS' : 'FAIL'} ${name} ${extra}`); if (!ok) process.exitCode = 1; };
@@ -20,6 +20,8 @@ const say = async text => {
   await page.waitForSelector('#app:not([data-busy])', { state: 'attached', timeout: 20000 });
 };
 const visible = () => page.locator('.thread:visible');
+// log messages only (held, ask and approval cards are not part of the log)
+const LOGMSG = '.msg:is([data-role=user],[data-role=assistant],[data-role=tool])';
 
 await page.goto(url);
 await page.selectOption('#provider', 'mock');
@@ -45,6 +47,52 @@ check('plain reply streams and renders a code block', await visible().locator('.
 await say('please use a tool');
 const result = await visible().locator('.msg[data-role=tool] pre').first().textContent();
 check('run_js executes in the worker', result === '42\n[console]\nhi', result);
+
+// ---- card headers carry metrics ----
+check('metrics: reply header shows model, tokens and time', /model mock-1[^]*in \d[^]*out \d[^]*time [\d.]+ s/.test(await visible().locator('.msg[data-role=assistant] .mhead').last().textContent()));
+check('metrics: tool header shows tool, time, size, ok', /tool run_js[^]*time \d+ ms[^]*chars[^]*ok/.test(await visible().locator('.msg[data-role=tool] .mhead').last().textContent()));
+
+// ---- ask: typed questions on a card, validated ----
+await page.fill('#input', 'ask me something');
+await page.click('#send');
+await page.waitForSelector('.thread:visible .msg[data-role=ask] form');
+const askCardEl = visible().locator('.msg[data-role=ask]').last();
+await askCardEl.locator('button[type=submit]').click();
+check('ask: missing and invalid answers are refused on the card', /name: an answer is required/.test(await askCardEl.locator('.note.bad').textContent()));
+await askCardEl.locator('[name=ask-name]').fill('lab');
+await askCardEl.locator('[name=ask-size]').fill('9');
+await askCardEl.locator('[name=ask-tags][value=docs]').check();
+await askCardEl.locator('[name=ask-go][value=yes]').check();
+await askCardEl.locator('[name=ask-cfg]').fill('{"port": "x"}');
+await askCardEl.locator('button[type=submit]').click();
+check('ask: number range and JSON schema are checked', /size: above 5/.test(await askCardEl.locator('.note.bad').textContent()) && /cfg \$\.port: expected integer/.test(await askCardEl.locator('.note.bad').textContent()));
+await askCardEl.locator('[name=ask-size]').fill('3');
+await askCardEl.locator('[name=ask-cfg]').fill('{"port": 8787}');
+await askCardEl.locator('button[type=submit]').click();
+await page.waitForSelector('#app:not([data-busy])', { state: 'attached', timeout: 20000 });
+const askOut = JSON.parse(await visible().locator('.msg[data-role=tool] > details pre').last().textContent());
+check('ask: typed answers go back as JSON', JSON.stringify(askOut) === JSON.stringify({ name: 'lab', size: 3, vis: 'private', tags: ['docs'], go: true, cfg: { port: 8787 } }), JSON.stringify(askOut));
+
+// ---- pacing: hold tool calls, then model requests ----
+await page.selectOption('#pace', 'tools');
+await page.fill('#input', 'please use a tool again');
+await page.click('#send');
+await page.waitForSelector('.thread:visible .msg[data-role=held]:not([data-done])');
+const toolsBefore = await visible().locator('.msg[data-role=tool]').count();
+check('pace: the tool call is held, shown as it will run', /held tool call/.test(await visible().locator('.msg[data-role=held]').last().textContent()) && /run_js/.test(await visible().locator('.msg[data-role=held] pre').last().textContent()));
+await page.waitForTimeout(300);
+check('pace: nothing ran while held', await visible().locator('.msg[data-role=tool]').count() === toolsBefore);
+await visible().locator('.msg[data-role=held]:not([data-done]) [data-hold=release]').click();
+await page.waitForSelector('#app:not([data-busy])', { state: 'attached', timeout: 20000 });
+check('pace: released, the call runs', await visible().locator('.msg[data-role=tool]').count() === toolsBefore + 1);
+await page.selectOption('#pace', 'requests');
+await page.fill('#input', 'held hello');
+await page.click('#send');
+await page.waitForSelector('.thread:visible .msg[data-role=held]:not([data-done])');
+check('pace: the model request is held with its size', /held model request[^]*mock-1 · \d+ messages/.test(await visible().locator('.msg[data-role=held]').last().textContent()));
+await visible().locator('.msg[data-role=held]:not([data-done]) [data-hold=all]').click();
+await page.waitForSelector('#app:not([data-busy])', { state: 'attached', timeout: 20000 });
+check('pace: "release all" lets the session loose', await page.inputValue('#pace') === 'run' && /released by you/.test(await visible().locator('.msg[data-role=held]').last().textContent()));
 
 await say('show me a widget');
 const stage = () => page.locator('.stagebox:visible');
@@ -113,20 +161,23 @@ const [dl] = await Promise.all([page.waitForEvent('download'), page.click('[data
 const file = JSON.parse(fs.readFileSync(await dl.path(), 'utf8'));
 check('export: bundle has schema and messages, no key', file.kind === 'webharness.session' && file.schema === 1 && file.sessions[0].messages.length >= 8 && !JSON.stringify(file).includes('wh:keys'));
 
-const before = await visible().locator('.msg').count();
+const before = await visible().locator(LOGMSG).count();
 const threads = await page.locator('.thread').count();
 await page.click('[data-act=new]');
 check('new session: old thread hidden by style rule, node kept', await visible().locator('.msg').count() === 0 && await page.locator('.thread').count() === threads + 1);
 const rowsBefore = await page.locator('#sessions [data-id]').count();
 await page.setInputFiles('#file', await dl.path());
 await page.waitForFunction(n => document.querySelectorAll('#sessions [data-id]').length === n, rowsBefore + 4);
-check('import: restored session shows the same messages', await visible().locator('.msg').count() === before, `${before}`);
+check('import: restored session shows the same messages', await visible().locator(LOGMSG).count() === before, `${before}`);
 
 await page.reload();
 check('import: stored output came with the file', file.blobs && Object.keys(file.blobs).length >= 2);
-check('reload: state restored from localStorage', await page.locator('#sessions [data-id]').count() === rowsBefore + 4 && await visible().locator('.msg').count() === before);
+check('reload: state restored from localStorage', await page.locator('#sessions [data-id]').count() === rowsBefore + 4 && await visible().locator(LOGMSG).count() === before);
 
 await page.click('[data-act=epoch]');
+await page.waitForSelector('.modal .primary');
+check('fold session: asks in an in-page modal', /Fold this session\?/.test(await page.textContent('.modal h3')));
+await page.click('.modal .primary');
 await page.waitForFunction(() => /epoch 2/.test(document.querySelector('#title').value), null, { timeout: 20000 });
 await page.click('[data-act=new]');
 await page.click('[data-pane=insp]');
@@ -165,6 +216,7 @@ await say('decide');
 check('keep marks: the note is in the system prompt of a new session', /Start a line with !/.test(JSON.parse(await page.locator('#req').textContent()).messages[0].content));
 const reqs = await page.locator('#tracen').textContent();
 await page.click('[data-act=epoch]');
+await page.click('.modal .primary');
 await page.waitForFunction(() => /epoch 2/.test(document.querySelector('#title').value));
 check('keep marks: fold uses the marked lines, critical first, with no request', (await visible().locator('.msg').first().evaluate(n => n._raw)) === 'Pocket:\nuse the flash model\nport is 8787' && (await page.locator('#tracen').textContent()) === reqs);
 
@@ -172,7 +224,7 @@ await page.click('[data-act=new]');
 await say('hello again');
 check('patterns: a new session opens with the index', /patterns \(pattern_get id[^]*\[recipe\] multiply two numbers #math \(slots: a, b\)/.test(await visible().locator('.msg[data-role=user]').first().textContent()));
 await page.locator('#sessions > div', { hasText: 'hello there · epoch 2' }).click();
-check('fold session: new epoch starts from the pocket, source kept', /^Pocket:\n[^]*## Settled/.test(await visible().locator('.msg').first().textContent()) && await visible().locator('.msg').count() === 1, await page.inputValue('#title'));
+check('fold session: new epoch starts from the pocket, source kept', /^Pocket:\n[^]*## Settled/.test(await visible().locator('.msg .txt').first().textContent()) && await visible().locator(LOGMSG).count() === 1, await page.inputValue('#title'));
 
 // ---- policies: repaired before they run; smells tracked by steering version; review proposes ----
 check('policies: the default is a named card, not a text field', await page.evaluate(() => [...document.querySelectorAll('#policies .item .name')].map(e => e.textContent).join()) === 'bounded-waits');
