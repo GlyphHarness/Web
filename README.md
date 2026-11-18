@@ -2,7 +2,7 @@
 
 A client-side LLM chat harness served straight from this repo with GitHub Pages. No server, no build step: the browser holds the API key, the sessions and the tools.
 
-Status: working skeleton (v0.1.0). The OpenRouter path is written from the OpenAI-compatible conventions and has not yet been run against the live API.
+Status: working skeleton (v0.2.0). The OpenRouter path is written from the OpenAI-compatible conventions and has not yet been run against the live API.
 
 ## Run
 
@@ -40,6 +40,14 @@ The cache ledger shows two numbers per request:
 - **cached**: input tokens the provider reports as cache hits (`usage.prompt_tokens_details.cached_tokens`).
 
 Editing the system prompt or switching model mid-session is allowed, and shows up as a broken prefix. Scratchpads marked "in context" are attached to the next user message only when new or changed, so they never rewrite earlier bytes.
+
+### Trace and replay
+
+Every request made during a page load is recorded in memory: the body sent, the HTTP status, and the raw response text in the chunks it arrived in, with millisecond offsets. The API key is not recorded; your message text is. "export .trace" in the inspector downloads the lot.
+
+`node scripts/replay.mjs FILE.trace [port] [--fast]` serves the app and answers `/api/v1/chat/completions` from that file with the recorded chunks and timing. Set "API base URL" to `http://localhost:PORT/api/v1` and the real provider code runs with no upstream access. The server prints whether each incoming body matches the recorded one, so a change to request assembly can be checked against a real session. `scripts/sample.trace` is a hand-made example.
+
+The same "API base URL" setting points the OpenRouter provider at any other OpenAI-compatible host.
 
 ### Tools
 

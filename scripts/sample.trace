@@ -1,0 +1,66 @@
+{
+ "kind": "webharness.trace",
+ "version": 1,
+ "exchanges": [
+  {
+   "t": "x",
+   "url": "u",
+   "request": {
+    "model": "test/model",
+    "messages": [
+     {
+      "role": "user",
+      "content": "please use a tool"
+     }
+    ],
+    "stream": true
+   },
+   "status": 200,
+   "chunks": [
+    [
+     40,
+     ": OPENROUTER PROCESSING\n\n"
+    ],
+    [
+     120,
+     "data: {\"id\": \"gen-1\", \"choices\": [{\"index\": 0, \"de"
+    ],
+    [
+     140,
+     "lta\": {\"role\": \"assistant\", \"content\": \"\", \"tool_calls\": [{\"index\": 0, \"id\": \"call_a\", \"type\": \"function\", \"function\": {\"name\": \"run_js\", \"arguments\": \"\"}}]}}]}\n\ndata: {\"id\": \"gen-1\", \"choices\": [{\"index\": 0, \"delta\": {\"tool_calls\": [{\"index\": 0, \"function\": {\"arguments\": \"{\\\"code\\\":\\\"return 2+2\\\"}\"}}]}}]}\n\n"
+    ],
+    [
+     200,
+     "data: {\"id\": \"gen-1\", \"choices\": [{\"index\": 0, \"delta\": {}, \"finish_reason\": \"tool_calls\"}], \"usage\": {\"prompt_tokens\": 300, \"completion_tokens\": 12, \"prompt_tokens_details\": {\"cached_tokens\": 0}, \"cost\": 4e-05}}\n\ndata: [DONE]\n\n"
+    ]
+   ],
+   "ms": 200
+  },
+  {
+   "t": "x",
+   "url": "u",
+   "request": {
+    "model": "test/model",
+    "messages": [
+     {
+      "role": "user",
+      "content": "please use a tool"
+     }
+    ],
+    "stream": true
+   },
+   "status": 200,
+   "chunks": [
+    [
+     60,
+     "data: {\"id\": \"gen-1\", \"choices\": [{\"index\": 0, \"delta\": {\"role\": \"assistant\", \"content\": \"It is \"}}]}\n\ndata: {\"id\": \"gen-1\", \"choices\": [{\"index\": 0, \"delta\": {\"content\": \"4.\"}}]}\n\n"
+    ],
+    [
+     90,
+     "data: {\"id\": \"gen-2\", \"choices\": [{\"index\": 0, \"delta\": {}, \"finish_reason\": \"stop\"}], \"usage\": {\"prompt_tokens\": 340, \"completion_tokens\": 5, \"prompt_tokens_details\": {\"cached_tokens\": 256}, \"cost\": 2e-05}}\n\ndata: [DONE]\n\n"
+    ]
+   ],
+   "ms": 90
+  }
+ ]
+}

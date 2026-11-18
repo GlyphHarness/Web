@@ -9,7 +9,7 @@ import { providers } from './providers.js';
 import { toolDefs, execTool } from './tools.js';
 import { buildRequest, measure, report, padAttachment } from './context.js';
 
-export const VERSION = '0.1.0';
+export const VERSION = '0.2.0';
 const MAX_STEPS = 8; // model <-> tool round trips per user turn
 
 const $ = (s, r = document) => r.querySelector(s);
@@ -50,6 +50,8 @@ const SHELL = `
     <input id="key" type="password" autocomplete="off">
     <label>Pinned code ref (tag, branch or commit; empty = this branch)</label>
     <input id="ref" placeholder="e.g. v0.1.0">
+    <label>API base URL (empty = provider default)</label>
+    <input id="base" placeholder="">
     <p class="note" id="build"></p>
   </details>
   <details open><summary>System prompt</summary>
@@ -67,9 +69,15 @@ const SHELL = `
   </details>
   <details><summary>Last request</summary><pre id="req"></pre></details>
   <details><summary>Stream events</summary><pre id="events"></pre></details>
+  <details open><summary>Trace</summary>
+    <p class="note">Every request this page load: body sent, status, raw response chunks with ms offsets. No API key. Contains your message text.</p>
+    <button data-act="trace">export .trace</button> <span class="note" id="tracen">0 requests</span>
+  </details>
 </aside>`;
 
 let app, busy = false, ctl = null;
+const trace = []; // raw request/response records, memory only
+const opt = () => ({ base: state.meta.settings.base?.[state.meta.settings.provider] || '', trace });
 const cur = () => state.sessions[state.meta.active];
 const provider = () => providers[state.meta.settings.provider] || providers.openrouter;
 
@@ -174,13 +182,19 @@ function activate(id) {
   scrollDown();
 }
 
+function showBase() {
+  const id = state.meta.settings.provider;
+  $('#base').value = state.meta.settings.base?.[id] || '';
+  $('#base').placeholder = providers[id].base || 'not used by this provider';
+}
+
 function applyInspector() {
   rule('inspector', state.meta.settings.inspector ? '' : '#inspect{display:none}\n#app{grid-template-columns:var(--side) minmax(0,1fr)}');
 }
 
 async function loadModels() {
   try {
-    const list = await provider().models(state.keys[state.meta.settings.provider]);
+    const list = await provider().models(state.keys[state.meta.settings.provider], opt());
     $('#models').replaceChildren(...list.map(m => h('option', { value: m.id, label: m.name })));
   } catch (e) { $('#models').replaceChildren(); console.warn('model list failed:', e); }
 }
@@ -219,7 +233,7 @@ async function run(s) {
       const acc = { content: '', reasoning: '', calls: [], usage: null };
       let failure = null;
       try {
-        for await (const ev of p.stream(body, key, ctl.signal)) {
+        for await (const ev of p.stream(body, key, ctl.signal, opt())) {
           $('#events').append(JSON.stringify(ev) + '\n');
           if (ev.error) throw new Error(ev.error.message || JSON.stringify(ev.error));
           if (ev.usage) acc.usage = ev.usage;
@@ -236,6 +250,7 @@ async function run(s) {
         }
       } catch (e) { failure = e; }
       live.remove();
+      $('#tracen').textContent = trace.length + ' requests';
 
       const calls = failure ? [] : acc.calls.filter(Boolean); // drop half-streamed calls
       if (acc.content || calls.length) {
@@ -261,14 +276,19 @@ async function run(s) {
 
 // ---------- wiring ----------
 
+const download = (name, obj) => {
+  const a = h('a', { href: URL.createObjectURL(new Blob([JSON.stringify(obj, null, 1)], { type: 'application/json' })), download: name });
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+};
+
 const actions = {
+  trace() { download('webharness-' + new Date().toISOString().replace(/[:.]/g, '-') + '.trace', { kind: 'webharness.trace', version: 1, build: VERSION, exchanges: trace }); },
   new() { const s = newSession(); $('#sessions').prepend(sessionRow(s)); activate(s.id); $('#input').focus(); },
   import() { $('#file').click(); },
   export() {
     const s = cur();
-    const a = h('a', { href: URL.createObjectURL(new Blob([JSON.stringify(exportBundle(s), null, 1)], { type: 'application/json' })), download: (s.title.replace(/[^\w\- ]+/g, '').trim() || 'session') + '.session' });
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    download((s.title.replace(/[^\w\- ]+/g, '').trim() || 'session') + '.session', exportBundle(s));
   },
   inspector() { state.meta.settings.inspector = !state.meta.settings.inspector; saveMeta(); applyInspector(); },
   stop() { ctl?.abort(); },
@@ -304,7 +324,8 @@ function bind() {
   $('#title').addEventListener('change', e => { const s = cur(); s.title = e.target.value || 'Untitled'; saveSession(s); $(`#sessions [data-id="${s.id}"] span`).textContent = s.title; });
   $('#system').addEventListener('change', e => { const s = cur(); s.system = e.target.value; saveSession(s); });
   $('#model').addEventListener('change', e => { state.meta.settings.model = e.target.value.trim(); saveMeta(); });
-  $('#provider').addEventListener('change', e => { state.meta.settings.provider = e.target.value; saveMeta(); $('#key').value = state.keys[e.target.value] || ''; loadModels(); });
+  $('#provider').addEventListener('change', e => { state.meta.settings.provider = e.target.value; saveMeta(); $('#key').value = state.keys[e.target.value] || ''; showBase(); loadModels(); });
+  $('#base').addEventListener('change', e => { (state.meta.settings.base ??= {})[state.meta.settings.provider] = e.target.value.trim(); saveMeta(); loadModels(); });
   $('#key').addEventListener('change', e => { state.keys[state.meta.settings.provider] = e.target.value.trim(); saveKeys(); });
   $('#ref').addEventListener('change', e => { location.search = '?ref=' + encodeURIComponent(e.target.value.trim()); });
 
@@ -342,6 +363,7 @@ export function boot(env) {
   $('#model').value = set.model;
   $('#key').value = state.keys[set.provider] || '';
   $('#sessions').append(...state.meta.order.map(id => sessionRow(state.sessions[id])));
+  showBase();
   renderPads();
   applyInspector();
   bind();

@@ -2,14 +2,16 @@
 //   { label, needsKey, models(key) -> [{id, name}], stream(body, key, signal) -> async iterator of chunks }
 // Chunks are OpenAI-style streaming objects ({choices:[{delta}], usage, error}).
 
-async function* sse(res) {
+async function* sse(res, onRaw) {
   const reader = res.body.getReader();
   const dec = new TextDecoder();
   let buf = '';
   for (;;) {
     const { done, value } = await reader.read();
     if (done) break;
-    buf += dec.decode(value, { stream: true });
+    const text = dec.decode(value, { stream: true });
+    onRaw?.(text);
+    buf += text;
     let i;
     while ((i = buf.indexOf('\n')) >= 0) {
       const line = buf.slice(0, i).trim();
@@ -22,27 +24,45 @@ async function* sse(res) {
   }
 }
 
+// opt.base overrides the API root (a proxy, another OpenAI-compatible host, or
+// the local replay server). opt.trace is an array that receives one record per
+// request: the body sent, the status, and the raw response text in the chunks
+// it arrived in with millisecond offsets. The API key is never recorded.
 function openaiCompatible({ label, base }) {
+  const root = opt => (opt?.base || base).replace(/\/+$/, '');
   return {
-    label, needsKey: true,
-    async models() {
-      const r = await fetch(base + '/models');
+    label, needsKey: true, base,
+    async models(_key, opt) {
+      const r = await fetch(root(opt) + '/models');
       if (!r.ok) throw new Error(`models: HTTP ${r.status}`);
       const j = await r.json();
       return (j.data || []).map(m => ({ id: m.id, name: m.name || m.id }));
     },
-    async *stream(body, key, signal) {
-      const r = await fetch(base + '/chat/completions', {
-        method: 'POST', signal,
-        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + key },
-        body: JSON.stringify(body),
-      });
-      if (!r.ok) {
-        let msg = `HTTP ${r.status}`;
-        try { const j = await r.json(); msg += ': ' + (j.error?.message || JSON.stringify(j)); } catch {}
-        throw new Error(msg);
-      }
-      yield* sse(r);
+    async *stream(body, key, signal, opt = {}) {
+      const url = root(opt) + '/chat/completions';
+      const t0 = performance.now(), dt = () => Math.round(performance.now() - t0);
+      const rec = { t: new Date().toISOString(), url, request: body, status: 0, chunks: [] };
+      opt.trace?.push(rec);
+      try {
+        const r = await fetch(url, {
+          method: 'POST', signal,
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + key },
+          body: JSON.stringify(body),
+        });
+        rec.status = r.status;
+        rec.headersMs = dt();
+        if (!r.ok) {
+          const text = await r.text();
+          rec.chunks.push([dt(), text]);
+          let msg = text;
+          try { const j = JSON.parse(text); msg = j.error?.message || text; } catch {}
+          throw new Error(`HTTP ${r.status}: ${msg.slice(0, 500)}`);
+        }
+        yield* sse(r, text => rec.chunks.push([dt(), text]));
+      } catch (e) {
+        rec.error = String(e.message || e);
+        throw e;
+      } finally { rec.ms = dt(); }
     },
   };
 }
