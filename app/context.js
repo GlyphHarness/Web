@@ -5,13 +5,46 @@
 // Anything that breaks it (editing the system prompt, changing tools, switching
 // model) shows up in the ledger as a short "kept" prefix.
 
+// The stored log is always structured (tool_calls and tool results). How it is
+// put on the wire is a per-session choice, session.wire:
+//   'calls'  as stored.
+//   'notes'  each call becomes one line in the assistant's own turn, e.g.
+//            [called run_js "sum rows" os:1k2j3h want: total]
+//            and each result becomes a [result ...] block in the next user turn.
+//            No call ids, no argument JSON, and the stated want sits in the
+//            cached prefix right before its result.
+// Both are pure functions of the log, so either keeps the prefix byte-stable.
+// Changing the choice mid-session rewrites the prefix once.
+
+function callNote(tc) {
+  let a = {};
+  try { a = JSON.parse(tc.function.arguments); } catch {}
+  const { ref, name, want, ...rest } = a;
+  const args = ref ? ' ' + ref : Object.keys(rest).length ? ' ' + JSON.stringify(rest) : '';
+  return `[called ${tc.function.name}${name ? ` ${JSON.stringify(name)}` : ''}${args}${want ? ` want: ${want}` : ''}]`;
+}
+
+function asNotes(log) {
+  const out = [], label = {};
+  const add = (role, content) => { const p = out.at(-1); p && p.role === role ? p.content += '\n\n' + content : out.push({ role, content }); };
+  for (const m of log) {
+    if (m.role === 'tool') add('user', `[result ${label[m.tool_call_id] || 'call'}]\n${m.content}`);
+    else if (m.tool_calls) {
+      for (const tc of m.tool_calls) { let a = {}; try { a = JSON.parse(tc.function.arguments); } catch {} label[tc.id] = tc.function.name + (a.name ? ` ${JSON.stringify(a.name)}` : ''); }
+      add('assistant', [m.content, ...m.tool_calls.map(callNote)].filter(Boolean).join('\n'));
+    } else add(m.role, m.content || '');
+  }
+  return out;
+}
+
+// A reply that writes a call note instead of making the call did nothing. Detected, never executed.
+export const imitatesNote = text => /^\[called \w+/m.test(text || '');
+
 export function buildRequest(session, model, toolDefs) {
   const messages = [];
   if (session.system) messages.push({ role: 'system', content: session.system });
-  for (const m of session.messages) {
-    const { x, ...wire } = m; // x = local-only metadata, never sent
-    messages.push(wire);
-  }
+  const log = session.messages.map(({ x, ...wire }) => wire); // x = local-only metadata, never sent
+  messages.push(...(session.wire === 'notes' ? asNotes(log) : log));
   const body = { model, messages, stream: true };
   if (toolDefs.length) body.tools = toolDefs;
   return body;

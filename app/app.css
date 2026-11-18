@@ -71,7 +71,7 @@ details.call pre.full { margin-top: 6px; padding-top: 6px; border-top: 1px dashe
 
 #inspect details { border-bottom: 1px solid var(--line); padding: 6px 0; }
 #inspect label { display: block; font-size: 11px; color: var(--dim); margin-top: 6px; }
-#inspect input:not([type=checkbox]) { width: 100%; }
+#inspect input:not([type=checkbox]), #inspect select { width: 100%; }
 #inspect pre { max-height: 320px; overflow: auto; margin-top: 6px; }
 .note { font-size: 11px; color: var(--dim); margin: 4px 0; }
 #ledger { width: 100%; border-collapse: collapse; font: 11px ui-monospace, monospace; margin-top: 6px; }

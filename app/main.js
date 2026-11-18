@@ -10,9 +10,9 @@ import { toolDefs, execTool, SWAPPABLE, ARG_MAX } from './tools.js';
 import { render } from './widgets.js';
 import * as pat from './patterns.js';
 import { put, get, handlesIn } from './outstore.js';
-import { buildRequest, measure, report, padAttachment, inherit } from './context.js';
+import { buildRequest, measure, report, padAttachment, inherit, imitatesNote } from './context.js';
 
-export const VERSION = '0.7.0';
+export const VERSION = '0.8.0';
 const MAX_STEPS = 8; // model <-> tool round trips per user turn
 const MAX_BRANCHES = 6; // concerns per fan_out
 const FOLD_MAX = 2000; // chars of a fold handed back to the source
@@ -78,6 +78,8 @@ const SHELL = `
   </details>
   <details open><summary>System prompt</summary>
     <textarea id="system" rows="6"></textarea>
+    <label>How past tool calls are sent</label>
+    <select id="wire"><option value="calls">calls: structured, as the model made them</option><option value="notes">notes: one text line per call, results as text</option></select>
     <p class="note">First bytes of every request. Editing it mid-session breaks the cached prefix; the ledger will show it.</p>
   </details>
   <details><summary>Scratchpads</summary>
@@ -280,6 +282,7 @@ function activate(id) {
   rule('active', `.thread:not([data-session="${id}"]),.stagebox:not([data-session="${id}"]){display:none}\n#sessions [data-id="${id}"]{background:var(--sel)}`);
   $('#title').value = s.title;
   $('#system').value = s.system;
+  $('#wire').value = s.wire || 'calls';
   $('#ledger tbody').replaceChildren(...s.ledger.map(ledgerRow));
   s.parent ? app.setAttribute('data-branch', '') : app.removeAttribute('data-branch');
   ledgerSum();
@@ -441,7 +444,8 @@ async function turns(s, depth, onFirst) {
         if (!SWAPPABLE.has(c.function.name) || c.function.arguments.length <= ARG_MAX) continue;
         let a;
         try { a = JSON.parse(c.function.arguments); } catch { continue; }
-        c.function.arguments = JSON.stringify({ ref: await put(c.function.arguments), name: String(a.name || a.title || '').slice(0, 60) || undefined });
+        // what the call was looking for stays inline: it is the hint the next turns read
+        c.function.arguments = JSON.stringify({ ref: await put(c.function.arguments), name: String(a.name || a.title || '').slice(0, 60) || undefined, want: a.want ? String(a.want).slice(0, 160) : undefined });
       }
       const m = { role: 'assistant', content: acc.content || null };
       if (calls.length) m.tool_calls = calls;
@@ -455,7 +459,13 @@ async function turns(s, depth, onFirst) {
     ledgerSum();
 
     if (failure) { if (failure.name !== 'AbortError') notice(s, String(failure.message || failure)); return 'failed'; }
-    if (!calls.length) return 'done';
+    if (!calls.length) {
+      if (s.wire === 'notes' && imitatesNote(acc.content)) {
+        pat.trailAdd({ t: Date.now(), ...ctx.by(), tool: 'imitated_note', shape: 'imitated', ok: false, chars: acc.content.length, ms: 0 });
+        notice(s, 'The reply wrote a call note as text instead of calling the tool, so nothing ran. This is the known risk of the "notes" log form.');
+      }
+      return 'done';
+    }
     if (depth && s.ledger.reduce((n, e) => n + (e.prompt || 0) + (e.completion || 0), 0) > (Number(set.branchBudget) || BRANCH_BUDGET)) {
       notice(s, 'Branch token budget reached; stopped before running more tools.');
       return 'budget';
@@ -521,7 +531,7 @@ const concernMessage = (id, task, deps = '') => `<concern id=${JSON.stringify(id
 
 function fork(source, id, cut) {
   const b = newSession({
-    title: '↳ ' + id, system: source.system, padSeen: { ...source.padSeen },
+    title: '↳ ' + id, system: source.system, wire: source.wire, padSeen: { ...source.padSeen },
     parent: { id: source.id, at: cut, concern: id },
     messages: structuredClone(source.messages.slice(0, cut)),
   });
@@ -648,7 +658,7 @@ const actions = {
     const status = await run(b), m = b.messages.at(-1);
     if (status !== 'done' || m?.role !== 'assistant' || !m.content) return notice(src, 'The pocket was not written; nothing was folded.');
     const epoch = (src.epoch || 1) + 1;
-    const n = newSession({ title: src.title.replace(/ · epoch \d+$/, '') + ' · epoch ' + epoch, system: src.system, epoch, from: src.id });
+    const n = newSession({ title: src.title.replace(/ · epoch \d+$/, '') + ' · epoch ' + epoch, system: src.system, wire: src.wire, epoch, from: src.id });
     $('#sessions').prepend(sessionRow(n));
     push(n, { role: 'user', content: `<pocket from="${src.id}">\n${m.content}\n</pocket>` });
     activate(n.id);
@@ -716,6 +726,7 @@ function bind() {
 
   $('#title').addEventListener('change', e => { const s = cur(); s.title = e.target.value || 'Untitled'; saveSession(s); $(`#sessions [data-id="${s.id}"] span`).textContent = s.title; });
   $('#system').addEventListener('change', e => { const s = cur(); s.system = e.target.value; saveSession(s); });
+  $('#wire').addEventListener('change', e => { const s = cur(); s.wire = e.target.value; saveSession(s); });
   $('#model').addEventListener('change', e => { state.meta.settings.model = e.target.value.trim(); saveMeta(); showPrice(); });
   $('#provider').addEventListener('change', e => { state.meta.settings.provider = e.target.value; saveMeta(); $('#key').value = state.keys[e.target.value] || ''; showBase(); loadModels(); });
   $('#base').addEventListener('change', e => { (state.meta.settings.base ??= {})[state.meta.settings.provider] = e.target.value.trim(); saveMeta(); loadModels(); });

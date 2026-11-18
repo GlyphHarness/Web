@@ -62,7 +62,7 @@ check('ledger: provider-reported cached tokens grow', Number(cached.at(-1)) > Nu
 
 await say('long script');
 const logged = await page.evaluate(() => { const m = JSON.parse(localStorage['wh:meta']); return JSON.parse(localStorage['wh:s:' + m.active]).messages.findLast(x => x.tool_calls).tool_calls[0].function.arguments; });
-check('arguments: a long call is logged as {ref, name}', /^\{"ref":"os:[a-z0-9]+","name":"sum rows"\}$/.test(logged), logged);
+check('arguments: a long call is logged as {ref, name, want}', /^\{"ref":"os:[a-z0-9]+","name":"sum rows","want":"total"\}$/.test(logged), logged);
 const filtered = await visible().locator('.msg[data-role=tool] pre').last().textContent();
 check('results: want returns the matching line, not the bulk', /filter=keywords want="total"; 1 of 1/.test(filtered) && /total=4950/.test(filtered) && filtered.length < 300, filtered.replace(/\n/g, ' | '));
 await page.click('[data-pane=insp]');
@@ -117,10 +117,19 @@ check('reload: state restored from localStorage', await page.locator('#sessions 
 await page.click('[data-act=epoch]');
 await page.waitForFunction(() => /epoch 2/.test(document.querySelector('#title').value), null, { timeout: 20000 });
 await page.click('[data-act=new]');
+await page.click('[data-pane=insp]');
+await page.selectOption('#wire', 'notes');
+await say('long script');
+await say('and then');
+const wire = JSON.parse(await page.locator('#req').textContent());
+check('notes form: calls and results go out as text turns, roles alternate', !JSON.stringify(wire.messages).includes('tool_call') && wire.messages.every((m, i, a) => m.role !== 'tool' && m.role !== a[i - 1]?.role) && /\[called run_js "sum rows" os:[a-z0-9]+ want: total\]/.test(wire.messages[1].content) && /^\[result run_js "sum rows"\]\n\[os:[^]*total=4950/.test(wire.messages[2].content), JSON.stringify(wire.messages.map(m => m.role)));
+check('notes form: prefix stays byte-stable', (await page.locator('#ledger td[data-hit]').allTextContents()).slice(1).every(t => t === '100%'));
+
+await page.click('[data-act=new]');
 await say('hello again');
 check('patterns: a new session opens with the index', /<patterns [^]*\[recipe\] multiply two numbers #math \(slots: a, b\)/.test(await visible().locator('.msg[data-role=user]').first().textContent()));
-await page.locator('#sessions > div:not([data-parent])').nth(1).click();
-check('fold session: new epoch starts from the pocket, source kept', /<pocket from=[^]*## Settled/.test(await visible().locator('.msg').first().textContent()) && await visible().locator('.msg').count() === 1);
+await page.locator('#sessions > div', { hasText: 'epoch 2' }).click();
+check('fold session: new epoch starts from the pocket, source kept', /<pocket from=[^]*## Settled/.test(await visible().locator('.msg').first().textContent()) && await visible().locator('.msg').count() === 1, await page.inputValue('#title'));
 
 await page.evaluate(() => { const m = JSON.parse(localStorage['wh:meta']); m.schema = 99; localStorage['wh:meta'] = JSON.stringify(m); });
 await page.reload();

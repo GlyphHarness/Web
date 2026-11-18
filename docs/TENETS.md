@@ -33,6 +33,9 @@ Origins: `L` = glyphcore/lodestar (`CLAUDE.md`, `docs/design/`), `S` = glyphcore
 | 24 | **Long arguments leave the log once, at append time.** A call over 400 chars of arguments is logged as `{ref, name}`; the text is stored by handle. The logged form is itself a valid call. | `main.js` swap in `turns`, `tools.js` ref resolution; smoke test "arguments" | L `output-store.md` |
 | 25 | **Filters before models; a failed helper passes through.** Every result is squeezed deterministically. A long one is reduced by what the caller said it wants: helper model if set, else keyword lines, else head and tail. | `outstore.js` `squeeze`, `shortlist`, `present`; smoke tests "results" | L `output-store.md`, L `squeeze.md` |
 | 26 | **The helper is metered.** Each helper request is traced and has its own ledger row. | `main.js` `helper` | L6 |
+| 27 | **Two views, one log.** The stored log is always structured; the wire form (`calls` or `notes`) is a pure function of it, so either keeps the prefix byte-stable. | `context.js` `buildRequest`, `asNotes`; smoke tests "notes form" | L12 |
+| 28 | **The stated want stays in the prefix.** A swapped call keeps `want` inline, and in notes form it sits on the call line right before its result. | `main.js` swap, `callNote` | W |
+| 29 | **An imitated call is detected, never executed.** In notes form, a reply that writes a `[called ...]` line as text is flagged and counted in the trail. | `imitatesNote`, `turns` | W |
 | 12 | **Secrets stay out of records.** The API key is never in a session file or trace. | `store.js` key separation, `providers.js` trace record | L9 |
 
 ## Concerns (no enforcer yet)
@@ -40,7 +43,8 @@ Origins: `L` = glyphcore/lodestar (`CLAUDE.md`, `docs/design/`), `S` = glyphcore
 | Concern | Note | Origin |
 |---|---|---|
 | Fold break-even is advisory | The estimate is shown, not enforced, and assumes 600 pocket tokens and full cache hits. Calibrate from real traces. | L `shim.md` |
-| Two views, one prefix | Derive the wire request as stable prefix + ephemeral edge instead of replaying the log. Today scratchpads are baked into the user message. | L12 |
+| Ephemeral edge | The wire is derived from the log, but there is still no unpersisted tail; scratchpads are baked into the user message. | L12 |
+| Notes vs calls is unmeasured | Notes saves call ids and JSON framing and frees the log from provider pairing rules, but may teach the model to write notes instead of calling. Compare cost and the imitation count on the same task. | W |
 | Stored output is never pruned | Blobs live in IndexedDB until the browser clears them; no retention rule. | L `output-store.md` Q5 |
 | Models may not send `want` | Filtering by intent depends on the model filling `want`. Measure how often a long result arrives without it. | W |
 | Helper accuracy | Nothing checks a helper extract against the stored output; a wrong extract looks like a fact. The handle is always attached. | L `output-store.md` (false-drop rate) |

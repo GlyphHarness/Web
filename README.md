@@ -2,7 +2,7 @@
 
 A client-side LLM chat harness served straight from this repo with GitHub Pages. No server, no build step: the browser holds the API key, the sessions and the tools.
 
-Status: working skeleton (v0.7.0). The OpenRouter path is written from the OpenAI-compatible conventions and has not yet been run against the live API.
+Status: working skeleton (v0.8.0). The OpenRouter path is written from the OpenAI-compatible conventions and has not yet been run against the live API.
 
 ## Run
 
@@ -89,7 +89,7 @@ The right pane has two tabs, Stage and Inspector. The stage shows what the model
 
 Both halves of a tool call can be bulky: the arguments the model wrote, and the result. Each is cut down once, when it enters the log, and the full text is kept in the browser (IndexedDB) under a handle such as `os:1k2j3h4g5f`.
 
-**Arguments.** A `run_js` or `show_widget` call with more than 400 characters of arguments is logged as `{ref, name}`. `name` is the label the model gave the call. Calling a tool with only `{ref}` runs the stored arguments again. Opening the call in the thread shows the full text.
+**Arguments.** A `run_js` or `show_widget` call with more than 400 characters of arguments is logged as `{ref, name, want}`. `name` is the label the model gave the call and `want` is what it said it was looking for. Calling a tool with only `{ref}` runs the stored arguments again. Opening the call in the thread shows the full text.
 
 **Results.** Every result first has colour codes, trailing spaces, blank runs and repeated lines removed. If it is still over 1,500 characters it is reduced, in this order:
 
@@ -98,6 +98,15 @@ Both halves of a tool call can be bulky: the arguments the model wrote, and the 
 3. Otherwise: the first 900 and last 400 characters.
 
 Every reduced result starts with a tag such as `[os:... 305 lines, 2,514 chars; filter=keywords want="total"; 1 of 1 matching lines]`, so the model and you can see what was done and fetch the rest with `output_read`. A helper that fails falls through to the next step. Helper requests appear in the trace and the ledger. Exports include the stored text their sessions cite.
+
+### How past tool calls are sent: calls or notes
+
+Each session has a setting under the system prompt for how its earlier tool calls go back to the model. The stored log is the same either way.
+
+- **calls** (default): structured tool calls and tool results, as the model made them.
+- **notes**: each call becomes one line in the assistant's turn, such as `[called run_js "sum rows" os:1k2j3h want: total]`, and each result becomes a `[result run_js "sum rows"]` block in the next user turn. There are no call ids or argument JSON, and what the call was looking for sits in the cached prefix right before its result.
+
+The risk with notes is that a model copies the pattern and writes a `[called ...]` line instead of making a real call. That is detected: nothing runs, a notice appears, and the trail counts it. Changing the setting mid-session rewrites the prefix once; branches and folded sessions inherit it.
 
 ### Folding a session
 

@@ -104,6 +104,7 @@ const mock = {
     else if (last.role === 'tool') text = 'The tool returned:\n\n```text\n' + last.content + '\n```';
     else if (/^<widget_event/.test(last.content || '')) text = 'Got the event: ' + last.content.split('\n')[1];
     else if (/^<pocket_request/.test(last.content || '')) text = '## Goal\nmock goal\n## Settled\n- mock decision\n## Open\n- none';
+    else if (/^\[result /.test(last.content || '')) text = 'The result was read.';
     else if (/long script/.test(last.content || '')) {
       const code = "const out = []; for (let i = 0; i < 300; i++) { out.push('row ' + i + '   '); if (i === 150) out.push('total=4950'); } out.push('same', 'same', 'same'); return out.join('\\n'); // " + 'padding '.repeat(60);
       yield { choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_' + Date.now(), type: 'function', function: { name: 'run_js', arguments: JSON.stringify({ code, name: 'sum rows', want: 'total' }) } }] } }] };

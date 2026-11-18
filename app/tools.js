@@ -139,7 +139,7 @@ async function exec(call, ctx) {
   if (!t) return `Unknown tool: ${call.function.name}`;
   let args;
   try { args = JSON.parse(call.function.arguments || '{}'); } catch (e) { return `Invalid JSON arguments: ${e.message}`; }
-  if (typeof args.ref === 'string' && Object.keys(args).every(k => k === 'ref' || k === 'name')) {
+  if (typeof args.ref === 'string' && Object.keys(args).every(k => k === 'ref' || k === 'name' || k === 'want')) {
     const stored = await get(args.ref).catch(() => null);
     if (stored == null) return `No stored call "${args.ref}".`;
     try { args = JSON.parse(stored); } catch { return `Stored call "${args.ref}" is not valid JSON.`; }
