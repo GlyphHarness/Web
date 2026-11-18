@@ -12,7 +12,7 @@ import * as pat from './patterns.js';
 import { put, get, handlesIn } from './outstore.js';
 import { buildRequest, measure, report, padAttachment, inherit, imitatesNote, keptLines, corePrompt } from './context.js';
 
-export const VERSION = '0.11.0';
+export const VERSION = '0.12.0';
 const MAX_STEPS = 8; // model <-> tool round trips per user turn
 const MAX_BRANCHES = 6; // concerns per fan_out
 const FOLD_MAX = 2000; // chars of a fold handed back to the source
@@ -71,8 +71,8 @@ const SHELL = `
     <input id="budget" type="number" min="1000" step="1000">
     <p class="note" id="build"></p>
   </details>
-  <details open><summary>Model</summary>
-    <p class="note" id="pricenote"></p>
+  <details><summary id="pricesum">Models</summary>
+    <p class="note">Collapsed line: input / cached input / output, per 1M tokens.</p>
     <table id="price"></table>
     <button data-act="models">refresh list</button> <span class="note" id="modelsn"></span>
   </details>
@@ -398,22 +398,30 @@ const PRICE_ROWS = [
   ['input_cache_write_1h', 'cache write 1h', 1e6, '/ 1M tok'], ['request', 'request', 1, '/ request'],
 ];
 
-function showPrice() {
-  const m = catalogue.find(m => m.id === state.meta.settings.model);
-  const rows = [];
-  if (m) {
-    const known = new Set(PRICE_ROWS.map(r => r[0]));
-    for (const [k, label, mul, unit] of PRICE_ROWS) {
-      const v = Number(m.pricing[k]), core = k === 'prompt' || k === 'input_cache_read' || k === 'completion';
-      if (m.pricing[k] != null && v > 0) rows.push(h('tr', {}, h('td', { text: label }), h('td', { text: '$' + +(v * mul).toPrecision(4) + ' ' + unit })));
-      else if (core) rows.push(h('tr', {}, h('td', { text: label }), h('td', { text: '--' }))); // no cost, or none listed
-    }
-    // anything the provider sends that this build has no label for is shown raw
-    for (const [k, v] of Object.entries(m.pricing)) if (!known.has(k) && Number(v) > 0) rows.push(h('tr', {}, h('td', { text: k }), h('td', { text: String(v) + ' (raw)' })));
-    if (m.ctx) rows.push(h('tr', {}, h('td', { text: 'context' }), h('td', { text: m.ctx.toLocaleString() + ' tok' })));
+// Full price list for one model: every key the provider sends.
+function priceRows(id) {
+  const m = catalogue.find(m => m.id === id), rows = [];
+  if (!m) return [h('tr', {}, h('td', { text: id ? 'Not in the fetched list; no price data.' : 'None chosen.' }))];
+  const known = new Set(PRICE_ROWS.map(r => r[0]));
+  for (const [k, label, mul, unit] of PRICE_ROWS) {
+    const v = Number(m.pricing[k]), core = k === 'prompt' || k === 'input_cache_read' || k === 'completion';
+    if (m.pricing[k] != null && v > 0) rows.push(h('tr', {}, h('td', { text: label }), h('td', { text: '$' + +(v * mul).toPrecision(4) + ' ' + unit })));
+    else if (core) rows.push(h('tr', {}, h('td', { text: label }), h('td', { text: '--' }))); // no cost, or none listed
   }
-  $('#price').replaceChildren(...rows);
-  $('#pricenote').textContent = m ? m.id : state.meta.settings.model ? 'Not in the fetched list; no price data.' : 'No model chosen.';
+  // anything the provider sends that this build has no label for is shown raw
+  for (const [k, v] of Object.entries(m.pricing)) if (!known.has(k) && Number(v) > 0) rows.push(h('tr', {}, h('td', { text: k }), h('td', { text: String(v) + ' (raw)' })));
+  if (m.ctx) rows.push(h('tr', {}, h('td', { text: 'context' }), h('td', { text: m.ctx.toLocaleString() + ' tok' })));
+  rows.push(h('tr', {}, h('td', { text: 'tool calls' }), h('td', { text: m.tools ? 'yes' : 'no' })));
+  return rows;
+}
+
+// The Models section: main and helper, collapsed to one line of input / cached / output per 1M.
+function showPrice() {
+  const set = state.meta.settings;
+  const brief = id => { const m = catalogue.find(m => m.id === id); return m ? `${per1M(m.pricing.prompt)} / ${per1M(m.pricing.input_cache_read)} / ${per1M(m.pricing.completion)}` : '--'; };
+  const roles = [['main', set.model], ['helper', set.helper]].filter(([role, id]) => role === 'main' || id);
+  $('#pricesum').textContent = 'Models · ' + roles.map(([role, id]) => `${role} ${brief(id)}`).join(' · ');
+  $('#price').replaceChildren(...roles.flatMap(([role, id]) => [h('tr', { class: 'role' }, h('th', { colspan: '2', text: `${role}: ${id || 'none'}` })), ...priceRows(id)]));
 }
 
 // ---------- the turn loop ----------
@@ -791,7 +799,7 @@ function bind() {
   $('#key').addEventListener('change', e => { state.keys[state.meta.settings.provider] = e.target.value.trim(); saveKeys(); });
   $('#ref').addEventListener('change', e => { location.search = '?ref=' + encodeURIComponent(e.target.value.trim()); });
 
-  $('#helper').addEventListener('change', e => { state.meta.settings.helper = e.target.value.trim(); saveMeta(); });
+  $('#helper').addEventListener('change', e => { state.meta.settings.helper = e.target.value.trim(); saveMeta(); showPrice(); });
   $('#budget').addEventListener('change', e => { state.meta.settings.branchBudget = Number(e.target.value) || BRANCH_BUDGET; saveMeta(); });
   // html widgets report through postMessage; match the sender to its card
   addEventListener('message', e => {

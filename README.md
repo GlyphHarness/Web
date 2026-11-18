@@ -2,7 +2,7 @@
 
 A client-side LLM chat harness served straight from this repo with GitHub Pages. No server, no build step: the browser holds the API key, the sessions and the tools.
 
-Status: working skeleton (v0.11.0). The OpenRouter path is written from the OpenAI-compatible conventions and has not yet been run against the live API.
+Status: working skeleton (v0.12.0). The OpenRouter path is written from the OpenAI-compatible conventions and has not yet been run against the live API.
 
 ## Run
 
@@ -56,7 +56,7 @@ The same "API base URL" setting points the OpenRouter provider at any other Open
 
 The model list and prices come from the provider's `/models` endpoint at run time and are cached per provider for a day (`wh:models:<provider>`, "refresh list" refetches). Nothing is hardcoded. Click the model box to open the picker: each row shows the model id, context size and price per 1M input, cached-input and output tokens, with `--` where there is no cost or none is listed. A warning sign marks models without tool calling. Typing filters the list: plain words match the id or name, and `free`, `tools`, `cache`, `cheap` (sort by input price) and `<0.1` (input under $0.10 per 1M) are filters. Enter picks the first row.
 
-The inspector shows the chosen model's price per 1M input, cached input, cache write, output and reasoning tokens, plus per-search and per-request charges. Price keys this build has no label for are shown raw. The ledger's cost column is what the provider reports per request.
+The inspector's Models section is collapsed to one line: input / cached input / output per 1M tokens for the main model and for the helper model when one is set. Opened, it lists every price each of them has (cache write, reasoning, per-search and per-request charges included), context size and whether it supports tool calls. Price keys this build has no label for are shown raw. The ledger's cost column is what the provider reports per request.
 
 ### Branch and fold
 

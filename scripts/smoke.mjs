@@ -31,7 +31,7 @@ await page.fill('#model', 'cheap tools');
 check('picker: "cheap tools" sorts by input price among tool-capable models', (await page.locator('#picker .row[data-model] span:first-child').allTextContents()).join() === 'mock-1,mock-pro');
 await page.fill('#model', 'mock <1');
 await page.locator('#picker .row[data-model]').first().dispatchEvent('mousedown');
-check('picker: choosing a row sets the model and its price panel', await page.inputValue('#model') === 'mock-1' && /cached input\$0.003/.test(await page.locator('#price').textContent()));
+check('picker: choosing a row sets the model and its price panel', await page.inputValue('#model') === 'mock-1' && /cached input\$0.003/.test(await page.locator('#price').textContent()) && await page.locator('#pricesum').textContent() === 'Models · main $0.15 / $0.003 / $0.6' && !(await page.locator('#price').isVisible()));
 await page.fill('#system', 'You are a test assistant. '.repeat(40));
 await page.dispatchEvent('#system', 'change');
 
@@ -74,6 +74,7 @@ const filtered = await visible().locator('.msg[data-role=tool] pre').last().text
 check('results: want returns the matching line, not the bulk', /^\[os:[a-z0-9]+ \d+L keywords 1\/1\]\n\d+: total=4950$/.test(filtered), filtered.replace(/\n/g, ' | '));
 await page.click('[data-pane=insp]');
 await page.fill('#helper', 'mock-1'); await page.dispatchEvent('#helper', 'change');
+check('models: helper pricing is listed beside the main model', await page.locator('#pricesum').textContent() === 'Models · main $0.15 / $0.003 / $0.6 · helper $0.15 / $0.003 / $0.6' && await page.locator('#price tr.role').count() === 2);
 await say('long script again');
 const helped = await visible().locator('.msg[data-role=tool] pre').last().textContent();
 check('results: with a helper model the extract comes from it, with its own ledger row', /L helper\]\nmock-filtered: total/.test(helped) && await page.locator('#ledger td:text-is("helper")').count() === 1, helped.replace(/\n/g, ' | '));
