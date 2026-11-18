@@ -16,6 +16,7 @@ import { logRepo } from './logrepo.js';
 import * as asks from './ask.js';
 import * as config from './config.js';
 import * as prof from './profiles.js';
+import * as handoff from './handoff.js';
 import * as vals from './values.js';
 import * as bridge from './bridge.js';
 import { render } from './widgets.js';
@@ -23,7 +24,7 @@ import * as pat from './patterns.js';
 import { put, get, handlesIn, setFallback } from './outstore.js';
 import { buildRequest, measure, report, padAttachment, inherit, imitatesNote, keptLines, corePrompt, EDGE_MIN, markedOnly, edgeReplies, turnOf, KINDS } from './context.js';
 
-export const VERSION = '0.28.0';
+export const VERSION = '0.29.0';
 const MAX_STEPS = 8; // model <-> tool round trips per user turn
 const MAX_BRANCHES = 6; // concerns per fan_out
 const FOLD_MAX = 2000; // chars of a fold handed back to the source
@@ -198,15 +199,18 @@ const toolsFor = s => { const c = eff(s).caps; return defsFor(s).filter(d => pro
 
 // ---------- message rendering ----------
 
-function blocks(text) {
+// opt = {s, promote}: promote shows plain fences as copy handoffs (the person asked for one)
+function blocks(text, opt = {}) {
   const out = [];
   const re = /```([^\n`]*)\n([\s\S]*?)(?:```|$)/g;
   let i = 0, m;
   while ((m = re.exec(text))) {
     if (m.index > i) out.push(h('div', { class: 'txt', text: text.slice(i, m.index).trim() }));
-    out.push(h('figure', { class: 'code' },
+    const body = m[2].replace(/\n$/, ''), ho = handoff.parse(m[1]) || (opt.promote ? { kind: 'copy', arg: '', title: m[1].trim(), promoted: true } : null);
+    if (ho) out.push(handoffCard(ho, body, opt.s));
+    else out.push(h('figure', { class: 'code' },
       h('figcaption', {}, h('span', { text: m[1].trim() || 'text' }), h('button', { 'data-copy': 'code', type: 'button', text: 'copy' })),
-      h('pre', {}, h('code', { text: m[2].replace(/\n$/, '') }))));
+      h('pre', {}, h('code', { text: body }))));
     i = re.lastIndex;
   }
   const rest = text.slice(i).trim();
@@ -223,6 +227,56 @@ function stagebox(s) {
   let b = $(`.stagebox[data-session="${s.id}"]`);
   if (!b) { b = h('div', { class: 'stagebox', 'data-session': s.id }); $('#stage').append(b); }
   return b;
+}
+
+// ---------- handoff blocks (handoff.js) ----------
+
+// A card for content the person takes away; also listed on the session's stage.
+function handoffCard(ho, body, s) {
+  const copyBtn = btn('copy', { class: 'primary' });
+  copyBtn.onclick = () => navigator.clipboard.writeText(body).then(() => { copyBtn.textContent = 'copied'; setTimeout(() => copyBtn.textContent = 'copy', 900); }, () => modal({ title: 'Copy', body: [h('pre', { class: 'cfgshow', text: body })] }));
+  const actions = [copyBtn];
+  let view = h('pre', {}, h('code', { text: body }));
+  if (ho.kind === 'file') {
+    const name = (ho.arg || 'file.txt').replace(/[\\/:*?"<>|]+/g, '_');
+    const dl = btn('download ' + name);
+    dl.onclick = () => { const a = h('a', { href: URL.createObjectURL(new Blob([body], { type: 'text/plain' })), download: name }); a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000); };
+    actions.push(dl);
+  } else if (ho.kind === 'command') {
+    const out = h('pre', { class: 'hout', hidden: '' });
+    if (s?.tools?.includes('vm') && eff(s).caps.vm) {
+      const run = btn('run on the machine');
+      run.onclick = async () => { run.disabled = true; out.hidden = false; out.textContent = 'running…'; const r = await vm().run(body, 300).catch(e => ({ out: String(e.message || e), code: null })); out.textContent = (r.out || '(no output)') + (r.timedOut ? '\n[timed out]' : `\n[exit ${r.code}]`); run.disabled = false; };
+      actions.push(run);
+    }
+    view = h('div', {}, view, out);
+  } else if (ho.kind === 'view') {
+    const fmt = (ho.arg || '').toLowerCase();
+    if (fmt === 'html') view = render('html', { html: body }, () => {});
+    else if (fmt === 'csv') view = render('table', handoff.csvRows(body), () => {});
+    else if (fmt === 'json') { try { view = h('pre', {}, h('code', { text: JSON.stringify(JSON.parse(body), null, 2) })); } catch {} }
+  } else if (ho.kind === 'config') {
+    const ap = btn('apply…');
+    ap.onclick = () => pasteConfig(body);
+    actions.push(ap);
+  }
+  const card = h('figure', { class: 'handoff', 'data-kind': ho.kind },
+    h('figcaption', {}, h('span', { class: 'hkind', text: ho.kind + (ho.kind === 'view' && ho.arg ? ' ' + ho.arg : '') }), h('b', { text: ho.title || (ho.kind === 'file' ? ho.arg : '') || ho.kind }), ho.promoted ? h('span', { class: 'meta', text: 'shown as a handoff because you asked for one' }) : '', h('span', { class: 'acts' }, ...actions)),
+    h('div', { class: 'hbody' }, view));
+  card._raw = body;
+  if (s) stageHandoff(s, ho, body, card);
+  return card;
+}
+// the session's handoffs, newest first, at the top of its stage
+function stageHandoff(s, ho, body, card) {
+  const box = stagebox(s);
+  let list = box.querySelector('.handoffs');
+  if (!list) { list = h('div', { class: 'handoffs' }, h('p', { class: 'note', text: 'Handoffs' })); box.prepend(list); }
+  const go = btn(ho.title || ho.arg || ho.kind, { class: 'hname' });
+  go.onclick = () => { setPane('stage'); card.scrollIntoView({ behavior: 'smooth', block: 'center' }); card.dataset.flash = ''; setTimeout(() => delete card.dataset.flash, 800); };
+  const cp = btn('copy');
+  cp.onclick = () => navigator.clipboard.writeText(body).then(() => { cp.textContent = 'copied'; setTimeout(() => cp.textContent = 'copy', 900); });
+  list.children[0].after(h('div', { class: 'hitem' }, h('span', { class: 'hkind', text: ho.kind }), go, cp));
 }
 
 const staging = new Map(); // sessionId -> promise chain, so cards mount in log order even when arguments load from the store
@@ -295,7 +349,11 @@ function messageNode(m, s) {
     el.append(h('details', { class: 'call' }, h('summary', { text: 'result ' + m.tool_call_id }), h('pre', { text: m.content })));
     if (m.x?.audit) el.append(auditTable(m.x.audit));
     if (m.x?.policy) { const p = m.x.policy; el.append(h('details', { class: 'call policy' }, h('summary', { text: `policy ${p.id} ${p.refused ? 'refused the call' : 'rewrote the call'} (${p.model})` }), h('pre', { text: `${p.rule}\n\nfrom: ${p.from}${p.to ? '\nto:   ' + p.to : ''}${p.refused ? '\nwhy:  ' + p.refused : ''}` }))); }
-  } else if (m.content) el.append(...blocks(m.content));
+  } else if (m.content) {
+    let promote = false;
+    if (m.role === 'assistant' && s) { const i = s.messages.indexOf(m); const u = s.messages.slice(0, i < 0 ? s.messages.length : i).findLast(x => x.role === 'user'); promote = handoff.wants(u?.content); }
+    el.append(...blocks(m.content, { s: m.role === 'assistant' ? s : null, promote }));
+  }
   for (const tc of m.tool_calls || []) {
     const d = h('details', { class: 'call' }, h('summary', { text: `call ${tc.function.name} (${tc.id})` }), h('pre', { text: tc.function.arguments }));
     const ref = /^\{"ref":"(os:[a-z0-9]+)"/.exec(tc.function.arguments)?.[1];
@@ -400,7 +458,7 @@ function showSettings() {
   $('#budget').value = set.branchBudget || BRANCH_BUDGET; $('#pace').value = pace();
   showBase(); renderPolicies(); renderProfiles(); redrawSessions(); showPrice(); renderScope();
 }
-async function pasteConfig() {
+async function pasteConfig(prefill = '') {
   const ta = h('textarea', { rows: '10', class: 'mono', spellcheck: 'false', placeholder: '{"settings": {"model": "...", "helper": "..."}, "policies": [{"name": "...", "rule": "..."}]}' });
   const out = h('div', { class: 'cfgplan' });
   let last = null;
@@ -416,6 +474,7 @@ async function pasteConfig() {
       last.next.machine != null ? h('p', { class: 'note', text: 'The machine switch changes: the page reloads after applying.' }) : '');
   };
   ta.addEventListener('input', show);
+  if (prefill) ta.value = prefill;
   show();
   setTimeout(() => ta.focus());
   const go = await modal({ title: 'Paste config', body: [ta, out], actions: [{ text: 'Cancel', value: false, cancel: true }, { text: 'Apply', value: true, primary: true }] });
@@ -1455,7 +1514,7 @@ const download = (name, obj) => {
 
 const actions = {
   trace() { download('webharness-' + new Date().toISOString().replace(/[:.]/g, '-') + '.trace', { kind: 'webharness.trace', version: 1, build: VERSION, exchanges: trace, trail: pat.trail(), smells: smells.all(), proposals: smells.proposals() }); },
-  new() { logSync('session start'); const np = profiles().some(p => p.id === state.meta.settings.newProfile) ? state.meta.settings.newProfile : undefined; const s = newSession({ keep: true, core: 2, edge: 'marks', ...(np ? { profile: np } : {}), ...(() => { const t = ['ask', 'values', ...(gh.mode() ? ['repo'] : []), ...(vmWanted() && vmReady() ? ['vm'] : [])]; return t.length ? { tools: t } : {}; })() }); redrawSessions(); activate(s.id); $('#input').focus(); },
+  new() { logSync('session start'); const np = profiles().some(p => p.id === state.meta.settings.newProfile) ? state.meta.settings.newProfile : undefined; const s = newSession({ keep: true, core: 3, edge: 'marks', ...(np ? { profile: np } : {}), ...(() => { const t = ['ask', 'values', ...(gh.mode() ? ['repo'] : []), ...(vmWanted() && vmReady() ? ['vm'] : [])]; return t.length ? { tools: t } : {}; })() }); redrawSessions(); activate(s.id); $('#input').focus(); },
   import() { $('#file').click(); },
   async export() {
     const s = cur(), bundle = exportBundle(s), blobs = {};

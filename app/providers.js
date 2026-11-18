@@ -126,6 +126,8 @@ const mock = {
     else if (/^event \S+: /.test(last.content || '')) text = 'Got the event: ' + last.content;
     else if (/^Write the pocket/.test(last.content || '')) text = '## Goal\nmock goal\n## Settled\n- mock decision\n## Open\n- none';
     else if (/^\[result /.test(last.content || '')) text = 'The result was read.';
+    else if (/handoffs please/.test(last.content || '')) text = 'Here you go.\n\n```handoff:copy deploy note\nship it on friday\n```\n\n```handoff:file notes.md\n# Notes\n- one\n```\n\n```handoff:command list files\necho hello-from-command\n```\n\n```handoff:view csv sizes\nname,size\na,1\n"b, c",2\n```\n\n```handoff:config models\n{"settings": {"helper": "mock-pro"}}\n```\n\nAnd plain code:\n\n```js\nconst x = 1;\n```';
+    else if (/copy that plain/.test(last.content || '')) text = 'Sure:\n\n```bash\nnpm test\n```';
     else if (/decide/.test(last.content || '')) text = 'Thinking it over at length.\n! port is 8787\nSome more musing.\n!! use the flash model\nDone musing. ' + 'filler '.repeat(120);
     else if (/ramble/.test(last.content || '')) text = 'word '.repeat(200);
     else if (/open (os:\w+)/.test(last.content || '')) {

@@ -51,6 +51,8 @@ export const KEEP_NOTE = 'Start a line with ! if it must survive when this conve
 // the session's settings, so it sits at the very front of the cached prefix.
 // Its job is to say plainly which text is the model's to write and which is the
 // system's record, so an abbreviated past call is never mistaken for a way to call.
+// core 3 (sessions created from v0.29): the handoff-block convention
+export const HANDOFF_LINE = '- When the person asks to see something, copy it, save it as a file, run a command or apply a config, put that content in a handoff block: a code fence whose info string is handoff:copy, handoff:file <name>, handoff:command, handoff:view <html|json|csv> or handoff:config, followed by a short title. Code that only explains stays in plain fences.';
 export function corePrompt(session) {
   const past = session.wire === 'notes'
     ? 'Your earlier tool calls are shown as lines like [called run_js "name" os:1k2j3h want: ...], each followed by a [result ...] block.'
@@ -64,6 +66,7 @@ export function corePrompt(session) {
       ? '- An earlier reply of yours may appear as a condensed record: a line like [os:1k2j3h troubleshot] (handle, then what that turn did) followed by the lines that were kept. entry_read opens its gotchas, steps, transcript or summary. Open one only for a specific reason the kept lines cannot meet.'
       : '',
     session.keep ? '- ' + KEEP_NOTE : '',
+    session.core >= 3 ? HANDOFF_LINE : '',
   ].filter(Boolean).join('\n');
 }
 

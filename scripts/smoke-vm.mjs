@@ -54,6 +54,13 @@ const evade = await run('s=sleep; $s 30; echo after=$?; sleep 1 && echo short-ok
 check('runtime policy: a long sleep is refused inside the machine, however it is spelled', /refused: a fixed wait of 30s/.test(evade) && /after=1/.test(evade) && /short-ok/.test(evade) && !/__WH_RUNTIME/.test(evade), JSON.stringify(evade));
 const rt = await page.evaluate(() => JSON.parse(localStorage['wh:smells'] || '[]').filter(r => r.kind === 'policy-runtime'));
 check('runtime policy: recorded as a smell under bounded-waits', rt.length === 1 && rt[0].policy === 'bounded-waits' && /sleep 30/.test(rt[0].detail));
+await page.fill('#input', 'handoffs please');
+await page.click('#send');
+await page.waitForSelector('#app:not([data-busy])', { state: 'attached', timeout: 60000 });
+const cmdCard = page.locator('.thread:visible figure.handoff[data-kind=command]').last();
+await cmdCard.locator('button', { hasText: 'run on the machine' }).click();
+await page.waitForFunction(() => /\[exit \d+\]/.test([...document.querySelectorAll('figure.handoff[data-kind=command] .hout')].at(-1)?.textContent || ''), null, { timeout: 120000 });
+check('handoff: a command block runs on the machine when you click it', /hello-from-command[^]*\[exit 0\]/.test(await cmdCard.locator('.hout').textContent()));
 const code = await run('false');
 check('shell: exit status is reported', /\[exit 1\]/.test(code));
 check('machine pane shows the guest output', /gh version/.test(await page.textContent('#machine pre.vmout')));

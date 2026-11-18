@@ -7,7 +7,9 @@ import fs from 'node:fs';
 const url = process.argv[2] || 'http://localhost:8787/';
 const shot = process.argv[3];
 const browser = await chromium.launch();
-const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
+const bctx = await browser.newContext({ viewport: { width: 1400, height: 900 }, acceptDownloads: true });
+await bctx.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: new URL(url).origin });
+const page = await bctx.newPage();
 const errors = [];
 page.on('dialog', d => { errors.push('native dialog: ' + d.message()); d.dismiss(); }); // the app must use its own modal
 page.on('pageerror', e => errors.push(String(e)));
@@ -283,6 +285,25 @@ await page.waitForSelector('.modal .cfgshow');
 const snap = JSON.parse(await page.textContent('.modal .cfgshow'));
 check('config: copy gives the same shape back, without credentials', snap.settings.helper === 'mock-free:free' && snap.policies.some(p => p.name === 'no-rm-root') && !JSON.stringify(snap).includes('SECRET'));
 await page.click('.modal button');
+
+// ---- handoff blocks: content to take away ----
+await page.click('[data-act=new]');
+check('handoff: new sessions declare the convention in the core prompt', /handoff:copy, handoff:file <name>/.test(await page.textContent('#core')));
+await say('handoffs please');
+const hcards = visible().locator('.msg[data-role=assistant]').last().locator('figure.handoff');
+check('handoff: each kind is a card; plain code stays code', await hcards.count() === 5 && (await hcards.evaluateAll(f => f.map(x => x.dataset.kind))).join() === 'copy,file,command,view,config' && await visible().locator('.msg[data-role=assistant]').last().locator('figure.code').count() === 1);
+await hcards.nth(0).locator('button.primary').click();
+check('handoff: copy puts the exact text on the clipboard', await page.evaluate(() => navigator.clipboard.readText()) === 'ship it on friday');
+const [hdl] = await Promise.all([page.waitForEvent('download'), hcards.nth(1).locator('button', { hasText: 'download' }).click()]);
+check('handoff: a file downloads under its name', hdl.suggestedFilename() === 'notes.md');
+check('handoff: a csv view renders as a table (quoted commas kept)', /b, c/.test(await hcards.nth(3).locator('table').textContent()) && await hcards.nth(3).locator('tr').count() === 3);
+await hcards.nth(4).locator('button', { hasText: 'apply' }).click();
+await page.waitForSelector('.modal .cfgplan');
+check('handoff: a config opens the paste-config preview, filled in', /helper[^]*mock-pro/.test(await page.textContent('.modal .cfgplan')));
+await page.click('.modal button:not(.primary)');
+check('handoff: the session lists its handoffs on the stage', await page.evaluate(() => [...document.querySelectorAll('.stagebox:not([style*=none]) .handoffs .hitem')].length) >= 5 || await page.locator('.handoffs .hitem').count() >= 5);
+await say('please copy that plain thing');
+check('handoff: a plain fence is shown as a copy handoff when you asked for one', await visible().locator('.msg[data-role=assistant]').last().locator('figure.handoff[data-kind=copy]').count() === 1 && /because you asked/.test(await visible().locator('.msg[data-role=assistant]').last().textContent()));
 
 // ---- scoped values: requested, set by the model, revised, used by reference ----
 await page.click('[data-act=new]');

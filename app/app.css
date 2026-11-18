@@ -250,3 +250,22 @@ table.scope button { font-size: 11px; padding: 1px 8px; }
 .from[data-from=profile] { color: #e0a040; border-color: #e0a040; }
 .lock { font-size: 10px; color: var(--dim); white-space: nowrap; }
 tr[data-locked] td:first-of-type { opacity: .9; }
+/* handoff blocks: content to take away */
+figure.handoff { margin: 8px 0; border: 1px solid var(--accent); border-radius: 8px; overflow: hidden; background: var(--bg); transition: box-shadow .3s; }
+figure.handoff[data-flash] { box-shadow: 0 0 0 2px var(--accent); }
+figure.handoff > figcaption { display: flex; align-items: center; gap: 8px; padding: 5px 8px; border-bottom: 1px solid var(--line); background: var(--panel); flex-wrap: wrap; }
+figure.handoff > figcaption b { font-size: 12px; }
+figure.handoff > figcaption .meta { font-size: 10px; color: var(--dim); }
+figure.handoff > figcaption .acts { margin-left: auto; display: flex; gap: 6px; }
+figure.handoff > figcaption button { font-size: 11px; padding: 1px 10px; }
+figure.handoff .hbody { padding: 8px; max-height: 50vh; overflow: auto; }
+figure.handoff .hbody > pre { white-space: pre; overflow: auto; }
+figure.handoff[data-kind=command] { border-color: var(--ok); }
+figure.handoff[data-kind=config] { border-color: #e0a040; }
+figure.handoff .hout { margin-top: 6px; padding-top: 6px; border-top: 1px dashed var(--line); }
+figure.handoff iframe { width: 100%; height: 260px; border: 0; background: #fff; }
+.handoffs { border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; display: flex; flex-direction: column; gap: 4px; }
+.handoffs .hitem { display: flex; align-items: center; gap: 6px; }
+.handoffs .hname { flex: 1; text-align: left; border: 0; background: none; padding: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+.handoffs button:not(.hname) { font-size: 11px; padding: 0 8px; }
+.hkind { font: 10px ui-monospace, monospace; text-transform: uppercase; color: var(--accent); border: 1px solid var(--line); border-radius: 10px; padding: 0 6px; white-space: nowrap; }

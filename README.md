@@ -2,7 +2,7 @@
 
 A client-side LLM chat harness served straight from this repo with GitHub Pages. No server, no build step: the browser holds the API key, the sessions and the tools.
 
-Status: working skeleton (v0.28.0). The OpenRouter path is written from the OpenAI-compatible conventions and has not yet been run against the live API.
+Status: working skeleton (v0.29.0). The OpenRouter path is written from the OpenAI-compatible conventions and has not yet been run against the live API.
 
 ## Run
 
@@ -206,6 +206,20 @@ Settings → "paste config" takes a JSON block (for example one an agent writes 
 
     {"settings": {"model": "deepseek/deepseek-v4.1-flash-1017", "helper": "tencent/hy4-flash", "logRepo": "owner/name"},
      "policies": [{"name": "bounded-waits", "on": true}]}
+
+### Handoff blocks
+
+Content in a reply that you take away rather than read is a handoff block: a fence whose info string starts with `handoff:`. New sessions (core prompt v3) are told the convention up front, in one line.
+
+| Fence | Card |
+|---|---|
+| ` ```handoff:copy <title> ` | the text; **copy** |
+| ` ```handoff:file <name> ` | **copy**, **download** as `<name>` |
+| ` ```handoff:command <title> ` | **copy**; **run on the machine** when the session has it (your click; output shown in the card) |
+| ` ```handoff:view html|json|csv <title> ` | rendered: html in the no-network sandbox, json formatted, csv as a table; **copy** the source |
+| ` ```handoff:config <title> ` | **copy**; **apply…** opens the paste-config preview filled in |
+
+Plain fences stay code. When your message asked to show, copy, save or run something and the reply used plain fences anyway, they are shown as copy handoffs ("shown as a handoff because you asked for one"): a deterministic helper, display only, no request and no change to the reply. Each session's handoffs are also listed at the top of its stage, newest first, with copy buttons.
 
 ### Pacing, questions and card metrics
 
