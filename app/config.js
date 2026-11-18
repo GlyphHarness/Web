@@ -103,3 +103,74 @@ export function snapshot(current) {
   return { webharness: 'config', v: 1, settings, policies: current.policies.map(p => Object.fromEntries(POLICY_FIELDS.filter(f => p[f] != null).map(f => [f, p[f]]))),
     profiles: (current.profiles || []).map(p => ({ name: p.name, ...(p.parent ? { parent: name(p.parent) } : {}), color: p.color, settings: p.settings, caps: p.caps, ...(p.repos ? { repos: p.repos } : {}), locks: p.locks })) };
 }
+
+// ---- import: loose "label: value" lines matched to what exists ----
+// Lines: "label: value", "label = value", "label<TAB>value", "- label: value", or
+// markdown table rows (first cell label, second cell value; header and separator
+// rows skipped). Each line goes to a setting (by name or alias), else to an
+// existing scoped value with that label (a new revision), else a new value.
+
+export const ALIASES = {
+  model: ['model', 'main', 'main model', 'chat model', 'session model'],
+  helper: ['helper', 'helper model', 'filter model', 'side model'],
+  policyModel: ['policy model', 'policymodel', 'repair model', 'review model', 'policy', 'policy and review'],
+  pace: ['pace'],
+  branchBudget: ['branch budget', 'budget', 'branchbudget', 'token budget'],
+  logRepo: ['log repo', 'logrepo', 'log repository', 'audit repo', 'logs repo'],
+  ghlabel: ['github access', 'access label', 'ghlabel', 'github label', 'token label'],
+  provider: ['provider'],
+};
+// settings a session's scope can hold; the others exist only as defaults
+export const SCOPED = ['model', 'helper', 'policyModel', 'pace', 'branchBudget'];
+const LOOKS_SECRET = /^(ghp_|gho_|ghs_|github_pat_|sk-|xox[abp]-|AKIA)[\w-]{8,}|-----BEGIN [A-Z ]*PRIVATE KEY/;
+const norm = t => String(t).toLowerCase().replace(/[`*_]/g, '').replace(/\(.*?\)/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+
+export function lines(text) {
+  const out = [];
+  const raw = String(text).split(/\r?\n/);
+  for (let i = 0; i < raw.length; i++) {
+    let l = raw[i].trim();
+    if (!l || /^#/.test(l)) continue;
+    let label, value;
+    if (/^\|.*\|$/.test(l)) {
+      if (/^\|[\s:|-]+\|$/.test(l)) continue; // separator row
+      if (/^\|[\s:|-]+\|$/.test((raw[i + 1] || '').trim())) continue; // header row (followed by a separator)
+      const cells = l.slice(1, -1).split('|').map(c => c.trim());
+      [label, value] = cells;
+    } else {
+      l = l.replace(/^[-*]\s+/, '');
+      const m = /^([^:=\t]{1,60}?)\s*(?::|=|\t)\s*(.*)$/.exec(l);
+      if (!m) continue;
+      [, label, value] = m;
+    }
+    value = String(value ?? '').trim().replace(/^`+|`+$/g, '').replace(/^"(.*)"$/, '$1');
+    label = String(label ?? '').trim().replace(/^`+|`+$/g, '').replace(/\*\*/g, '');
+    if (label && value !== '') out.push({ line: i + 1, label, value });
+  }
+  return out;
+}
+
+// ctx = {settings, values: [{id, label, value}], scoped: bool (a level other than defaults was chosen)}
+export function planImport(text, ctx) {
+  const rows = [];
+  for (const x of lines(text)) {
+    const n = norm(x.label);
+    if (/token|secret|password|passwd|api key|apikey|private key|\bpem\b|credential/.test(n) || LOOKS_SECRET.test(x.value)) { rows.push({ ...x, action: 'refused', why: 'looks like a credential; type those into their own field' }); continue; }
+    const key = Object.entries(ALIASES).find(([, al]) => al.includes(n))?.[0];
+    if (key) {
+      let v = x.value;
+      if (key === 'branchBudget') { v = Number(String(v).replace(/[,_\s]/g, '')); if (!Number.isInteger(v) || v < 1000) { rows.push({ ...x, action: 'refused', why: 'budget must be a whole number of tokens' }); continue; } }
+      if (key === 'pace' && !['run', 'requests', 'tools', 'both'].includes(v)) { rows.push({ ...x, action: 'refused', why: 'pace is run, requests, tools or both' }); continue; }
+      if (key === 'logRepo' && !/^[\w.-]+\/[\w.-]+$/.test(v)) { rows.push({ ...x, action: 'refused', why: 'log repo is owner/name' }); continue; }
+      if (key === 'provider' && !(ctx.providers || []).includes(v)) { rows.push({ ...x, action: 'refused', why: 'unknown provider' }); continue; }
+      const scoped = SCOPED.includes(key);
+      const now = scoped ? ctx.current?.(key) : ctx.settings[key];
+      rows.push({ ...x, target: { kind: 'setting', key, level: scoped ? 'chosen' : 'default' }, value: v, from: now ?? '', action: String(now ?? '') === String(v) ? 'unchanged' : 'update' });
+      continue;
+    }
+    const hit = (ctx.values || []).find(v => norm(v.label) === n);
+    if (hit) rows.push({ ...x, target: { kind: 'value', id: hit.id }, from: hit.value, action: String(hit.value) === x.value ? 'unchanged' : 'update' });
+    else rows.push({ ...x, target: { kind: 'value', id: null }, from: '', action: 'create' });
+  }
+  return rows;
+}

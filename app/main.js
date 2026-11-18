@@ -24,7 +24,7 @@ import * as pat from './patterns.js';
 import { put, get, handlesIn, setFallback } from './outstore.js';
 import { buildRequest, measure, report, padAttachment, inherit, imitatesNote, keptLines, corePrompt, EDGE_MIN, markedOnly, edgeReplies, turnOf, KINDS } from './context.js';
 
-export const VERSION = '0.29.0';
+export const VERSION = '0.30.0';
 const MAX_STEPS = 8; // model <-> tool round trips per user turn
 const MAX_BRANCHES = 6; // concerns per fan_out
 const FOLD_MAX = 2000; // chars of a fold handed back to the source
@@ -75,9 +75,10 @@ const SHELL = `
   <details open><summary>This session's scope <span class="count" id="scopecount"></span></summary>
     <p class="note">Every setting and capability as this session resolves it, and the level it comes from: this session, a profile in its chain, or the defaults. Set a value at any level from this session up; a lock stops the levels below it. Capabilities can be narrowed for this session only, never widened.</p>
     <table class="scope" id="scope"></table>
+    <div class="cfgbar"><button data-act="cfgimport">import labels and values…</button></div>
   </details>
   <details open><summary>Defaults and connections</summary>
-    <div class="cfgbar"><button data-act="cfgpaste">paste config</button><button data-act="cfgcopy">copy config</button></div>
+    <div class="cfgbar"><button data-act="cfgimport">import</button><button data-act="cfgpaste">paste config</button><button data-act="cfgcopy">copy config</button></div>
     <label>API key (kept in this browser only, never exported)</label>
     <input id="key" type="password" autocomplete="off">
     <label>GitHub token (fine-grained, limited to the repos it may touch; kept in this browser only). New sessions get repository tools while one is set.</label>
@@ -492,6 +493,47 @@ async function pasteConfig(prefill = '') {
   renderSmells();
 }
 
+// Import loose "label: value" lines (config.js planImport): settings by name or
+// alias at a chosen level, else existing values by label (new revision), else new values.
+async function importLines() {
+  const s = cur(), levels = scopeLevels(s);
+  const ta = h('textarea', { rows: '8', class: 'mono', spellcheck: 'false', placeholder: 'model: …\nhelper model: …\nlog repo: owner/name\nregion = eu-west-1\n| main | some/model | … |' });
+  const lv = h('select', {}, ...levels.map((l, i) => Object.assign(h('option', { value: l.id, text: l.id === 'session' ? 'this session' : l.id === 'default' ? 'defaults (all sessions)' : 'profile ' + l.name }), { selected: i === 0 })));
+  const out = h('div', { class: 'cfgplan' });
+  let rows = [];
+  const plan = () => {
+    const visibleVals = valuesFor(s).map(v => { const r = vals.current(v); return { id: v.id, label: r.label, value: typeof r.value === 'string' ? r.value : JSON.stringify(r.value) }; });
+    rows = config.planImport(ta.value, { settings: state.meta.settings, current: k => eff(s).settings[k], values: visibleVals, providers: Object.keys(providers) });
+    const level = lv.value, e = eff(s);
+    out.replaceChildren(h('p', { class: 'note', text: rows.length ? `${rows.filter(r => r.action === 'update' || r.action === 'create').length} to apply · uncheck a line to leave it out` : 'Paste lines of label and value.' }), ...rows.map((r, i) => {
+      const lockBy = r.target?.kind === 'setting' && r.target.level === 'chosen' ? e.locked.get(r.target.key) : null;
+      const li = levels.findIndex(l => l.id === level), lk = lockBy ? levels.findIndex(l => l.name === lockBy) : -1;
+      if (lockBy && li < lk) { r.action = 'refused'; r.why = `locked by profile ${lockBy}`; }
+      const where = !r.target ? '' : r.target.kind === 'setting' ? `${r.target.key}${r.target.level === 'default' ? ' (defaults)' : ''}` : r.target.id ? `value ${r.target.id}` : 'new value';
+      const box = Object.assign(h('input', { type: 'checkbox', 'data-i': String(i) }), { checked: r.action === 'update' || r.action === 'create', disabled: r.action === 'refused' || r.action === 'unchanged' });
+      return h('label', { class: 'cfgrow imp ' + (r.action === 'refused' ? 'bad' : '') }, box, h('code', { text: r.label }), h('span', { text: '→ ' + (where || '—') }),
+        r.action === 'refused' ? h('span', { text: 'refused: ' + r.why }) : h('span', {}, h('span', { class: 'from', text: JSON.stringify(r.from ?? '') }), h('span', { text: ' → ' }), h('span', { class: 'to', text: JSON.stringify(r.value) }), h('span', { class: 'note', text: ' ' + r.action })));
+    }));
+  };
+  ta.addEventListener('input', plan); lv.addEventListener('change', plan); plan();
+  setTimeout(() => ta.focus());
+  const go = await modal({ title: 'Import labels and values', body: [ta, field('apply at', lv), out], actions: [{ text: 'Cancel', value: false, cancel: true }, { text: 'Apply', value: true, primary: true }] });
+  if (!go) return;
+  const picked = rows.filter((r, i) => (r.action === 'update' || r.action === 'create') && out.querySelector(`[data-i="${i}"]`)?.checked);
+  const level = lv.value, done = [];
+  const scope = level === 'default' ? { kind: 'global' } : level === 'session' ? { kind: 'session', id: s.id } : { kind: 'profile', id: level.slice(2) };
+  for (const r of picked) {
+    if (r.target.kind === 'setting') {
+      if (r.target.level === 'default') { state.meta.settings[r.target.key] = r.value; if (r.target.key === 'logRepo') state.meta.settings.logReady = false; saveMeta(); done.push(r.target.key); }
+      else { const err = setAt(s, level, r.target.key, r.value); if (!err) done.push(r.target.key); }
+    } else if (r.target.id) { const v = allValues().find(x => x.id === r.target.id); vals.revise(v, { value: r.value, why: 'imported' }, valueBy(s, 'you')); done.push(v.id); }
+    else { const v = vals.create(state.meta, scope, { label: r.label.slice(0, 60), role: 'imported', value: r.value, purpose: '' }, valueBy(s, 'you')); done.push(v.id); }
+  }
+  saveMeta();
+  smells.add({ kind: 'config-imported', detail: `${done.length} lines at ${level}: ${done.join(', ')}`.slice(0, 300) });
+  showSettings(); renderValues(); renderScope(); renderSmells();
+}
+
 // One card for every list in the inspector (policies, patterns, scratchpads,
 // smells, proposals): a kind chip and a name in the header, a short meta line,
 // the body, then actions. tone: ok | warn | bad | off colours the edge.
@@ -569,6 +611,17 @@ function renderScope() {
       h('td', {}, toggle)), edit];
   }));
   slot($('#scopecount'), e.path || 'defaults');
+}
+// set one scoped setting at a level relative to the session; returns an error or null
+function setAt(s, level, k, v, kind = 'set') {
+  const e = eff(s), lockBy = kind === 'set' ? e.locked.get(k) : null, levels = scopeLevels(s);
+  const at = levels.findIndex(l => l.id === level), lockIdx = lockBy ? levels.findIndex(l => l.name === lockBy) : -1;
+  if (lockIdx >= 0 && at < lockIdx) return `locked by profile ${lockBy}`;
+  const assign = (obj, key) => { if (v == null) delete obj[key]; else obj[key] = v; };
+  if (level === 'session') { s.over ??= {}; if (kind === 'cap') { s.over.caps ??= {}; assign(s.over.caps, k); } else assign(s.over, k); saveSession(s); }
+  else if (level === 'default') { if (kind === 'set') { assign(state.meta.settings, k); saveMeta(); } }
+  else { const p = profiles().find(x => 'p:' + x.id === level); if (!p) return 'no such profile'; if (kind === 'cap') { p.caps ??= {}; assign(p.caps, k); } else { p.settings ??= {}; assign(p.settings, k); } saveMeta(); }
+  return null;
 }
 function scopeSet(el) {
   const s = cur(), tr = el.closest('[data-row]'), k = tr.dataset.row, row = SCOPE_ROWS.find(r => r.k === k);
@@ -1526,6 +1579,7 @@ const actions = {
   },
   smellsclear() { smells.clear(); renderSmells(); },
   cfgpaste() { return pasteConfig(); },
+  cfgimport() { return importLines(); },
   async cfgcopy() {
     const text = JSON.stringify(config.snapshot(cfgCurrent()), null, 2);
     let copied = false;

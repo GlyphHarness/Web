@@ -286,6 +286,23 @@ const snap = JSON.parse(await page.textContent('.modal .cfgshow'));
 check('config: copy gives the same shape back, without credentials', snap.settings.helper === 'mock-free:free' && snap.policies.some(p => p.name === 'no-rm-root') && !JSON.stringify(snap).includes('SECRET'));
 await page.click('.modal button');
 
+// ---- import: loose labels and values matched to what exists ----
+await page.evaluate(() => document.querySelector('[data-act=cfgimport]').click());
+await page.waitForSelector('.modal textarea');
+await page.fill('.modal textarea', ['| Role | Model | Price |', '|---|---|---|', '| main | `mock-pro` | x |', '| helper (filters output) | `mock-1` | y |', '- Log repo: someone/logs2', 'deploy region = eu-west-1', 'GitHub token: github_pat_' + 'q'.repeat(20), 'pace: fast'].join('\n'));
+const iplan = await page.textContent('.modal .cfgplan');
+check('import: lines are matched to settings, values or new values, with a preview', /main→ model[^]*"mock-pro"/.test(iplan.replace(/\s+/g, ' ').replace(/ → /g, '→ ')) || (/model/.test(iplan) && /mock-pro/.test(iplan) && /new value/.test(iplan) && /logRepo \(defaults\)/.test(iplan)), iplan.slice(0, 300));
+check('import: credentials and invalid values are refused, the token is not shown', /refused: looks like a credential/.test(iplan) && !iplan.includes('github_pat_') && /pace is run, requests, tools or both/.test(iplan));
+await page.selectOption('.modal select', 'session');
+await page.click('.modal .primary');
+const after = await page.evaluate(() => { const m = JSON.parse(localStorage['wh:meta']); const s = JSON.parse(localStorage['wh:s:' + m.active]); return { over: s.over || {}, logRepo: m.settings.logRepo, vals: (m.values || []).filter(v => v.revs.at(-1).label === 'deploy region').map(v => ({ scope: v.scope.kind, value: v.revs.at(-1).value, role: v.revs.at(-1).role })) }; });
+check('import: scoped settings land at the chosen level, defaults-only ones in defaults, unknown labels become values', after.over.model === 'mock-pro' && after.over.helper === 'mock-1' && after.logRepo === 'someone/logs2' && after.vals.length === 1 && after.vals[0].scope === 'session' && after.vals[0].value === 'eu-west-1', JSON.stringify(after));
+await page.evaluate(() => document.querySelector('[data-act=cfgimport]').click());
+await page.fill('.modal textarea', 'deploy region: us-east-1');
+check('import: an existing label is matched (a new revision, not a duplicate)', /value v\d+/.test(await page.textContent('.modal .cfgplan')));
+await page.click('.modal .primary');
+check('import: the matched value got a second revision', await page.evaluate(() => { const v = JSON.parse(localStorage['wh:meta']).values.filter(v => v.revs[0].label === 'deploy region'); return v.length === 1 && v[0].revs.length === 2 && v[0].revs[1].value === 'us-east-1'; }));
+
 // ---- handoff blocks: content to take away ----
 await page.click('[data-act=new]');
 check('handoff: new sessions declare the convention in the core prompt', /handoff:copy, handoff:file <name>/.test(await page.textContent('#core')));

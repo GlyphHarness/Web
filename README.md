@@ -2,7 +2,7 @@
 
 A client-side LLM chat harness served straight from this repo with GitHub Pages. No server, no build step: the browser holds the API key, the sessions and the tools.
 
-Status: working skeleton (v0.29.0). The OpenRouter path is written from the OpenAI-compatible conventions and has not yet been run against the live API.
+Status: working skeleton (v0.30.0). The OpenRouter path is written from the OpenAI-compatible conventions and has not yet been run against the live API.
 
 ## Run
 
@@ -220,6 +220,16 @@ Content in a reply that you take away rather than read is a handoff block: a fen
 | ` ```handoff:config <title> ` | **copy**; **apply…** opens the paste-config preview filled in |
 
 Plain fences stay code. When your message asked to show, copy, save or run something and the reply used plain fences anyway, they are shown as copy handoffs ("shown as a handoff because you asked for one"): a deterministic helper, display only, no request and no change to the reply. Each session's handoffs are also listed at the top of its stage, newest first, with copy buttons.
+
+### Import labels and values
+
+"import" (Defaults, and under this session's scope) takes loose lines copied from anywhere: `label: value`, `label = value`, tab-separated, `- label: value`, or markdown table rows (first cell label, second value; header and separator rows skipped; backticks stripped). Each line is matched in order:
+
+1. a setting by name or alias (`main`, `model` → model; `helper model` → helper; `repair model`, `policy model` → policy model; `budget`; `pace`; `log repo`; `access label`; `provider`);
+2. an existing scoped value with that label → a new revision;
+3. otherwise a new value (role `imported`).
+
+You pick the level relative to the session (this session, a profile in its chain, or defaults); settings that only exist as defaults go there, and locks are respected. The preview lists each line's target and action (update, create, unchanged, refused) with a checkbox to leave it out. Credential-looking labels or values are refused and never shown.
 
 ### Pacing, questions and card metrics
 
