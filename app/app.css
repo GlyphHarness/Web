@@ -132,7 +132,7 @@ details.call pre.full { margin-top: 6px; padding-top: 6px; border-top: 1px dashe
 .wform input:not([type=checkbox]), .wform select, .wform textarea { width: 100%; font: inherit; color: var(--fg); }
 .wform button { align-self: flex-start; border-color: var(--accent); color: var(--accent); }
 #price tr.role th { text-align: left; padding: 8px 4px 2px; color: var(--accent); font-weight: 600; overflow-wrap: anywhere; }
-#bridgebar { position: fixed; left: 50%; bottom: 8px; transform: translateX(-50%); z-index: 20; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; max-width: min(900px, 96vw); padding: 6px 10px; background: var(--panel); border: 1px solid #e0a040; border-radius: 6px; box-shadow: 0 4px 16px #0005; font-size: 12px; }
+#bridgebar { position: fixed; left: 8px; bottom: 8px; z-index: 20; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; max-width: min(420px, 96vw); padding: 6px 10px; background: var(--panel); border: 1px solid #e0a040; border-radius: 6px; box-shadow: 0 4px 16px #0005; font-size: 12px; }
 #bridgebar .note { margin: 0; }
 #bridgebar [data-bask]:not(:empty) { flex-basis: 100%; color: #e0a040; overflow-wrap: anywhere; }
 .msg[data-role=approve] { border-left: 3px solid #e0a040; }

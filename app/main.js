@@ -15,7 +15,7 @@ import * as pat from './patterns.js';
 import { put, get, handlesIn } from './outstore.js';
 import { buildRequest, measure, report, padAttachment, inherit, imitatesNote, keptLines, corePrompt, EDGE_MIN, markedOnly, edgeReplies, turnOf, KINDS } from './context.js';
 
-export const VERSION = '0.17.0';
+export const VERSION = '0.17.1';
 const MAX_STEPS = 8; // model <-> tool round trips per user turn
 const MAX_BRANCHES = 6; // concerns per fan_out
 const FOLD_MAX = 2000; // chars of a fold handed back to the source
@@ -71,6 +71,8 @@ const SHELL = `
       <label>Private key (.pem, as downloaded)</label><textarea id="ghpem" rows="3" spellcheck="false" placeholder="-----BEGIN RSA PRIVATE KEY-----"></textarea>
       <p class="note">When both are set the app is used and the token above is ignored.</p>
     </details>
+    <label>Label for this access, told to the model in new sessions (e.g. "glyphharness-web token: web repo, contents + PRs")</label>
+    <input id="ghlabel" autocomplete="off">
     <p class="note" id="ghwho"></p>
     <label>Pinned code ref (tag, branch or commit; empty = this branch)</label>
     <input id="ref" placeholder="e.g. v0.1.0">
@@ -456,8 +458,18 @@ async function send(text) {
   await stewarding; // a pass already under way may be condensing this session's edge
   await edgeFold(s);
   // a new session opens with the pattern index; it is part of the first message from then on
-  push(s, { role: 'user', content: text + (s.messages.length ? '' : pat.index()) + padAttachment(s, state.meta.pads) });
+  push(s, { role: 'user', content: text + (s.messages.length ? '' : pat.index() + ghNote(s)) + padAttachment(s, state.meta.pads) });
   await run(s);
+}
+
+// What GitHub access a repo-tool session has, stated once in its first message
+// (so it sits in the cached prefix and never changes): the label the user gave
+// the credential and the account or app the last "check" reported.
+function ghNote(s) {
+  if (!s.tools?.includes('repo')) return '';
+  const set = state.meta.settings;
+  const parts = [set.ghlabel, set.ghwho].filter(Boolean);
+  return parts.length ? `\ngithub access: ${parts.join(' · ')}` : '';
 }
 
 function retitle(s, title) {
@@ -814,7 +826,7 @@ const actions = {
   async ghcheck() {
     const who = $('#ghwho');
     who.textContent = 'checking…';
-    try { who.textContent = await gh.whoami(); }
+    try { who.textContent = state.meta.settings.ghwho = await gh.whoami(); saveMeta(); }
     catch (e) { who.textContent = e.message; }
   },
   inspector() { state.meta.settings.inspector = !state.meta.settings.inspector; saveMeta(); applyInspector(); },
@@ -901,7 +913,7 @@ function bind() {
   });
 
   $('#composer').addEventListener('submit', e => { e.preventDefault(); const i = $('#input'); const v = i.value; if (busy || !v.trim()) return; i.value = ''; send(v); });
-  $('#input').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); $('#composer').requestSubmit(); } });
+  // Enter is a new line; only the send button sends.
 
   $('#title').addEventListener('change', e => { const s = cur(); s.title = e.target.value || 'Untitled'; s.autoTitle = false; saveSession(s); $(`#sessions [data-id="${s.id}"] span`).textContent = s.title; });
   $('#system').addEventListener('change', e => { const s = cur(); s.system = e.target.value; saveSession(s); });
@@ -920,10 +932,11 @@ function bind() {
   $('#picker').addEventListener('mousedown', e => { const r = e.target.closest('[data-model]'); if (r) { e.preventDefault(); pickModel(r.dataset.model); $('#model').blur(); } });
   $('#provider').addEventListener('change', e => { state.meta.settings.provider = e.target.value; saveMeta(); $('#key').value = state.keys[e.target.value] || ''; showBase(); loadModels(); });
   $('#base').addEventListener('change', e => { (state.meta.settings.base ??= {})[state.meta.settings.provider] = e.target.value.trim(); saveMeta(); loadModels(); });
-  const saveApp = () => { const appId = $('#ghappid').value.trim(), pem = $('#ghpem').value.trim(); state.keys.ghapp = appId || pem ? { appId, pem } : undefined; saveKeys(); $('#ghwho').textContent = ''; };
+  const saveApp = () => { const appId = $('#ghappid').value.trim(), pem = $('#ghpem').value.trim(); state.keys.ghapp = appId || pem ? { appId, pem } : undefined; saveKeys(); state.meta.settings.ghwho = ''; saveMeta(); $('#ghwho').textContent = ''; };
   $('#ghappid').addEventListener('change', saveApp);
   $('#ghpem').addEventListener('change', saveApp);
-  $('#ghkey').addEventListener('change', e => { state.keys.github = e.target.value.trim(); saveKeys(); $('#ghwho').textContent = ''; });
+  $('#ghkey').addEventListener('change', e => { state.keys.github = e.target.value.trim(); saveKeys(); state.meta.settings.ghwho = ''; saveMeta(); $('#ghwho').textContent = ''; });
+  $('#ghlabel').addEventListener('change', e => { state.meta.settings.ghlabel = e.target.value.trim(); saveMeta(); });
   $('#key').addEventListener('change', e => { state.keys[state.meta.settings.provider] = e.target.value.trim(); saveKeys(); });
   $('#ref').addEventListener('change', e => { location.search = '?ref=' + encodeURIComponent(e.target.value.trim()); });
 
@@ -982,6 +995,8 @@ export function boot(env) {
   $('#model').value = set.model;
   $('#key').value = state.keys[set.provider] || '';
   $('#ghkey').value = state.keys.github || '';
+  $('#ghlabel').value = state.meta.settings.ghlabel || '';
+  $('#ghwho').textContent = state.meta.settings.ghwho || '';
   $('#ghappid').value = state.keys.ghapp?.appId || '';
   $('#ghpem').value = state.keys.ghapp?.pem || '';
   $('#sessions').append(...rows());

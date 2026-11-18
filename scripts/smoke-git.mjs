@@ -111,16 +111,20 @@ const hello = await until(async () => (await upEvents()).find(e => e.type === 'h
 check('bridge: hello arrives encrypted on the branch', hello?.data?.build && !JSON.stringify(branches['bridge/t1'].files).includes('"build"'));
 
 // the session list: new sessions get repo tools while a token is set
+await page.fill('#ghlabel', 'test token: o/r contents + PRs'); await page.dispatchEvent('#ghlabel', 'change');
+await page.click('[data-act=ghcheck]');
+await until(async () => /signed in as tester/.test(await page.textContent('#ghwho')));
 await page.click('[data-act=new]');
 const say = async text => {
   await page.fill('#input', text);
-  await page.press('#input', 'Enter');
+  await page.click('#send');
   await page.waitForSelector('#app[data-busy]', { state: 'attached' });
 };
 const idle = () => page.waitForSelector('#app:not([data-busy])', { state: 'attached', timeout: 20000 });
 const thread = () => page.locator('.thread:visible');
 
 await say('repo read please'); await idle();
+check('the model is told the GitHub access label and account', /github access: test token: o\/r contents \+ PRs · signed in as tester/.test(await thread().locator('.msg[data-role=user]').first().textContent()));
 check('repo_read: returns the file text', /hello world/.test(await thread().locator('.msg[data-role=tool] pre').last().textContent()));
 const sent = await page.evaluate(() => document.querySelector('#req').textContent);
 check('repo tools are in this session\'s request', /"repo_commit"/.test(sent));
@@ -172,7 +176,7 @@ await page.evaluate(() => { const k = JSON.parse(localStorage['wh:keys']); }); /
 await page.selectOption('#provider', 'agent');
 await page.fill('#model', 'agent'); await page.dispatchEvent('#model', 'change');
 await page.click('[data-act=new]');
-await page.fill('#input', 'create the repo'); await page.press('#input', 'Enter');
+await page.fill('#input', 'create the repo'); await page.click('#send');
 const turn = await until(async () => (await upEvents()).find(e => e.type === 'turn' && !e.seen)?.data);
 check('agent provider: the request goes up as a turn with the tool list', turn?.tools?.includes('repo_create'));
 const ans = await directive('answer', { turn: turn.turn, content: 'Creating it.', tool_calls: [{ name: 'repo_create', args: { owner: 'neworg', name: 'lab', description: 'made by the paired agent' } }] });

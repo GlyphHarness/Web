@@ -15,7 +15,7 @@ page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
 const check = (name, ok, extra = '') => { console.log(`${ok ? 'PASS' : 'FAIL'} ${name} ${extra}`); if (!ok) process.exitCode = 1; };
 const say = async text => {
   await page.fill('#input', text);
-  await page.press('#input', 'Enter');
+  await page.click('#send');
   await page.waitForSelector('#app[data-busy]', { state: 'attached' });
   await page.waitForSelector('#app:not([data-busy])', { state: 'attached', timeout: 20000 });
 };
@@ -35,6 +35,10 @@ check('picker: choosing a row sets the model and its price panel', await page.in
 await page.fill('#system', 'You are a test assistant. '.repeat(40));
 await page.dispatchEvent('#system', 'change');
 
+await page.fill('#input', 'line one');
+await page.press('#input', 'Enter');
+check('composer: Enter adds a new line and does not send', await page.inputValue('#input') === 'line one\n' && await visible().locator('.msg').count() === 0);
+await page.fill('#input', '');
 await say('hello there');
 check('plain reply streams and renders a code block', await visible().locator('.msg[data-role=assistant] figure.code').count() === 1);
 
