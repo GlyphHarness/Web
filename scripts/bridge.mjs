@@ -4,7 +4,7 @@
 // with plain git. Payloads are AES-GCM ciphertext; the key is only in the
 // pairing link's fragment and in DIR/pair.json.
 //
-//   node scripts/bridge.mjs pair --repo OWNER/NAME [--dir D] [--page URL]
+//   node scripts/bridge.mjs pair --repo OWNER/NAME --page URL [--dir D]
 //        creates branch bridge/<id> (orphan, one README) and prints the link to open
 //   node scripts/bridge.mjs listen [--dir D]          fetch every 3 s; new events go to D/inbox.jsonl, one summary line each
 //   node scripts/bridge.mjs do NAME [JSON] [--dir D] [--wait S] [--out F]
@@ -22,7 +22,7 @@ import { randomBytes, webcrypto } from 'node:crypto';
 const args = process.argv.slice(2);
 const flag = (n, d) => { const i = args.indexOf('--' + n); return i >= 0 ? args.splice(i, 2)[1] : d; };
 const dir = flag('dir', join(homedir(), '.webharness-bridge'));
-const page = flag('page', 'https://glyphharness.github.io/Web/');
+const page = flag('page', '');
 const repoArg = flag('repo', '');
 const remoteArg = flag('remote', ''); // tests: a local bare repo instead of github.com
 const wait = Number(flag('wait', 90));
@@ -73,7 +73,7 @@ function summary(e) {
 }
 
 if (cmd === 'pair') {
-  if (!/^[\w.-]+\/[\w.-]+$/.test(repoArg)) { console.error('pair needs --repo OWNER/NAME'); process.exit(1); }
+  if (!/^[\w.-]+\/[\w.-]+$/.test(repoArg) || !/^https?:\/\//.test(page)) { console.error('pair needs --repo OWNER/NAME and --page URL (the page to open)'); process.exit(1); }
   const id = randomBytes(6).toString('hex');
   writeFileSync(pairFile, JSON.stringify({ repo: repoArg, remote: remoteArg || undefined, branch: 'bridge/' + id, key: b64u.enc(randomBytes(32)), created: new Date().toISOString() }), { mode: 0o600 });
   for (const f of ['seen', 'inbox.jsonl']) if (existsSync(join(dir, f))) writeFileSync(join(dir, f), '');

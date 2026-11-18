@@ -6,7 +6,7 @@ Status: working skeleton (v0.20.0). The OpenRouter path is written from the Open
 
 ## Run
 
-- Hosted: enable Pages (Settings > Pages > Source > GitHub Actions); every push to `main` deploys to `https://glyphharness.github.io/Web/`.
+- Hosted: enable Pages (Settings > Pages > Source > GitHub Actions); every push to `main` deploys to `https://<owner>.github.io/<repo>/` (paths are case-sensitive).
 - Local: `python3 -m http.server 8787` in the repo root, then open `http://localhost:8787/`.
 - No key needed to try it: choose the provider "Mock (offline)" and model `mock-1`. Say "tool", "big", "widget", "form", "chart" or "fan out" to see a tool round trip.
 - Smoke tests (need Playwright): `node scripts/smoke.mjs`, `node scripts/smoke-git.mjs` (fake GitHub API), `node scripts/smoke-vm.mjs` (the Linux machine)
@@ -213,7 +213,7 @@ Opening the page with `#bridge=<owner/repo>~<branch>~<key>` connects it to an ag
 - **Directives:** `ping`, `state`, `session`, `trace`, `trail`, `dom` (read-only selector), `run` (in the sandbox), `act` (new, inspector). `send`, `set` (provider, model and helper; never the API base) and `reload` wait for your click in the banner.
 - **Keys:** stored key values are replaced with `[key]` in every payload before encryption.
 - **Paired agent as the model:** choose provider "Paired agent (bridge)" and each request goes up as a `turn` event; the agent answers with `do answer '{"turn":"...","content":"...","tool_calls":[{"name":"...","args":{}}]}'`. Tool runs, approvals and the log follow the normal path, from the page's own network.
-- **Agent side:** `node scripts/bridge.mjs pair --repo OWNER/NAME` prints the link; `listen`, `do NAME JSON`, `show N`, `close`.
+- **Agent side:** `node scripts/bridge.mjs pair --repo OWNER/NAME --page URL` prints the link; `listen`, `do NAME JSON`, `show N`, `close`.
 
 ### Cosmetic state
 

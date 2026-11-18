@@ -76,12 +76,12 @@ const SHELL = `
       <label>Private key (.pem, as downloaded)</label><textarea id="ghpem" rows="3" spellcheck="false" placeholder="-----BEGIN RSA PRIVATE KEY-----"></textarea>
       <p class="note">When both are set the app is used and the token above is ignored.</p>
     </details>
-    <label>Label for this access, told to the model in new sessions (e.g. "glyphharness-web token: web repo, contents + PRs")</label>
+    <label>Label for this access, told to the model in new sessions (e.g. "fine-grained token: one repo, contents + PRs")</label>
     <input id="ghlabel" autocomplete="off">
     <p class="note" id="ghwho"></p>
     <label><input type="checkbox" id="vmon"> Linux machine: a <code>shell</code> tool for new sessions (bash, git, python3, gh). Downloads the image once; switching this reloads the page to turn cross-origin isolation on or off.</label>
     <label>Log repo: a private repo of yours where the harness keeps tracking over time (owner/name). Only the harness writes to it; agents can read it.</label>
-    <div style="display:flex;gap:6px"><input id="logrepo" placeholder="e.g. Glyphharness/harness-logs" autocomplete="off"><button data-act="logsetup">set up</button><button data-act="logsync">sync</button></div>
+    <div style="display:flex;gap:6px"><input id="logrepo" placeholder="owner/name" autocomplete="off"><button data-act="logsetup">set up</button><button data-act="logsync">sync</button></div>
     <p class="note" id="logstat"></p>
     <label>Pinned code ref (tag, branch or commit; empty = this branch)</label>
     <input id="ref" placeholder="e.g. v0.1.0">
