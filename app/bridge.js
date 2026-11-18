@@ -15,6 +15,8 @@
 // - Down: a fixed list of directives. Anything that spends credit, changes which
 //   code runs or changes settings waits for a click.
 
+import { slot } from './styles.js';
+
 const API = 'https://api.github.com';
 const POLL_MS = 3000;
 const MAX_AGE = 10 * 60e3; // directives older than this are dropped (replay guard)
@@ -134,7 +136,7 @@ export async function start(pair, host) {
   for (const lvl of ['warn', 'error']) console[lvl] = (...a) => { orig[lvl](...a); emit('console', { lvl, text: a.map(x => x instanceof Error ? x.stack : typeof x === 'string' ? x : (() => { try { return JSON.stringify(x); } catch { return String(x); } })()).join(' ').slice(0, 4000) }); };
 
   const bar = host.banner();
-  function status() { bar.querySelector('[data-bstat]').textContent = `${pair.repo} ${pair.branch} · up ${stats.up} · down ${stats.down}${stats.limited ? ' · limited ' + stats.limited : ''}${stats.err ? ' · errors ' + stats.err + (stats.last ? ' (' + stats.last + ')' : '') : ''}`; }
+  function status() { slot(bar.querySelector('[data-bstat]'), `${pair.repo} ${pair.branch} · up ${stats.up} · down ${stats.down}${stats.limited ? ' · limited ' + stats.limited : ''}${stats.err ? ' · errors ' + stats.err + (stats.last ? ' (' + stats.last + ')' : '') : ''}`); }
   bar.querySelector('[data-bend]').addEventListener('click', stop);
   function stop() {
     stopped = true; clearTimeout(poll); clearInterval(tick);
@@ -144,7 +146,7 @@ export async function start(pair, host) {
     bar.remove();
   }
 
-  if (!(await host.token().catch(() => ''))) bar.querySelector('[data-bstat]').textContent = 'Set a GitHub token in Settings, then reload: the bridge runs over a git branch.';
+  if (!(await host.token().catch(() => ''))) slot(bar.querySelector('[data-bstat]'), 'Set a GitHub token in Settings, then reload: the bridge runs over a git branch.');
   else { await prime(); check(); }
   emit('hello', host.hello());
   status();

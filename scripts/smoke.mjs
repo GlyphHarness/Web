@@ -12,6 +12,8 @@ const errors = [];
 page.on('dialog', d => { errors.push('native dialog: ' + d.message()); d.dismiss(); }); // the app must use its own modal
 page.on('pageerror', e => errors.push(String(e)));
 page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
+// live values are slots (styles.js): read them with their data-v values
+const slotOf = sel => page.evaluate(async s => (await import('./app/styles.js')).slotText(document.querySelector(s)), sel);
 const check = (name, ok, extra = '') => { console.log(`${ok ? 'PASS' : 'FAIL'} ${name} ${extra}`); if (!ok) process.exitCode = 1; };
 const say = async text => {
   await page.fill('#input', text);
@@ -25,7 +27,7 @@ const LOGMSG = '.msg:is([data-role=user],[data-role=assistant],[data-role=tool])
 
 await page.goto(url);
 await page.selectOption('#provider', 'mock');
-await page.waitForFunction(() => /3 models/.test(document.querySelector('#modelsn').textContent));
+await page.waitForFunction(() => /3 models/.test(document.querySelector('#modelsn').getAttribute('data-v')));
 await page.fill('#model', 'free');
 const freeRows = await page.locator('#picker .row[data-model]').allTextContents();
 check('picker: "free" filters, and no-cost prices show as --', freeRows.length === 1 && /^mock-free:free ⚠262k------$/.test(freeRows[0]), freeRows.join('|'));
@@ -33,7 +35,7 @@ await page.fill('#model', 'cheap tools');
 check('picker: "cheap tools" sorts by input price among tool-capable models', (await page.locator('#picker .row[data-model] span:first-child').allTextContents()).join() === 'mock-1,mock-pro');
 await page.fill('#model', 'mock <1');
 await page.locator('#picker .row[data-model]').first().dispatchEvent('mousedown');
-check('picker: choosing a row sets the model and its price panel', await page.inputValue('#model') === 'mock-1' && /cached input\$0.003/.test(await page.locator('#price').textContent()) && await page.locator('#pricesum').textContent() === 'Models · main $0.15 / $0.003 / $0.6' && !(await page.locator('#price').isVisible()));
+check('picker: choosing a row sets the model and its price panel', await page.inputValue('#model') === 'mock-1' && /cached input\$0.003/.test(await page.locator('#price').textContent()) && await slotOf('#pricesum') === 'Models · main $0.15 / $0.003 / $0.6' && !(await page.locator('#price').isVisible()));
 await page.fill('#system', 'You are a test assistant. '.repeat(40));
 await page.dispatchEvent('#system', 'change');
 
@@ -92,7 +94,8 @@ await page.waitForSelector('.thread:visible .msg[data-role=held]:not([data-done]
 check('pace: the model request is held with its size', /held model request[^]*mock-1 · \d+ messages/.test(await visible().locator('.msg[data-role=held]').last().textContent()));
 await visible().locator('.msg[data-role=held]:not([data-done]) [data-hold=all]').click();
 await page.waitForSelector('#app:not([data-busy])', { state: 'attached', timeout: 20000 });
-check('pace: "release all" lets the session loose', await page.inputValue('#pace') === 'run' && /released by you/.test(await visible().locator('.msg[data-role=held]').last().textContent()));
+check('pace: "release all" lets the session loose', await page.inputValue('#pace') === 'run' && /released by you/.test(await page.evaluate(async () => (await import('./app/styles.js')).slotText([...document.querySelectorAll('.thread:not([style*=none]) .msg[data-role=held]')].filter(e => e.offsetParent).at(-1)))));
+check('slots: live values are attributes drawn by CSS, not text nodes', await page.evaluate(() => { const e = document.querySelector('#tracen'); return e.childNodes.length === 0 && /\d+ requests/.test(e.getAttribute('data-v')) && /requests/.test(getComputedStyle(e, '::after').content); }));
 
 await say('show me a widget');
 const stage = () => page.locator('.stagebox:visible');
@@ -126,7 +129,7 @@ const filtered = await visible().locator('.msg[data-role=tool] pre').last().text
 check('results: want returns the matching line, not the bulk', /^\[os:[a-z0-9]+ \d+L keywords 1\/1\]\n\d+: total=4950$/.test(filtered), filtered.replace(/\n/g, ' | '));
 await page.click('[data-pane=insp]');
 await page.fill('#helper', 'mock-1'); await page.dispatchEvent('#helper', 'change');
-check('models: helper pricing is listed beside the main model', await page.locator('#pricesum').textContent() === 'Models · main $0.15 / $0.003 / $0.6 · helper $0.15 / $0.003 / $0.6' && await page.locator('#price tr.role').count() === 2);
+check('models: helper pricing is listed beside the main model', await slotOf('#pricesum') === 'Models · main $0.15 / $0.003 / $0.6 · helper $0.15 / $0.003 / $0.6' && await page.locator('#price tr.role').count() === 2);
 await say('long script again');
 const helped = await visible().locator('.msg[data-role=tool] pre').last().textContent();
 check('results: with a helper model the extract comes from it, with its own ledger row', /L helper\]\nmock-filtered: total/.test(helped) && await page.locator('#ledger td:text-is("helper")').count() === 1, helped.replace(/\n/g, ' | '));
@@ -205,7 +208,7 @@ await page.selectOption('#edge', 'helper');
 await page.fill('#helper', 'mock-1'); await page.dispatchEvent('#helper', 'change');
 await say('ramble please');
 await page.waitForFunction(() => /^Mock Title/.test(document.querySelector('#title').value), null, { timeout: 5000 });
-check('steward: one idle pass serves several sessions: titles, and this one\'s unmarked reply condensed', await visible().locator('.msg[data-condensed]').count() === 1 && /1 passes, [2-9] items applied/.test(await page.locator('#stewardsum').textContent()), await page.locator('#stewardsum').textContent());
+check('steward: one idle pass serves several sessions: titles, and this one\'s unmarked reply condensed', await visible().locator('.msg[data-condensed]').count() === 1 && /1 passes, [2-9] items applied/.test(await slotOf('#stewardsum')), await slotOf('#stewardsum'));
 await say('next');
 check('steward: the condensed reply is what goes back', /^\[os:[a-z0-9]+ answered\]\ncondensed item \d$/.test(await sentBack()));
 check('overview: sessions listed from ledgers', await page.locator('#overview tr').count() >= 4);
@@ -214,11 +217,11 @@ await page.fill('#helper', ''); await page.dispatchEvent('#helper', 'change');
 await page.click('[data-act=new]');
 await say('decide');
 check('keep marks: the note is in the system prompt of a new session', /Start a line with !/.test(JSON.parse(await page.locator('#req').textContent()).messages[0].content));
-const reqs = await page.locator('#tracen').textContent();
+const reqs = await slotOf('#tracen');
 await page.click('[data-act=epoch]');
 await page.click('.modal .primary');
 await page.waitForFunction(() => /epoch 2/.test(document.querySelector('#title').value));
-check('keep marks: fold uses the marked lines, critical first, with no request', (await visible().locator('.msg').first().evaluate(n => n._raw)) === 'Pocket:\nuse the flash model\nport is 8787' && (await page.locator('#tracen').textContent()) === reqs);
+check('keep marks: fold uses the marked lines, critical first, with no request', (await visible().locator('.msg').first().evaluate(n => n._raw)) === 'Pocket:\nuse the flash model\nport is 8787' && (await slotOf('#tracen')) === reqs);
 
 await page.click('[data-act=new]');
 await say('hello again');

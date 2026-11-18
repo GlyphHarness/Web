@@ -6,6 +6,8 @@ import { createHash, randomBytes, webcrypto, generateKeyPairSync, createVerify }
 const { chromium } = createRequire(import.meta.url)('playwright');
 
 const url = process.argv[2] || 'http://localhost:8787/';
+// live values are slots (styles.js): read them with their data-v values
+const slotOf = sel => page.evaluate(async s => (await import('./app/styles.js')).slotText(document.querySelector(s)), sel);
 const check = (name, ok, extra = '') => { console.log(`${ok ? 'PASS' : 'FAIL'} ${name} ${extra}`); if (!ok) process.exitCode = 1; };
 const TOKEN = 'github_pat_TESTTOKEN_' + 'x'.repeat(20);
 
@@ -123,7 +125,7 @@ check('bridge: hello arrives encrypted on the branch', hello?.data?.build && !JS
 // the session list: new sessions get repo tools while a token is set
 await page.fill('#ghlabel', 'test token: o/r contents + PRs'); await page.dispatchEvent('#ghlabel', 'change');
 await page.click('[data-act=ghcheck]');
-await until(async () => /signed in as tester/.test(await page.textContent('#ghwho')));
+await until(async () => /signed in as tester/.test(await slotOf('#ghwho')));
 await page.click('[data-act=new]');
 const say = async text => {
   await page.fill('#input', text);
@@ -215,7 +217,7 @@ await page.evaluate(() => document.querySelector('[data-act=logsetup]').click())
 await page.waitForSelector('.modal .primary');
 check('log repo: creating it is asked in an in-page modal', /Create the log repo/.test(await page.textContent('.modal h3')));
 await page.click('.modal .primary');
-const ready = await until(async () => /ready \(schema 1\)|sync|failed|Not/.test(await page.textContent('#logstat')) && /sync [^(]|nothing new|failed/.test(await page.textContent('#logstat')) && await page.textContent('#logstat'), 20000);
+const ready = await until(async () => /ready \(schema 1\)|sync|failed|Not/.test(await slotOf('#logstat')) && /sync [^(]|nothing new|failed/.test(await slotOf('#logstat')) && await slotOf('#logstat'), 20000);
 const L = repos['o/logs']?.main?.files || {};
 check('log repo: created private and laid out on a cold start', !!repos['o/logs'] && JSON.parse(L['.harness/manifest.json'] || '{}').schema === 1 && /only writer/.test(L['README.md'] || ''), ready);
 const smellFiles = Object.keys(L).filter(f => f.startsWith('smells/'));
@@ -224,7 +226,7 @@ check('log repo: first sync wrote smells, session metrics and steering', Object.
 const sessRows = (L[sessFiles[0]] || '').trim().split('\n').map(l => JSON.parse(l));
 check('log repo: session rows are metrics only, no message text or keys', sessRows.length > 0 && sessRows.every(r => !('messages' in r) && !('title' in r)) && !Object.values(L).join('').includes(TOKEN));
 await page.click('[data-act=new]');
-await until(async () => /nothing new|sync /.test(await page.textContent('#logstat')) && !/syncing/.test(await page.textContent('#logstat')), 15000);
+await until(async () => /nothing new|sync /.test(await slotOf('#logstat')) && !/syncing/.test(await slotOf('#logstat')), 15000);
 const L2 = repos['o/logs'].main.files;
 check('log repo: a new session syncs again, append-only (no file rewritten)', Object.keys(L2).filter(f => /^sessions\//.test(f)).length >= 1 && L2[sessFiles[0]] === L[sessFiles[0]]);
 const tools2 = await page.evaluate(async () => {
@@ -243,7 +245,7 @@ await page.selectOption('#provider', 'mock');
 await page.fill('#model', 'mock-1');
 await page.dispatchEvent('#model', 'change');
 await page.click('[data-act=ghcheck]');
-check('app: check signs a JWT from the PKCS#1 key', await until(async () => /app wh-test/.test(await page.textContent('#ghwho'))));
+check('app: check signs a JWT from the PKCS#1 key', await until(async () => /app wh-test/.test(await slotOf('#ghwho'))));
 await page.click('[data-act=new]');
 branches.feat.files['a.txt'] = 'hello again\n';
 await say('repo read please'); await idle();

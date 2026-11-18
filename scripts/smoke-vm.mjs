@@ -6,6 +6,8 @@ import { createRequire } from 'node:module';
 const { chromium } = createRequire(import.meta.url)('playwright');
 
 const url = process.argv[2] || 'http://localhost:8787/';
+// live values are slots (styles.js): read them with their data-v values
+const slotOf = sel => page.evaluate(async s => (await import('./app/styles.js')).slotText(document.querySelector(s)), sel);
 const check = (name, ok, extra = '') => { console.log(`${ok ? 'PASS' : 'FAIL'} ${name} ${extra}`); if (!ok) process.exitCode = 1; };
 const TOKEN = 'github_pat_VMTEST_' + 'y'.repeat(24);
 const browser = await chromium.launch();

@@ -4,7 +4,7 @@
 
 import { state, load, saveMeta, saveSession, saveKeys, newSession, dropSession, children, family, exportBundle, importBundle, uid } from './store.js';
 import { SCHEMA } from './migrate.js';
-import { rule } from './styles.js';
+import { rule, slot, slotText } from './styles.js';
 import { providers } from './providers.js';
 import { defsFor, execTool, SWAPPABLE, ARG_MAX, runJs } from './tools.js';
 import { client as gitClient } from './git.js';
@@ -20,7 +20,7 @@ import * as pat from './patterns.js';
 import { put, get, handlesIn } from './outstore.js';
 import { buildRequest, measure, report, padAttachment, inherit, imitatesNote, keptLines, corePrompt, EDGE_MIN, markedOnly, edgeReplies, turnOf, KINDS } from './context.js';
 
-export const VERSION = '0.22.0';
+export const VERSION = '0.23.0';
 const MAX_STEPS = 8; // model <-> tool round trips per user turn
 const MAX_BRANCHES = 6; // concerns per fan_out
 const FOLD_MAX = 2000; // chars of a fold handed back to the source
@@ -383,8 +383,8 @@ function renderPatterns() {
       p.refs?.length ? h('p', { class: 'note', text: 'refs: ' + p.refs.join(' ') }) : null,
     ],
     actions: [btn('delete', { 'data-act': 'pat-drop' })] })));
-  $('#patn').textContent = `${pat.trail().length} trail rows`;
-  $('#patcount').textContent = list.length || '';
+  slot($('#patn'), `${pat.trail().length} trail rows`);
+  slot($('#patcount'), list.length || '');
 }
 
 // ---------- policy items ----------
@@ -409,10 +409,10 @@ function renderPolicies() {
       ],
       actions: [btn('delete', { 'data-act': 'pol-drop' })] });
   }));
-  $('#polcount').textContent = list.filter(p => p.on !== false).length + '/' + list.length;
+  slot($('#polcount'), list.filter(p => p.on !== false).length + '/' + list.length);
 }
 
-const renderPads = () => { $('#pads').replaceChildren(...state.meta.pads.map(padNode)); $('#padcount').textContent = state.meta.pads.length || ''; };
+const renderPads = () => { $('#pads').replaceChildren(...state.meta.pads.map(padNode)); slot($('#padcount'), state.meta.pads.length || ''); };
 
 function activate(id) {
   state.meta.active = id;
@@ -446,7 +446,7 @@ function ledgerSum() {
     return `${t.n} requests, ${t.prompt} prompt (${t.prompt ? Math.round(100 * t.cached / t.prompt) : 0}% cached), ${t.out} out, $${t.cost.toFixed(5)}`;
   };
   const fam = family(s);
-  $('#ledgersum').textContent = 'this session: ' + sum(s.ledger) + (fam.length > 1 ? `\nwith ${fam.length - 1} branches: ` + sum(fam.flatMap(x => x.ledger)) : '');
+  slot($('#ledgersum'), 'this session: ' + sum(s.ledger) + (fam.length > 1 ? `\nwith ${fam.length - 1} branches: ` + sum(fam.flatMap(x => x.ledger)) : ''));
 }
 
 function showBase() {
@@ -485,7 +485,7 @@ async function loadModels(force) {
     } catch (e) { if (stale()) return; catalogue = c?.base === o.base ? c.list : []; console.warn('model list failed:', e); }
   }
   $('#models').replaceChildren(...catalogue.map(m => h('option', { value: m.id, label: m.name })));
-  $('#modelsn').textContent = `${catalogue.length} models` + (c?.t ? `, fetched ${new Date(c.t).toLocaleString()}` : '');
+  slot($('#modelsn'), `${catalogue.length} models` + (c?.t ? `, fetched ${new Date(c.t).toLocaleString()}` : ''));
   showPrice();
 }
 
@@ -561,7 +561,7 @@ function showPrice() {
   const set = state.meta.settings;
   const brief = id => { const m = catalogue.find(m => m.id === id); return m ? `${per1M(m.pricing.prompt)} / ${per1M(m.pricing.input_cache_read)} / ${per1M(m.pricing.completion)}` : '--'; };
   const roles = [['main', set.model], ['helper', set.helper]].filter(([role, id]) => role === 'main' || id);
-  $('#pricesum').textContent = 'Models · ' + roles.map(([role, id]) => `${role} ${brief(id)}`).join(' · ');
+  slot($('#pricesum'), 'Models · ' + roles.map(([role, id]) => `${role} ${brief(id)}`).join(' · '));
   $('#price').replaceChildren(...roles.flatMap(([role, id]) => [h('tr', { class: 'role' }, h('th', { colspan: '2', text: `${role}: ${id || 'none'}` })), ...priceRows(id)]));
 }
 
@@ -676,7 +676,7 @@ function steward(only) {
     }
     (state.meta.steward ??= []).push(report({ t: Date.now(), model: set.helper, items: items.length, applied, sessions: new Set(items.map(it => it.s.id)).size }, usage));
     saveMeta();
-    $('#tracen').textContent = trace.length + ' requests';
+    slot($('#tracen'), trace.length + ' requests');
     overview();
   })();
 }
@@ -692,7 +692,7 @@ function overview() {
   const tops = state.meta.order.map(id => state.sessions[id]).filter(s => !s.parent);
   $('#overview').replaceChildren(h('tr', {}, ...['session', 'branches', 'requests', 'context', 'cached', 'condensed', 'edge', '$'].map(t => h('th', { text: t }))), ...tops.map(row));
   const st = state.meta.steward || [];
-  $('#stewardsum').textContent = st.length ? `steward: ${st.length} passes, ${st.reduce((n, e) => n + (e.applied || 0), 0)} items applied, ${st.reduce((n, e) => n + (e.prompt || 0), 0)} prompt tokens, $${st.reduce((n, e) => n + (Number(e.cost) || 0), 0).toFixed(5)}` : 'steward: no passes yet';
+  slot($('#stewardsum'), st.length ? `steward: ${st.length} passes, ${st.reduce((n, e) => n + (e.applied || 0), 0)} items applied, ${st.reduce((n, e) => n + (e.prompt || 0), 0)} prompt tokens, $${st.reduce((n, e) => n + (Number(e.cost) || 0), 0).toFixed(5)}` : 'steward: no passes yet');
 }
 
 // Request > stream > tool calls > repeat, for one session.
@@ -751,7 +751,7 @@ async function turns(s, depth, onFirst) {
       }
     } catch (e) { failure = e; }
     live.remove();
-    $('#tracen').textContent = trace.length + ' requests';
+    slot($('#tracen'), trace.length + ' requests');
 
     const calls = failure ? [] : acc.calls.filter(Boolean); // drop half-streamed calls
     if (acc.content || calls.length) {
@@ -831,7 +831,7 @@ function hold(s, kind, detail) {
   return new Promise(ok => {
     const id = uid('h');
     const card = h('article', { class: 'msg', 'data-role': 'held', 'data-held': id });
-    const done = (v, by = 'you') => { if (!held.has(id)) return; held.delete(id); card.dataset.done = v === 'skip' ? 'skipped' : 'released'; card.querySelector('.mhead .mx').textContent = `${card.dataset.done} by ${by}`; for (const b of card.querySelectorAll('button')) b.disabled = true; link?.emit('held-done', { id, by, v }); ok(v); };
+    const done = (v, by = 'you') => { if (!held.has(id)) return; held.delete(id); card.dataset.done = v === 'skip' ? 'skipped' : 'released'; slot(card.querySelector('.mhead .mx'), `${card.dataset.done} by ${by}`); for (const b of card.querySelectorAll('button')) b.disabled = true; link?.emit('held-done', { id, by, v }); ok(v); };
     card.append(h('header', { class: 'mhead' }, h('span', { class: 'role', text: 'held ' + (kind === 'request' ? 'model request' : 'tool call') }), h('span', { class: 'mx', text: 'waiting' })),
       h('pre', { text: detail.length > 3000 ? detail.slice(0, 3000) + '…' : detail }),
       h('div', { class: 'actions' }, btn('release', { 'data-hold': 'release', class: 'primary' }), btn('release all', { 'data-hold': 'all' }), btn('skip', { 'data-hold': 'skip' })));
@@ -870,7 +870,7 @@ function askCard(s, args) {
     const finish = (out, by) => {
       asking.delete(id);
       card.dataset.done = by;
-      card.querySelector('.mhead .mx').textContent = out.declined ? `declined by ${by}` : `answered by ${by}`;
+      slot(card.querySelector('.mhead .mx'), out.declined ? `declined by ${by}` : `answered by ${by}`);
       for (const e of card.querySelectorAll('input, textarea, button')) e.disabled = true;
       link?.emit('ask-done', { id, by, ...out });
       ok(out.declined ? 'The person declined to answer.' : JSON.stringify(out.answers));
@@ -954,7 +954,7 @@ function renderSmells() {
     h('div', { class: 'items' }, ...list.slice(-20).reverse().map(r => item({ kind: r.kind, name: r.policy || r.tool || '', meta: new Date(r.t).toLocaleTimeString(),
       tone: /refused|error|failed/.test(r.kind) ? 'bad' : r.kind === 'policy-rewritten' ? 'warn' : '', attrs: { 'data-kind': r.kind },
       body: [h('p', { class: 'note', text: (r.why || r.detail || r.rule || '').slice(0, 300) }), r.from ? h('pre', { text: 'from: ' + r.from + (r.to ? '\nto:   ' + r.to : '') }) : null] }))));
-  $('#smellcount').textContent = list.length || '';
+  slot($('#smellcount'), list.length || '');
 }
 
 // One request to a side model (policy repair); traced, with its own ledger row.
@@ -993,7 +993,7 @@ async function helper(s, want, text) {
   s.ledger.push(entry);
   saveSession(s);
   if (s.id === state.meta.active) $('#ledger tbody').append(ledgerRow(entry, s.ledger.length - 1));
-  $('#tracen').textContent = trace.length + ' requests';
+  slot($('#tracen'), trace.length + ' requests');
   return out.trim();
 }
 
@@ -1130,20 +1130,20 @@ const actions = {
   'pol-drop'(el) { const i = Number(el.closest('[data-pol]').dataset.pol); policyList().splice(i, 1); saveMeta(); renderPolicies(); },
   async logsetup() {
     const set = state.meta.settings, stat = $('#logstat'), l = logs();
-    if (!l) { stat.textContent = 'Enter owner/name first.'; return; }
+    if (!l) { slot(stat, 'Enter owner/name first.'); return; }
     try {
-      stat.textContent = 'checking ' + l.repo + '…';
+      slot(stat, 'checking ' + l.repo + '…');
       let st = await l.status();
       if (st.state === 'missing') {
-        if (!(await ask2('Create the log repo?', `${l.repo} does not exist, or this credential cannot see it. Create it now as a private repository?`, 'Create private repo'))) { stat.textContent = 'Not created.'; return; }
-        stat.textContent = (await l.create()).split('\n')[0];
+        if (!(await ask2('Create the log repo?', `${l.repo} does not exist, or this credential cannot see it. Create it now as a private repository?`, 'Create private repo'))) { slot(stat, 'Not created.'); return; }
+        slot(stat, (await l.create()).split('\n')[0]);
         st = await l.status();
       }
-      if (st.state === 'empty') { stat.textContent = 'writing the layout…'; await l.init(); st = await l.status(); }
+      if (st.state === 'empty') { slot(stat, 'writing the layout…'); await l.init(); st = await l.status(); }
       set.logReady = st.state === 'ready'; saveMeta();
-      stat.textContent = set.logReady ? `${l.repo}: ready (schema ${st.manifest.schema})` : `${l.repo}: ${st.state}`;
+      slot(stat, set.logReady ? `${l.repo}: ready (schema ${st.manifest.schema})` : `${l.repo}: ${st.state}`);
       if (set.logReady) await logSync('set up');
-    } catch (e) { stat.textContent = e.message; }
+    } catch (e) { slot(stat, e.message); }
   },
   logsync() { return logSync('by hand'); },
   async review() {
@@ -1161,9 +1161,9 @@ const actions = {
   propose(el) { const list = smells.proposals(); const p = list.find(x => x.id === el.dataset.id); if (p) { p.status = el.dataset.to; p.decided = Date.now(); smells.saveProposals(list); } renderSmells(); },
   async ghcheck() {
     const who = $('#ghwho');
-    who.textContent = 'checking…';
-    try { who.textContent = state.meta.settings.ghwho = await gh.whoami(); saveMeta(); }
-    catch (e) { who.textContent = e.message; }
+    slot(who, 'checking…');
+    try { slot(who, state.meta.settings.ghwho = await gh.whoami()); saveMeta(); }
+    catch (e) { slot(who, e.message); }
   },
   inspector() { state.meta.settings.inspector = !state.meta.settings.inspector; saveMeta(); applyInspector(); },
   stop() { ctl?.abort(); },
@@ -1282,8 +1282,8 @@ function bind() {
   });
   $('#polmodel').addEventListener('change', e => { state.meta.settings.policyModel = e.target.value.trim(); saveMeta(); });
   $('#logrepo').value = state.meta.settings.logRepo || '';
-  $('#logrepo').addEventListener('change', e => { state.meta.settings.logRepo = e.target.value.trim(); state.meta.settings.logReady = false; saveMeta(); $('#logstat').textContent = 'press "set up"'; });
-  if (state.meta.settings.logReady) $('#logstat').textContent = state.meta.settings.logRepo + ': ready';
+  $('#logrepo').addEventListener('change', e => { state.meta.settings.logRepo = e.target.value.trim(); state.meta.settings.logReady = false; saveMeta(); slot($('#logstat'), 'press "set up"'); });
+  if (state.meta.settings.logReady) slot($('#logstat'), state.meta.settings.logRepo + ': ready');
   $('#vmon').checked = vmWanted();
   $('#vmon').addEventListener('change', e => { try { localStorage.setItem('wh:vm', e.target.checked ? '1' : '0'); } catch {} location.reload(); });
   $('#wire').addEventListener('change', e => { const s = cur(); s.wire = e.target.value; saveSession(s); showCore(); });
@@ -1299,10 +1299,10 @@ function bind() {
   $('#picker').addEventListener('mousedown', e => { const r = e.target.closest('[data-model]'); if (r) { e.preventDefault(); pickModel(r.dataset.model); $('#model').blur(); } });
   $('#provider').addEventListener('change', e => { state.meta.settings.provider = e.target.value; saveMeta(); $('#key').value = state.keys[e.target.value] || ''; showBase(); loadModels(); });
   $('#base').addEventListener('change', e => { (state.meta.settings.base ??= {})[state.meta.settings.provider] = e.target.value.trim(); saveMeta(); loadModels(); });
-  const saveApp = () => { const appId = $('#ghappid').value.trim(), pem = $('#ghpem').value.trim(); state.keys.ghapp = appId || pem ? { appId, pem } : undefined; saveKeys(); state.meta.settings.ghwho = ''; saveMeta(); $('#ghwho').textContent = ''; };
+  const saveApp = () => { const appId = $('#ghappid').value.trim(), pem = $('#ghpem').value.trim(); state.keys.ghapp = appId || pem ? { appId, pem } : undefined; saveKeys(); state.meta.settings.ghwho = ''; saveMeta(); slot($('#ghwho'), ''); };
   $('#ghappid').addEventListener('change', saveApp);
   $('#ghpem').addEventListener('change', saveApp);
-  $('#ghkey').addEventListener('change', e => { state.keys.github = e.target.value.trim(); saveKeys(); state.meta.settings.ghwho = ''; saveMeta(); $('#ghwho').textContent = ''; });
+  $('#ghkey').addEventListener('change', e => { state.keys.github = e.target.value.trim(); saveKeys(); state.meta.settings.ghwho = ''; saveMeta(); slot($('#ghwho'), ''); });
   $('#ghlabel').addEventListener('change', e => { state.meta.settings.ghlabel = e.target.value.trim(); saveMeta(); });
   $('#key').addEventListener('change', e => { state.keys[state.meta.settings.provider] = e.target.value.trim(); saveKeys(); });
   $('#ref').addEventListener('change', e => { location.search = '?ref=' + encodeURIComponent(e.target.value.trim()); });
@@ -1363,7 +1363,7 @@ export function boot(env) {
   $('#key').value = state.keys[set.provider] || '';
   $('#ghkey').value = state.keys.github || '';
   $('#ghlabel').value = state.meta.settings.ghlabel || '';
-  $('#ghwho').textContent = state.meta.settings.ghwho || '';
+  slot($('#ghwho'), state.meta.settings.ghwho || '');
   $('#ghappid').value = state.keys.ghapp?.appId || '';
   $('#ghpem').value = state.keys.ghapp?.pem || '';
   $('#sessions').append(...rows());
@@ -1392,7 +1392,7 @@ function vm() {
   if (vmInst) return vmInst;
   vmInst = machine({
     token: gh.token, trace,
-    onStatus: t => { $('#vmstat').textContent = 'Machine: ' + t; link?.emit('notice', { session: 'machine', text: t }); },
+    onStatus: t => { slot($('#vmstat'), 'Machine: ' + t); link?.emit('notice', { session: 'machine', text: t }); },
     mount(type) {
       const box = $('#vmterm');
       const pre = h('pre', { class: 'vmout' });
@@ -1433,8 +1433,8 @@ async function logSync(why) {
   const l = logs();
   if (!l || !state.meta.settings.logReady || logBusy) return logBusy;
   const since = (() => { try { return JSON.parse(localStorage.getItem('wh:logsync') || '{}')[l.repo]?.t || 0; } catch { return 0; } })();
-  $('#logstat').textContent = 'syncing (' + why + ')…';
-  logBusy = l.sync(logPayload(since)).then(r => { $('#logstat').textContent = `${l.repo}: ${r}`; }, e => { $('#logstat').textContent = `${l.repo}: sync failed: ${e.message}`; smells.add({ kind: 'log-sync-failed', detail: e.message.slice(0, 200) }); }).finally(() => { logBusy = null; });
+  slot($('#logstat'), 'syncing (' + why + ')…');
+  logBusy = l.sync(logPayload(since)).then(r => { slot($('#logstat'), `${l.repo}: ${r}`); }, e => { slot($('#logstat'), `${l.repo}: sync failed: ${e.message}`); smells.add({ kind: 'log-sync-failed', detail: e.message.slice(0, 200) }); }).finally(() => { logBusy = null; });
   return logBusy;
 }
 
@@ -1529,7 +1529,7 @@ async function startBridge(pair, env) {
       trace: ({ from = 0 }) => trace.slice(from),
       trail: () => pat.trail(),
       smells: () => smells.all(),
-      dom: ({ sel, html, max = 20 }) => [...document.querySelectorAll(sel)].slice(0, max).map(e => (html ? e.outerHTML : e.textContent).slice(0, 4000)),
+      dom: ({ sel, html, max = 20 }) => [...document.querySelectorAll(sel)].slice(0, max).map(e => (html ? e.outerHTML : slotText(e)).slice(0, 4000)), // slot values included
       run: ({ code, timeout = 5000 }) => runJs({ code }, null, timeout),
       act: ({ name }) => { if (!BRIDGE_ACTS.has(name)) throw new Error('act allows: ' + [...BRIDGE_ACTS].join(' ')); actions[name](); return state.meta.active; },
       async send({ text, session }) {

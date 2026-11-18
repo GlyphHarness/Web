@@ -2,7 +2,7 @@
 
 A client-side LLM chat harness served straight from this repo with GitHub Pages. No server, no build step: the browser holds the API key, the sessions and the tools.
 
-Status: working skeleton (v0.22.0). The OpenRouter path is written from the OpenAI-compatible conventions and has not yet been run against the live API.
+Status: working skeleton (v0.23.0). The OpenRouter path is written from the OpenAI-compatible conventions and has not yet been run against the live API.
 
 ## Run
 
@@ -221,6 +221,10 @@ Opening the page with `#bridge=<owner/repo>~<branch>~<key>` connects it to an ag
 - **Keys:** stored key values are replaced with `[key]` in every payload before encryption.
 - **Paired agent as the model:** choose provider "Paired agent (bridge)" and each request goes up as a `turn` event; the agent answers with `do answer '{"turn":"...","content":"...","tool_calls":[{"name":"...","args":{}}]}'`. Tool runs, approvals and the log follow the normal path, from the page's own network.
 - **Agent side:** `node scripts/bridge.mjs pair --repo OWNER/NAME --page URL` prints the link; `listen`, `do NAME JSON`, `show N`, `close`.
+
+### Live values through CSS (slots)
+
+Values that change while you work (section counts, the trace count, the ledger summary, the Machine status, the GitHub, log repo and bridge status lines, the status on held and question cards) are not text nodes. `slot(el, value)` in `styles.js` sets a `data-v` attribute and `.slot::after { content: attr(data-v) }` draws it. An update is one attribute write: no node is rebuilt, focus, selection and scroll survive, and the devtools tree does not churn. Such values cannot be selected or found with Ctrl+F, so messages, results, rules and cards stay real text. `slotText(el)` reads an element with its slot values; the bridge's `dom` directive and the tests use it.
 
 ### Cosmetic state
 

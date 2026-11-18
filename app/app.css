@@ -148,7 +148,7 @@ details.policy summary { color: #e0a040; }
 #insp > details[open] > summary::before { transform: rotate(90deg); }
 #insp > details > summary::-webkit-details-marker { display: none; }
 .count { margin-left: auto; font: 11px ui-monospace, monospace; color: var(--dim); background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 0 7px; }
-.count:empty { display: none; }
+.count:not([data-v]), .count[data-v=""] { display: none; }
 .items { display: flex; flex-direction: column; gap: 6px; margin: 6px 0; }
 .item { border: 1px solid var(--line); border-left: 3px solid var(--line); border-radius: 6px; background: var(--bg); }
 .item[data-tone=ok] { border-left-color: var(--ok); }
@@ -199,3 +199,6 @@ button.primary { border-color: var(--accent); background: var(--accent); color: 
 .pace { display: flex; align-items: center; gap: 4px; font-size: 12px; color: var(--dim); }
 #app:has(#pace option[value=run]:not(:checked)) .pace select { border-color: #e0a040; color: #e0a040; }
 .qtype { font: 10px ui-monospace, monospace; text-transform: uppercase; color: var(--accent); border: 1px solid var(--line); border-radius: 10px; padding: 0 6px; }
+
+/* live values drawn from data-v (styles.js slot) */
+.slot::after { content: attr(data-v); }
