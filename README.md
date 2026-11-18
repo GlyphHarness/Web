@@ -2,7 +2,7 @@
 
 A client-side LLM chat harness served straight from this repo with GitHub Pages. No server, no build step: the browser holds the API key, the sessions and the tools.
 
-Status: working skeleton (v0.35.0). The OpenRouter path is written from the OpenAI-compatible conventions and has not yet been run against the live API.
+Status: working skeleton (v0.36.0). The OpenRouter path is written from the OpenAI-compatible conventions and has not yet been run against the live API.
 
 ## Run
 
@@ -245,6 +245,19 @@ You pick the level relative to the session (this session, a profile in its chain
 ### Policies: repair before a call runs
 
 Inspector → Policies holds rules checked against every tool call's arguments before it runs. Each is its own card: a name (what smells and the thread refer to), the tool (`*` for any), a pattern matched against the call's arguments as JSON, the rule in plain words, and on/off; the card shows how often it has fired. Policies written in the earlier one-line text form are converted once. A call that breaks one is not just blocked: the policy model (Settings; else the helper, else the session's model) gets a small fixed context (the rule, the tool's schema and the call) and returns corrected arguments. The repair is checked again and runs instead. The log keeps the repaired call (that message has not been sent back yet, so no cached byte changes), the result starts with `[policy p1: call rewritten]`, and the thread shows the original beside it. No repair, or one that still breaks the rule, means `Not run: policy ...`. The default policy turns long fixed `sleep`s in `shell` into bounded waits on a condition. Because a pattern only sees the literal call (`s=sleep; $s 60` gets past it), the machine also has a `sleep` ahead of the real one on `PATH` that refuses fixed waits of 20 s or more however they are spelled, tells the model what to do instead, and leaves a marker the harness strips from the output and records as a `policy-runtime` smell under the same policy.
+
+### The custodial queue
+
+Housekeeping the harness would do on the sessions' behalf does not run on its own: conditions put it in a queue (Inspector → Queue, and a "queue N" button in the top bar) and you drain it. Each item shows its type and intent; the targets it touches (sessions, policies, smell kinds, repos; sessions link to themselves); why it was queued (the condition, the policy or smell that fired, details, and how often it fired, since identical items merge); the estimated cost (input tokens from the real input size, the output cap, the model and its price); and the procedure that keeps it cheap.
+
+| Type | Queued when | Cost controls |
+|---|---|---|
+| condense (steward) | a turn ends with replies waiting to be condensed or a session without a title | one request for all sessions, at most 12 items, replies cut to 8,000 chars, fixed instructions, helper model, output capped at 1,500 tokens |
+| steering review | 3 or more new smells since the last review, or any refusal | counts and steering texts only, last 200 rows, policy model, output capped at 600 tokens |
+| credential check | the credential was never checked, or not for a week | plain API calls; no model |
+| retry log sync | a log sync failed | plain API calls; no model |
+
+Running enforces it: inputs are capped, `max_tokens` is set, an item estimated over the per-item budget (default 20,000 tokens) asks first, and what it actually used is recorded against the estimate (more than 1.5× is a `queue-overrun` smell). "drain all" shows the total estimate before it starts. With the helper edge mode, replies go out whole until a condense item is drained.
 
 ### Smells and review: steering quality over time
 

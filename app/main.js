@@ -10,6 +10,7 @@ import { defsFor, execTool, SWAPPABLE, ARG_MAX, runJs } from './tools.js';
 import { client as gitClient } from './git.js';
 import { auth as ghAuth, appJwt } from './ghauth.js';
 import * as tokencheck from './tokencheck.js';
+import * as cust from './custodial.js';
 import { machine, vmWanted, vmReady } from './vm.js';
 import * as policy from './policy.js';
 import * as smells from './smells.js';
@@ -25,7 +26,7 @@ import * as pat from './patterns.js';
 import { put, get, handlesIn, setFallback } from './outstore.js';
 import { buildRequest, measure, report, padAttachment, inherit, imitatesNote, keptLines, corePrompt, EDGE_MIN, markedOnly, edgeReplies, turnOf, KINDS } from './context.js';
 
-export const VERSION = '0.35.0';
+export const VERSION = '0.36.0';
 const MAX_STEPS = 8; // model <-> tool round trips per user turn
 const MAX_BRANCHES = 6; // concerns per fan_out
 const FOLD_MAX = 2000; // chars of a fold handed back to the source
@@ -59,6 +60,7 @@ const SHELL = `
     <button data-act="epoch" title="Replace this conversation with a short pocket in a new session">fold session</button>
     <button data-act="foldback" title="Append this branch's last reply to its source as a fold">fold back</button>
     <button data-act="inspector">inspector</button>
+    <button class="qbar slot" id="queuebar" data-act="q-show" title="custodial queue"></button>
     <label class="pace" title="Hold model requests and/or tool calls until you release them">pace <select id="pace"><option value="run">run</option><option value="requests">hold model requests</option><option value="tools">hold tool calls</option><option value="both">hold both</option></select></label>
   </header>
   <div id="threads"></div>
@@ -88,6 +90,11 @@ const SHELL = `
     <select id="newprofile"></select>
     <div class="items" id="profiles"></div>
     <button data-act="prof-add">+ profile</button>
+  </details>
+  <details open><summary>Queue <span class="count" id="queuecount"></span></summary>
+    <p class="note">Housekeeping the harness would do on the sessions' behalf waits here for you: what it is, what it touches, why it was queued, what it is for, what it should cost and how that is kept down. Nothing here runs on its own.</p>
+    <div class="cfgbar"><button data-act="q-drain" class="primary">drain all</button><label class="field"><span>per-item budget (tokens; asks above it)</span><input id="qbudget" type="number" min="1000" step="1000"></label></div>
+    <div class="items" id="queue"></div>
   </details>
   <details open><summary>Defaults and connections</summary>
     <div class="cfgbar"><button data-act="cfgimport">import</button><button data-act="cfgpaste">paste config</button><button data-act="cfgcopy">copy config</button></div>
@@ -1067,18 +1074,22 @@ async function edgeFold(s) {
 const STEWARD_SYSTEM = 'You condense records for other programs. The input is a list of items, each starting with a line "#n title" or "#n reply". For a title item, answer with a title of at most 6 words. For a reply item, answer with only the lines a later reader needs to continue the work: decisions, exact values, names, open questions; at most 8 short lines, no narration. You may put one word after the "#n" of a reply to say what it did: searched, verified, troubleshot, built, decided or answered. Output one block per item, each starting with its "#n" line, and nothing else.';
 
 let stewarding = null, stewardTimer = 0;
-const queueSteward = () => { clearTimeout(stewardTimer); stewardTimer = setTimeout(() => { if (!busy) steward(); }, 800); };
+// after a turn: queue what the steward would do (it does not run on its own)
+const queueSteward = () => { clearTimeout(stewardTimer); stewardTimer = setTimeout(() => { if (!busy) queueCondense(); }, 800); };
+function stewardItems(only) {
+  const items = [];
+  for (const s of only ? [only] : Object.values(state.sessions)) {
+    if (s.autoTitle && !s.parent && s.messages.length >= 2) items.push({ kind: 'title', s, text: s.messages.slice(0, 2).map(m => String(m.content || '').slice(0, 300)).join('\n') });
+    if (s.edge === 'helper') for (const { m, i } of edgeReplies(s)) if (!markedOnly(m.content)) items.push({ kind: 'reply', s, i, text: m.content.slice(0, 8000) });
+  }
+  return items.slice(0, 12);
+}
 
 function steward(only) {
   return stewarding = (async () => {
-    const set = state.meta.settings, items = [];
-    if (!set.helper) return;
-    for (const s of only ? [only] : Object.values(state.sessions)) {
-      if (s.autoTitle && !s.parent && s.messages.length >= 2) items.push({ kind: 'title', s, text: s.messages.slice(0, 2).map(m => String(m.content || '').slice(0, 300)).join('\n') });
-      if (s.edge === 'helper') for (const { m, i } of edgeReplies(s)) if (!markedOnly(m.content)) items.push({ kind: 'reply', s, i, text: m.content.slice(0, 8000) });
-    }
-    if (!items.length) return;
-    const body = { model: set.helper, stream: true, messages: [{ role: 'system', content: STEWARD_SYSTEM }, { role: 'user', content: items.map((it, n) => `#${n + 1} ${it.kind}\n${it.text}`).join('\n\n') }] };
+    const set = state.meta.settings, items = stewardItems(only);
+    if (!set.helper || !items.length) return;
+    const body = { model: set.helper, stream: true, max_tokens: cust.TYPES.condense.maxOut, messages: [{ role: 'system', content: STEWARD_SYSTEM }, { role: 'user', content: items.map((it, n) => `#${n + 1} ${it.kind}\n${it.text}`).join('\n\n') }] };
     let out = '', usage = null;
     try {
       for await (const ev of provider().stream(body, state.keys[set.provider], undefined, opt())) { if (ev.error) throw new Error(ev.error.message); if (ev.usage) usage = ev.usage; out += ev.choices?.[0]?.delta?.content || ''; }
@@ -1504,6 +1515,7 @@ function smell(s, row) {
   const r = smells.add({ session: s.id, model: cfg(s).model, profile: eff(s).path || undefined, steer: steerOf(s), ...row });
   link?.emit('smell', r);
   renderSmells();
+  considerReview(r);
   if (r.policy) renderPolicies();
 }
 
@@ -1527,9 +1539,9 @@ function renderSmells() {
 }
 
 // One request to a side model (policy repair); traced, with its own ledger row.
-async function aux(s, model, system, content, kind) {
+async function aux(s, model, system, content, kind, maxOut) {
   const set = cfg(s), p = provider();
-  const body = { model, messages: [{ role: 'system', content: system }, { role: 'user', content }], stream: true };
+  const body = { model, messages: [{ role: 'system', content: system }, { role: 'user', content }], stream: true, ...(maxOut ? { max_tokens: maxOut } : {}) };
   let out = '', usage = null;
   for await (const ev of p.stream(body, state.keys[set.provider], ctl?.signal, opt())) {
     if (ev.error) throw new Error(ev.error.message || kind + ' failed');
@@ -1695,6 +1707,15 @@ const actions = {
     download((s.title.replace(/[^\w\- ]+/g, '').trim() || 'session') + '.session', bundle);
   },
   smellsclear() { smells.clear(); renderSmells(); },
+  async 'q-run'(el) { const it = queue().find(x => x.id === el.closest('[data-q]').dataset.q); if (it) await runItem(it); },
+  'q-dismiss'(el) { const it = queue().find(x => x.id === el.closest('[data-q]').dataset.q); if (it) { it.status = 'dismissed'; it.done = Date.now(); saveMeta(); renderQueue(); } },
+  async 'q-drain'() {
+    const p = cust.pending(queue()); if (!p.length) return;
+    const t = cust.total(queue());
+    if (!await ask2('Drain the queue?', `${p.length} items: about ${k(t.in)} input tokens, at most ${k(t.out)} output, ${t.cost ? '$' + t.cost.toFixed(4) : 'price unknown'}. Items over the per-item budget still ask.`, 'Drain')) return;
+    for (const it of p) await runItem(it);
+  },
+  'q-show'() { setPane('insp'); const d = $('#queue').closest('details'); d.open = true; d.scrollIntoView({ block: 'start' }); },
   ghscopes() { return checkScopes(); },
   ghderive() { state.meta.settings.ghIntent = tokencheck.derive({ settings: state.meta.settings, profiles: profiles() }); saveMeta(); showIntent(); },
   cfgpaste() { return pasteConfig(); },
@@ -1749,7 +1770,8 @@ const actions = {
   },
   logsync() { return logSync('by hand'); },
   logbrowse() { return browseTranscripts(); },
-  async review() {
+  async review() { return runReview(); },
+  async _oldReview() {
     const s = cur(), set = state.meta.settings;
     const model = set.policyModel || set.helper || set.model;
     const steer = smells.bySteer(state.meta.order.map(id => state.sessions[id]).filter(Boolean).map(x => ({ steer: steerOf(x), requests: x.ledger.filter(e => !e.helper).length })));
@@ -1926,6 +1948,11 @@ function bind() {
   });
   $('#polmodel').addEventListener('change', e => { state.meta.settings.policyModel = e.target.value.trim(); saveMeta(); });
   showIntent();
+  $('#qbudget').value = state.meta.settings.queueBudget || 20000;
+  $('#qbudget').addEventListener('change', e => { state.meta.settings.queueBudget = Number(e.target.value) || 20000; saveMeta(); });
+  renderQueue();
+  // conditions checked at start: a credential never checked, or not for a week
+  if ((state.keys.github || state.keys.ghapp) && Date.now() - (state.meta.settings.ghScopeAt || 0) > 7 * 864e5) enqueue({ type: 'scope-check', targets: [{ kind: 'credential', id: gh.mode() || 'github', label: 'GitHub credential' }], reason: { kind: state.meta.settings.ghScopeAt ? 'stale' : 'never checked', detail: state.meta.settings.ghScopeAt ? 'last checked over a week ago' : 'the credential has not been checked against its intended use' } });
   for (const id of ['#ghintent', '#ghpulls', '#ghcreate']) $(id).addEventListener('change', readIntent);
   $('#logrepo').value = state.meta.settings.logRepo || '';
   $('#logrepo').addEventListener('change', e => { state.meta.settings.logRepo = e.target.value.trim(); state.meta.settings.logReady = false; saveMeta(); slot($('#logstat'), 'press "set up"'); });
@@ -2123,7 +2150,7 @@ async function logSync(why) {
       const l = logs(repo);
       const since = (() => { try { return JSON.parse(localStorage.getItem('wh:logsync') || '{}')[repo]?.t || 0; } catch { return 0; } })();
       try { const r = await l.sync(logPayload(since, repo)); const t = await transcriptSync(l).catch(e => 'transcripts failed: ' + e.message); notes.push(`${repo}: ${r}; ${t}`); }
-      catch (e) { notes.push(`${repo}: sync failed: ${e.message}`); smells.add({ kind: 'log-sync-failed', detail: `${repo}: ${e.message}`.slice(0, 200) }); }
+      catch (e) { notes.push(`${repo}: sync failed: ${e.message}`); smells.add({ kind: 'log-sync-failed', detail: `${repo}: ${e.message}`.slice(0, 200) }); enqueue({ type: 'log-retry', targets: [{ kind: 'repo', id: repo, label: repo }], reason: { kind: 'log-sync-failed', detail: e.message.slice(0, 200) } }); }
     }
     slot($('#logstat'), notes.join(' | ') || 'no log repo ready');
   })().finally(() => { logBusy = null; });
@@ -2253,11 +2280,101 @@ async function checkScopes() {
   slot($('#ghscopes'), '· ' + sum);
   const bad = rows.filter(r => r.status === 'missing' || r.status === 'excess');
   if (bad.length) smells.add({ kind: 'token-scope', detail: bad.map(r => `${r.status}: ${r.check}`).join('; ').slice(0, 300) });
+  state.meta.settings.ghScopeAt = Date.now(); saveMeta();
   renderSmells();
   return modal({ title: 'Credential scopes', body: [h('p', { class: 'note', text: sum + '. Compared with the intended use; no model was involved.' }),
     h('table', { class: 'audit tcheck' }, h('tr', {}, ...['check', 'expected', 'observed', ''].map(t => h('th', { text: t }))),
       ...rows.map(r => h('tr', { 'data-st': r.status }, h('td', { text: r.check }), h('td', { text: r.expected }), h('td', { text: r.observed }), h('td', { class: 'st', text: r.status }))))] });
 }
+
+// ---------- the custodial queue (custodial.js) ----------
+
+const queue = () => (state.meta.queue ??= []);
+const priceOf = id => catalogue.find(m => m.id === id)?.pricing || null;
+function enqueue(args) {
+  const it = cust.enqueue(queue(), args);
+  // drop what is long finished, keep the list short
+  state.meta.queue = queue().filter(x => x.status === 'queued' || Date.now() - (x.done || x.created) < 7 * 864e5).slice(-200);
+  saveMeta(); renderQueue();
+  link?.emit('queued', { id: it.id, type: it.type, reason: it.reason, estimate: it.estimate });
+  return it;
+}
+function queueCondense() {
+  const items = stewardItems(), helperModel = state.meta.settings.helper;
+  if (!items.length || !helperModel) return;
+  const sessionsIn = [...new Map(items.map(it => [it.s.id, it.s])).values()];
+  enqueue({ type: 'condense', targets: sessionsIn.map(x => ({ kind: 'session', id: x.id, label: x.title })),
+    reason: { kind: 'edge', detail: `${items.filter(i => i.kind === 'reply').length} replies waiting to be condensed, ${items.filter(i => i.kind === 'title').length} sessions without a title` },
+    inChars: STEWARD_SYSTEM.length + items.reduce((n, it) => n + it.text.length + 12, 0), model: helperModel, price: priceOf(helperModel) });
+}
+function reviewInput(s) {
+  const steer = smells.bySteer(state.meta.order.map(id => state.sessions[id]).filter(Boolean).map(x => ({ steer: steerOf(x), requests: x.ledger.filter(e => !e.helper).length })));
+  const rows = smells.all().slice(-200).map(r => ({ kind: r.kind, steer: r.steer, tool: r.tool, policy: r.policy, why: r.why, detail: r.detail?.slice(0, 120) }));
+  return { steer, rows, text: `STEERING VERSIONS:\n${JSON.stringify(steer)}\n\nRECENT ROWS:\n${rows.map(r => JSON.stringify(r)).join('\n')}\n\nCURRENT CONVENTIONS:\n${corePrompt(s)}\n\nCURRENT POLICIES:\n${policyList().map(p => `${p.name} [${p.tool}${p.on === false ? ', off' : ''}] /${p.pattern}/${p.flags || ''} ${p.rule}`).join('\n')}\n\nCURRENT SYSTEM PROMPT:\n${s.system || '(empty)'}` };
+}
+// conditions: enough new smells, or any refusal, queue a review
+function considerReview(r) {
+  const last = state.meta.lastReview || 0, fresh = smells.all().filter(x => x.t > last && !/^(addressed|config-|queue-)/.test(x.kind));
+  if (fresh.length < 3 && !/refused/.test(r.kind)) return;
+  const s = cur(), set = state.meta.settings, model = set.policyModel || set.helper || set.model;
+  const pols = [...new Set(fresh.map(x => x.policy).filter(Boolean))], kinds = [...new Set(fresh.map(x => x.kind))];
+  enqueue({ type: 'review', targets: [...pols.map(p => ({ kind: 'policy', id: p, label: p })), ...kinds.map(k => ({ kind: 'smell', id: k, label: k }))],
+    reason: { kind: r.kind, policy: r.policy, detail: `${fresh.length} smells since the last review: ${kinds.join(', ')}` },
+    inChars: smells.REVIEW_SYSTEM.length + reviewInput(s).text.length, model, price: priceOf(model) });
+}
+async function runReview() {
+  const s = cur(), set = state.meta.settings, model = set.policyModel || set.helper || set.model;
+  const inp = reviewInput(s);
+  const text = await aux(s, model, smells.REVIEW_SYSTEM, inp.text, 'review', cust.TYPES.review.maxOut).catch(e => 'review failed: ' + (e.message || e));
+  const list = smells.proposals();
+  list.push({ id: 'r' + Date.now().toString(36), t: Date.now(), model, text, status: 'pending', basis: { rows: inp.rows.length, steer: inp.steer.length } });
+  smells.saveProposals(list);
+  state.meta.lastReview = Date.now(); saveMeta();
+  renderSmells();
+}
+// actual tokens of the side requests made while running an item
+const sideTokens = () => ({ n: Object.values(state.sessions).reduce((a, x) => a + x.ledger.filter(e => e.helper).reduce((b, e) => b + (e.prompt || 0) + (e.completion || 0), 0), 0) + (state.meta.steward || []).reduce((b, e) => b + (e.prompt || 0) + (e.completion || 0), 0),
+  cost: Object.values(state.sessions).reduce((a, x) => a + x.ledger.filter(e => e.helper).reduce((b, e) => b + (Number(e.cost) || 0), 0), 0) + (state.meta.steward || []).reduce((b, e) => b + (Number(e.cost) || 0), 0) });
+async function runItem(it, { confirmBudget = true } = {}) {
+  const budget = Number(state.meta.settings.queueBudget) || 20000, est = it.estimate.in + it.estimate.out;
+  if (confirmBudget && est > budget && !await ask2('Over the per-item budget', `${cust.TYPES[it.type].label}: about ${k(est)} tokens, over the ${k(budget)} budget. Run it anyway?`, 'Run')) return false;
+  it.status = 'running'; saveMeta(); renderQueue();
+  const before = sideTokens();
+  try {
+    if (it.type === 'condense') await steward();
+    else if (it.type === 'review') await runReview();
+    else if (it.type === 'scope-check') await checkScopes();
+    else if (it.type === 'log-retry') await logSync('queue');
+    const after = sideTokens(), used = after.n - before.n;
+    it.status = 'done'; it.done = Date.now(); it.result = { tokens: used, cost: +(after.cost - before.cost).toFixed(6) };
+    if (est && used > est * 1.5) smells.add({ kind: 'queue-overrun', detail: `${it.type}: ${used} tokens against an estimate of ${est}` });
+  } catch (e) { it.status = 'failed'; it.done = Date.now(); it.result = { error: String(e.message || e) }; }
+  saveMeta(); renderQueue(); renderSmells();
+  return true;
+}
+function renderQueue() {
+  const box = $('#queue');
+  if (!box) return;
+  const list = queue().slice().reverse(), tot = cust.total(queue());
+  const money = c => c == null ? 'price unknown' : '$' + c.toFixed(c < 0.01 ? 5 : 3);
+  box.replaceChildren(...list.map(it => {
+    const est = it.estimate, T = cust.TYPES[it.type];
+    return item({ kind: T.label, name: it.reason.detail, meta: it.status === 'queued' ? (est.model ? `~${k(est.in)} in · ≤${k(est.out)} out · ${money(est.cost)}` : 'no tokens') : it.status + (it.result?.tokens != null ? ` · ${k(it.result.tokens)} tokens · ${money(it.result.cost)}` : ''),
+      tone: it.status === 'queued' ? 'warn' : it.status === 'failed' ? 'bad' : 'off', attrs: { 'data-q': it.id, 'data-status': it.status },
+      body: [
+        h('div', { class: 'qrow' }, h('b', { text: 'for' }), h('span', { text: it.intent })),
+        h('div', { class: 'qrow' }, h('b', { text: 'why' }), h('span', { text: `${it.reason.kind}${it.reason.policy ? ' · policy ' + it.reason.policy : ''}${it.fired > 1 ? ` · fired ${it.fired}×` : ''} — ${it.reason.detail}` })),
+        h('div', { class: 'qrow' }, h('b', { text: 'targets' }), h('span', { class: 'qtargets' }, ...it.targets.map(t => t.kind === 'session' && state.sessions[t.id] ? btn(t.label || t.id, { 'data-goto': t.id, class: 'qt' }) : h('span', { class: 'hkind', text: `${t.kind} ${t.label || t.id}` })))),
+        h('div', { class: 'qrow' }, h('b', { text: 'cost' }), h('span', { text: est.model ? `${est.model}: about ${k(est.in)} input tokens, at most ${k(est.out)} output · ${money(est.cost)}` : 'no model, no tokens' })),
+        h('details', { class: 'hist' }, h('summary', { text: 'how the cost is kept down' }), h('ul', { class: 'qproc' }, ...it.procedure.map(p => h('li', { text: p })))),
+        it.result?.error ? h('p', { class: 'note bad', text: it.result.error }) : null,
+      ],
+      actions: it.status === 'queued' ? [btn('dismiss', { 'data-act': 'q-dismiss' }), btn('run', { 'data-act': 'q-run', class: 'primary' })] : [] });
+  }));
+  slot($('#queuecount'), tot && pending(queue()) ? `${pending(queue())} · ${money(tot.cost)}` : '');
+  slot($('#queuebar'), pending(queue()) ? `queue ${pending(queue())}` : '');
+}
+const pending = list => cust.pending(list).length;
 
 // ---------- approvals for outward-facing writes ----------
 

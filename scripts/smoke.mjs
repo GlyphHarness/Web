@@ -209,7 +209,14 @@ await page.click('[data-pane=insp]');
 await page.selectOption('#edge', 'helper');
 await page.fill('#helper', 'mock-1'); await page.dispatchEvent('#helper', 'change');
 await say('ramble please');
+// custodial work is queued, not run: the condense item says what, why, for whom and at what cost
+await page.waitForSelector('#queue [data-q][data-status=queued]', { state: 'attached', timeout: 5000 });
+const qtext = await page.evaluate(() => document.querySelector('#queue [data-q][data-status=queued]').textContent);
+check('queue: the steward\'s work waits in the queue with reason, targets, cost and procedure', /condense/.test(qtext) && /replies waiting to be condensed/.test(qtext) && /mock-1: about \d+ input tokens, at most 1\.5k output/.test(qtext) && /how the cost is kept down/.test(qtext), qtext.slice(0, 300));
+check('queue: nothing ran on its own (no title yet, no condensed reply)', !/^Mock Title/.test(await page.inputValue('#title')) && await visible().locator('.msg[data-condensed]').count() === 0);
+await page.evaluate(() => document.querySelector('#queue [data-q][data-status=queued] [data-act="q-run"]').click());
 await page.waitForFunction(() => /^Mock Title/.test(document.querySelector('#title').value), null, { timeout: 5000 });
+check('queue: running the item records what it actually used', await page.evaluate(() => { const q = JSON.parse(localStorage['wh:meta']).queue; const it = q.find(x => x.type === 'condense' && x.status === 'done'); return it && typeof it.result.tokens === 'number'; }));
 check('steward: one idle pass serves several sessions: titles, and this one\'s unmarked reply condensed', await visible().locator('.msg[data-condensed]').count() === 1 && /1 passes, [2-9] items applied/.test(await slotOf('#stewardsum')), await slotOf('#stewardsum'));
 await say('next');
 check('steward: the condensed reply is what goes back', /^\[os:[a-z0-9]+ answered\]\ncondensed item \d$/.test(await sentBack()));
@@ -262,6 +269,11 @@ check('smells: both events recorded with the steering in effect', rows.filter(r 
 check('smells: nothing was changed in the session (no automatic pattern)', !(await page.evaluate(() => localStorage['wh:patterns'] || '')).includes('Never loop'));
 await page.evaluate(() => document.querySelector('[data-act=review]').click());
 await page.waitForSelector('#smells [data-kind=proposal]', { state: 'attached' });
+const revq = await page.evaluate(() => JSON.parse(localStorage['wh:meta']).queue.find(x => x.type === 'review' && x.status === 'queued'));
+check('queue: a refusal queued a steering review, naming the policy that fired', !!revq && revq.reason.policy === 'bounded-loops' && revq.targets.some(t => t.kind === 'policy' && t.id === 'bounded-loops') && revq.estimate.out === 600, JSON.stringify(revq?.reason));
+check('queue: the top bar shows what is waiting', /queue \d+/.test(await slotOf('#queuebar')));
+await page.evaluate(id => document.querySelector(`#queue [data-q="${id}"] [data-act="q-dismiss"]`).click(), revq.id);
+check('queue: dismissing takes it off the queue', await page.evaluate(id => JSON.parse(localStorage['wh:meta']).queue.find(x => x.id === id).status, revq.id) === 'dismissed');
 check('review: a pending proposal from the counts', /keep p1/.test(await page.textContent('#smells [data-kind=proposal]')));
 await page.evaluate(() => document.querySelector('#smells [data-act=propose][data-to=dismissed]').click());
 check('policies: the card shows how often it fired', /fired 2/.test(await page.evaluate(() => document.querySelector('#policies .item:last-child .meta').textContent)));

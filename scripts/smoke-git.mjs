@@ -312,6 +312,18 @@ check('log repo per profile: the profile\'s sessions go there, not to the defaul
 check('log repo per profile: a missing repo is not created silently (a smell, skipped)', !repos['o/nowhere'] && await page.evaluate(() => JSON.parse(localStorage['wh:smells']).some(r => r.kind === 'log-repo-unavailable' && /o\/nowhere/.test(r.detail))));
 await pickProfile('(no profile)');
 
+// ---- the queue: an unchecked credential queues a no-token check ----
+await page.reload();
+await page.waitForSelector('#queue', { state: 'attached' });
+const sq = await page.evaluate(() => (JSON.parse(localStorage['wh:meta']).queue || []).find(x => x.type === 'scope-check' && x.status === 'queued'));
+check('queue: a credential never checked queues a scope check (no model, no tokens)', !!sq && sq.estimate.in === 0 && sq.estimate.model === null && /never checked|stale/.test(sq.reason.kind), JSON.stringify(sq?.reason));
+await page.evaluate(id => document.querySelector(`#queue [data-q="${id}"] [data-act="q-run"]`).click(), sq.id);
+await page.waitForSelector('.modal .tcheck');
+await page.click('.modal .actions button');
+check('queue: running it performs the check and marks it done', await until(async () => await page.evaluate(id => JSON.parse(localStorage['wh:meta']).queue.find(x => x.id === id).status, sq.id) === 'done', 5000));
+await page.selectOption('#provider', 'mock');
+await page.fill('#model', 'mock-1'); await page.dispatchEvent('#model', 'change');
+
 // ---- credential scope check: intended use vs what the token can do (no model) ----
 await page.click('[data-pane=insp]');
 await page.evaluate(() => { document.querySelector('#ghintentbox').open = true; document.querySelector('#ghintentbox').closest('details:not(#ghintentbox)').open = true; document.querySelector('[data-act=ghderive]').click(); });
