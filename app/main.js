@@ -200,19 +200,22 @@ function applyInspector() {
 // Model catalogue: fetched from the provider, cached per provider and base URL
 // for a day under wh:models:<provider>. Prices are shown, never hardcoded.
 const MODELS_TTL = 24 * 3600e3;
-let catalogue = [];
+let catalogue = [], loadSeq = 0;
 
 async function loadModels(force) {
   const id = state.meta.settings.provider, o = opt(), k = 'wh:models:' + id;
+  const turn = ++loadSeq, stale = () => turn !== loadSeq; // a slower earlier load must not win
   let c = null;
   try { c = JSON.parse(localStorage.getItem(k)); } catch {}
   if (!force && c && c.base === o.base && Date.now() - c.t < MODELS_TTL) catalogue = c.list;
   else {
     try {
-      catalogue = await provider().models(state.keys[id], o);
+      const list = await provider().models(state.keys[id], o);
+      if (stale()) return;
+      catalogue = list;
       try { localStorage.setItem(k, JSON.stringify({ t: Date.now(), base: o.base, list: catalogue })); } catch {}
       c = { t: Date.now() };
-    } catch (e) { catalogue = c?.base === o.base ? c.list : []; console.warn('model list failed:', e); }
+    } catch (e) { if (stale()) return; catalogue = c?.base === o.base ? c.list : []; console.warn('model list failed:', e); }
   }
   $('#models').replaceChildren(...catalogue.map(m => h('option', { value: m.id, label: m.name })));
   $('#modelsn').textContent = `${catalogue.length} models` + (c?.t ? `, fetched ${new Date(c.t).toLocaleString()}` : '');
