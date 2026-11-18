@@ -286,6 +286,26 @@ const snap = JSON.parse(await page.textContent('.modal .cfgshow'));
 check('config: copy gives the same shape back, without credentials', snap.settings.helper === 'mock-free:free' && snap.policies.some(p => p.name === 'no-rm-root') && !JSON.stringify(snap).includes('SECRET'));
 await page.click('.modal button');
 
+// ---- uptext: the full value of truncated text on hover or press-and-hold ----
+const longTitle = 'A very long session title that cannot possibly fit in the sidebar row at all';
+await page.fill('#title', longTitle); await page.dispatchEvent('#title', 'change');
+const rowSel = await page.evaluate(() => `#sessions [data-id="${JSON.parse(localStorage['wh:meta']).active}"] span`);
+await page.hover(rowSel);
+await page.waitForSelector('#uptext:not([hidden])', { timeout: 3000 }).catch(() => {});
+check('uptext: hovering a truncated label shows its full value above it', await page.evaluate(t => { const u = document.querySelector('#uptext'); return !u.hidden && u.textContent === t; }, longTitle));
+await page.mouse.move(700, 450);
+await page.waitForTimeout(100);
+check('uptext: it goes away on leave', await page.evaluate(() => document.querySelector('#uptext').hidden));
+await page.evaluate(sel => { const el = document.querySelector(sel); el.dispatchEvent(new PointerEvent('pointerdown', { pointerType: 'touch', bubbles: true })); }, rowSel);
+await page.waitForTimeout(600);
+check('uptext: press and hold on touch shows it too', await page.evaluate(t => { const u = document.querySelector('#uptext'); return !u.hidden && u.textContent === t; }, longTitle));
+await page.evaluate(sel => document.querySelector(sel).dispatchEvent(new PointerEvent('pointerup', { pointerType: 'touch', bubbles: true })), rowSel);
+await page.keyboard.press('Escape');
+const mx = visible().locator('.mhead .mx[data-full]').first();
+if (await mx.count()) { await mx.hover(); await page.waitForTimeout(500); }
+check('uptext: shortened labels show their full value (model id)', !(await mx.count()) || await page.evaluate(() => /\//.test(document.querySelector('#uptext').textContent) || document.querySelector('.mhead .mx[data-full]').dataset.full === document.querySelector('#uptext').textContent));
+await page.mouse.move(700, 450);
+
 // ---- import: loose labels and values matched to what exists ----
 await page.evaluate(() => document.querySelector('[data-act=cfgimport]').click());
 await page.waitForSelector('.modal textarea');
@@ -395,6 +415,32 @@ await say('hello scoped');
 const toolsNow = (JSON.parse(await page.textContent('#req')).tools || []).map(t => t.function.name);
 check('scope: a session can narrow its own capabilities', arow.value === 'no' && arow.from === 'this session' && !toolsNow.includes('ask') && !toolsNow.includes('value_set'), toolsNow.join(','));
 await page.evaluate(() => { const tr = document.querySelector('#scope tr.scope-edit[data-row="ask"]'); tr.querySelector('[data-sv]').value = ''; tr.querySelector('[data-act="scope-set"]').click(); });
+
+// inline edit: the row shows or hides its controls; a change asks before closing
+await page.evaluate(() => { document.querySelector('#sessioncard').closest('details').open = true; document.querySelector('#sessioncard').open = true; });
+await page.click('#scope tr[data-attr=pace]');
+const paceEdit = page.locator('#scope tr.scope-edit[data-row=pace]');
+check('inline edit: clicking the row shows its controls, prefilled with the current value', await paceEdit.isVisible() && await paceEdit.locator('[data-sv]').inputValue() === (await page.evaluate(() => document.querySelector('#scope tr[data-attr=pace] td.mono').textContent.replace('—', ''))));
+await page.click('#scope tr[data-attr=pace]');
+check('inline edit: clicking it again without a change just hides them', !(await paceEdit.isVisible()));
+await page.click('#scope tr[data-attr=pace] .scope-toggle');
+await paceEdit.locator('[data-sv]').fill('tools');
+await page.click('#scope tr[data-attr=pace]');
+await page.waitForSelector('.modal');
+check('inline edit: closing with a change asks, showing from and to', /Unsaved change to pace/.test(await page.textContent('.modal h3')) && /tools/.test(await page.textContent('.modal .to')));
+await page.click('.modal button:has-text("Keep editing")');
+check('inline edit: "keep editing" leaves the change in place', await paceEdit.isVisible() && await paceEdit.locator('[data-sv]').inputValue() === 'tools');
+await page.click('#scope tr[data-attr=pace]');
+await page.click('.modal button:has-text("Discard")');
+check('inline edit: "discard" closes and restores the value', !(await paceEdit.isVisible()) && await paceEdit.locator('[data-sv]').inputValue() !== 'tools');
+await page.click('#scope tr[data-attr=pace]');
+await paceEdit.locator('[data-sv]').fill('both');
+await page.click('#scope tr[data-attr=pace]');
+await page.click('.modal button:has-text("Save")');
+check('inline edit: "save" applies it at the chosen level', await page.evaluate(() => document.querySelector('#scope tr[data-attr=pace] td.mono').textContent) === 'both');
+await page.click('#scope tr[data-attr=pace]');
+await paceEdit.locator('[data-sv]').fill('');
+await paceEdit.locator('[data-act="scope-set"]').click();
 
 // mutable state: a frozen profile or session is read-only until switched back
 const freezeProfile = (name, on) => page.evaluate(([name, on]) => { const c = [...document.querySelectorAll('#profiles [data-prof]')].find(x => x.querySelector('.name').textContent.endsWith(name)); const t = c.querySelector('[data-pf=mutable]'); t.checked = !on; t.dispatchEvent(new Event('change', { bubbles: true })); }, [name, on]);

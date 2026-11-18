@@ -2,7 +2,7 @@
 
 A client-side LLM chat harness served straight from this repo with GitHub Pages. No server, no build step: the browser holds the API key, the sessions and the tools.
 
-Status: working skeleton (v0.33.0). The OpenRouter path is written from the OpenAI-compatible conventions and has not yet been run against the live API.
+Status: working skeleton (v0.34.0). The OpenRouter path is written from the OpenAI-compatible conventions and has not yet been run against the live API.
 
 ## Run
 
@@ -287,6 +287,11 @@ Opening the page with `#bridge=<owner/repo>~<branch>~<key>` connects it to an ag
 ### Live values through CSS (slots)
 
 Values that change while you work (section counts, the trace count, the ledger summary, the Machine status, the GitHub, log repo and bridge status lines, the status on held and question cards) are not text nodes. `slot(el, value)` in `styles.js` sets a `data-v` attribute and `.slot::after { content: attr(data-v) }` draws it. An update is one attribute write: no node is rebuilt, focus, selection and scroll survive, and the devtools tree does not churn. Such values cannot be selected or found with Ctrl+F, so messages, results, rules and cards stay real text. `slotText(el)` reads an element with its slot values; the bridge's `dom` directive and the tests use it.
+
+### Inline edit and uptext
+
+- **Inline edit:** in the scope table each attribute row has an edit icon (✎); clicking or tapping the row, or Enter/Space on it, shows or hides its controls, prefilled with the current value. Enter saves, Escape closes. Closing with a change (the row, the icon, or opening another row) asks first, showing the change from → to: Discard, Keep editing, or Save.
+- **Uptext:** hover (mouse, about 0.4 s) or press and hold (touch, about 0.45 s) on any text that is cut short shows its full value in a bubble above it. Truncation is detected, so session names, card names, chips, badges and scope values need no wiring; labels shortened on purpose carry their full value (`data-full`, e.g. the model id in a card header), and slot values are read too. It goes on leave, release, scroll or Escape.
 
 ### Cosmetic state
 

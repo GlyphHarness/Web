@@ -281,3 +281,12 @@ figure.handoff iframe { width: 100%; height: 260px; border: 0; background: #fff;
 .tcheck tr[data-st=excess] .st { color: #e0a040; font-weight: 600; }
 .tcheck tr[data-st=unverifiable] .st, .tcheck tr[data-st=info] .st { color: var(--dim); }
 .modal:has(.tcheck) { width: min(820px, 100%); }
+table.scope tr[data-attr] { cursor: pointer; }
+table.scope tr[data-attr]:hover th, table.scope tr[data-attr]:hover td { background: var(--sel); }
+table.scope tr[data-attr]:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+table.scope tr[data-editing] th, table.scope tr[data-editing] td { background: var(--sel); }
+table.scope .scope-toggle { border: 0; background: none; color: var(--dim); font-size: 13px; padding: 0 6px; }
+table.scope tr[data-attr]:hover .scope-toggle, table.scope tr[data-editing] .scope-toggle { color: var(--accent); }
+/* uptext: full value of truncated text, above it */
+#uptext { position: fixed; z-index: 60; max-width: min(520px, 92vw); padding: 5px 9px; border-radius: 6px; background: var(--fg); color: var(--bg); font: 12px/1.4 ui-monospace, monospace; white-space: pre-wrap; overflow-wrap: anywhere; box-shadow: 0 6px 20px #0006; pointer-events: none; }
+#uptext[hidden] { display: none; }

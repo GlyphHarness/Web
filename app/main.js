@@ -25,7 +25,7 @@ import * as pat from './patterns.js';
 import { put, get, handlesIn, setFallback } from './outstore.js';
 import { buildRequest, measure, report, padAttachment, inherit, imitatesNote, keptLines, corePrompt, EDGE_MIN, markedOnly, edgeReplies, turnOf, KINDS } from './context.js';
 
-export const VERSION = '0.33.0';
+export const VERSION = '0.34.0';
 const MAX_STEPS = 8; // model <-> tool round trips per user turn
 const MAX_BRANCHES = 6; // concerns per fan_out
 const FOLD_MAX = 2000; // chars of a fold handed back to the source
@@ -334,7 +334,7 @@ const k = n => n == null ? '' : n >= 1e4 ? Math.round(n / 1e3) + 'k' : n >= 1e3 
 function metrics(m) {
   const x = m.x || {}, u = x.usage || {}, out = [];
   if (m.role === 'assistant') {
-    if (x.model) out.push(['model', x.model.split('/').pop()]);
+    if (x.model) out.push(['model', x.model.split('/').pop(), x.model]);
     if (u.prompt_tokens != null) out.push(['in', k(u.prompt_tokens) + (u.prompt_tokens_details?.cached_tokens ? ` (${k(u.prompt_tokens_details.cached_tokens)} cached)` : '')]);
     if (u.completion_tokens != null) out.push(['out', k(u.completion_tokens)]);
     if (u.cost != null) out.push(['$', Number(u.cost).toFixed(5)]);
@@ -354,7 +354,7 @@ function metrics(m) {
 function messageNode(m, s) {
   const el = h('article', { class: 'msg', 'data-role': m.role });
   el.append(h('header', { class: 'mhead' }, h('span', { class: 'role', text: m.role }),
-    ...metrics(m).map(([a, b]) => h('span', { class: 'mx' + (b === 'failed' ? ' bad' : ''), title: a, text: a && a !== '$' ? `${a} ${b}` : a + b }))));
+    ...metrics(m).map(([a, b, f]) => h('span', { class: 'mx' + (b === 'failed' ? ' bad' : ''), ...(f ? { 'data-full': f } : {}), text: a && a !== '$' ? `${a} ${b}` : a + b }))));
   if (m.x?.reasoning) el.append(h('div', { class: 'think', text: m.x.reasoning }));
   if (m.role === 'tool') {
     el.append(h('details', { class: 'call' }, h('summary', { text: 'result ' + m.tool_call_id }), h('pre', { text: m.content })));
@@ -587,6 +587,85 @@ function policyList() {
   if (!Array.isArray(set.policyList)) { set.policyList = typeof set.policies === 'string' ? policy.fromText(set.policies) : structuredClone(policy.DEFAULT_LIST); delete set.policies; saveMeta(); }
   return set.policyList;
 }
+// ---------- uptext: the full value of anything cut short ----------
+
+// Hover (mouse) or press and hold (touch) on text that is truncated, or that
+// carries data-full, shows its whole value in a bubble above it.
+function uptext() {
+  const tip = h('div', { id: 'uptext', role: 'tooltip', hidden: '' });
+  document.body.append(tip);
+  let timer = null, shownFor = null;
+  const full = el => el.dataset?.full || (el.classList?.contains('slot') ? el.getAttribute('data-v') : '') || slotText(el).trim();
+  const truncated = el => el.scrollWidth > el.clientWidth + 1 || el.scrollHeight > el.clientHeight + 1;
+  const target = start => {
+    for (let el = start; el && el !== document.body; el = el.parentElement) {
+      if (el.dataset?.full) return el;
+      if (el.matches?.('input, textarea, select, pre, .msg, .body, #threads, .thread')) return null; // long text areas scroll; no bubble
+      const cs = getComputedStyle(el);
+      if ((cs.textOverflow === 'ellipsis' || cs.overflow === 'hidden') && truncated(el) && full(el)) return el;
+    }
+    return null;
+  };
+  const hide = () => { clearTimeout(timer); timer = null; tip.hidden = true; shownFor = null; };
+  const show = el => {
+    const text = full(el);
+    if (!text) return;
+    tip.textContent = text; tip.hidden = false; shownFor = el;
+    const r = el.getBoundingClientRect(), t = tip.getBoundingClientRect();
+    const left = Math.max(6, Math.min(innerWidth - t.width - 6, r.left + r.width / 2 - t.width / 2));
+    const top = r.top - t.height - 6 >= 6 ? r.top - t.height - 6 : r.bottom + 6;
+    tip.style.left = left + 'px'; tip.style.top = top + 'px';
+  };
+  document.addEventListener('pointerover', e => {
+    if (e.pointerType === 'touch') return;
+    const el = target(e.target);
+    if (el === shownFor) return;
+    hide();
+    if (el) timer = setTimeout(() => show(el), 400);
+  });
+  document.addEventListener('pointerout', e => { if (e.pointerType !== 'touch' && shownFor && !shownFor.contains(e.relatedTarget)) hide(); });
+  document.addEventListener('pointerdown', e => {
+    hide();
+    if (e.pointerType !== 'touch') return;
+    const el = target(e.target);
+    if (el) timer = setTimeout(() => show(el), 450); // press and hold
+  });
+  for (const ev of ['pointerup', 'pointercancel']) document.addEventListener(ev, e => { if (e.pointerType === 'touch') { clearTimeout(timer); timer = null; setTimeout(hide, shownFor ? 1500 : 0); } });
+  document.addEventListener('scroll', hide, true);
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') hide(); });
+  // a held press that showed a bubble should not also click
+  document.addEventListener('click', e => { if (shownFor && e.pointerType === 'touch') { e.preventDefault(); e.stopPropagation(); } }, true);
+}
+
+// ---------- inline edit: a row shows or hides its edit controls ----------
+
+// head: the row you click or tap; edit: the controls it shows; input: the field
+// whose value is compared with what it opened with. Closing with a change asks:
+// discard, keep editing, or save (the dialog shows from -> to).
+let openEdit = null;
+function inlineEdit(head, edit, input, { label, show = v => v, save }) {
+  let start = input.value;
+  const dirty = () => input.value !== start;
+  const close = () => { edit.hidden = true; head.removeAttribute('data-editing'); if (openEdit?.edit === edit) openEdit = null; };
+  const open = () => { start = input.value; edit.hidden = false; head.setAttribute('data-editing', ''); openEdit = { edit, tryClose }; setTimeout(() => input.focus()); };
+  async function tryClose() {
+    if (!dirty()) { close(); return true; }
+    const r = await modal({ title: `Unsaved change to ${label}`, body: [h('div', { class: 'cfgrow' }, h('code', { text: label }), h('span', { class: 'from', text: show(start) }), h('span', { text: '→' }), h('span', { class: 'to', text: show(input.value) }))],
+      actions: [{ text: 'Discard', value: 'discard' }, { text: 'Keep editing', value: 'keep', cancel: true }, { text: 'Save', value: 'save', primary: true }] });
+    if (r === 'save') { save(); return true; }
+    if (r === 'discard') { input.value = start; close(); return true; }
+    input.focus(); return false;
+  }
+  const toggle = async () => {
+    if (!edit.hidden) return tryClose();
+    if (openEdit && openEdit.edit !== edit && !(await openEdit.tryClose())) return;
+    open();
+  };
+  head.addEventListener('click', e => { if (!e.target.closest('input, select, textarea, a')) toggle(); });
+  head.addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ') && e.target === head) { e.preventDefault(); toggle(); } });
+  input.addEventListener('keydown', e => { if (e.key === 'Escape') tryClose(); if (e.key === 'Enter' && input.tagName === 'INPUT') save(); });
+}
+
 // ---------- this session's scope, attribute by attribute ----------
 
 const SCOPE_ROWS = [...prof.SETTING_KEYS.map(k => ({ k, kind: 'set' })), ...prof.CAP_KEYS.map(k => ({ k, kind: 'cap' }))];
@@ -611,16 +690,18 @@ function renderScope() {
     const lv = h('select', { 'data-sl': k }, ...levels.map((l, i) => opt(l.id, l.name + (levelFrozen(s, l.id) ? ' (frozen)' : ''), i === 0 && lockIdx < 0 || i === lockIdx, (lockIdx >= 0 && i < lockIdx) || (row.kind === 'cap' && l.id === 'default') || levelFrozen(s, l.id))));
     const input = k === 'logTranscripts' ? h('select', { 'data-sv': k }, opt('', 'inherit', true), opt('true', 'on'), opt('false', 'off'))
       : row.kind === 'set'
-      ? h('input', { 'data-sv': k, value: s.over?.[k] ?? '', placeholder: 'blank = inherit', list: /model|helper/i.test(k) ? 'models' : '', class: 'mono' })
-      : k === 'repo' ? h('select', { 'data-sv': k }, opt('', 'inherit', true), ...['none', 'read', 'write'].map(x => opt(x, x)))
-      : h('select', { 'data-sv': k }, opt('', 'inherit', true), opt('1', 'allow'), opt('0', 'deny'));
-    const edit = h('tr', { class: 'scope-edit', 'data-row': k, hidden: '' }, h('td', { colspan: '4' }, h('div', { class: 'setat' }, field('set at', lv), field(row.kind === 'set' ? 'value (blank = inherit)' : 'value', input), btn('set', { 'data-act': 'scope-set', class: 'primary' }))));
-    const toggle = btn('edit', { class: 'scope-toggle' });
-    toggle.onclick = () => { edit.hidden = !edit.hidden; toggle.textContent = edit.hidden ? 'edit' : 'close'; };
-    return [h('tr', { 'data-attr': k, ...(lockBy ? { 'data-locked': '' } : {}) },
+      ? h('input', { 'data-sv': k, value: val == null ? '' : String(val), placeholder: 'blank = inherit', list: /model|helper/i.test(k) ? 'models' : '', class: 'mono' })
+      : k === 'repo' ? h('select', { 'data-sv': k }, opt('', 'inherit'), ...['none', 'read', 'write'].map(x => opt(x, x, x === val)))
+      : h('select', { 'data-sv': k }, opt('', 'inherit'), opt('1', 'allow', val === true), opt('0', 'deny', val === false));
+    if (k === 'logTranscripts') input.value = val === false ? 'false' : 'true';
+    const edit = h('tr', { class: 'scope-edit', 'data-row': k, hidden: '' }, h('td', { colspan: '4' }, h('div', { class: 'setat' }, field('set at', lv), field(row.kind === 'set' ? 'value (blank = inherit)' : 'value', input), btn('save', { 'data-act': 'scope-set', class: 'primary' }))));
+    const toggle = btn('✎', { class: 'scope-toggle', title: 'edit ' + (SCOPE_LABEL[k] || k), 'aria-label': 'edit ' + (SCOPE_LABEL[k] || k) });
+    const head = h('tr', { 'data-attr': k, tabindex: '0', ...(lockBy ? { 'data-locked': '' } : {}) },
       h('th', {}, SCOPE_LABEL[k] || k, h('span', { class: 'aud', 'data-aud': prof.AUDIENCE[k], title: prof.AUDIENCE[k] === 'harness' ? 'configuration the harness uses on the session\'s behalf; the model never sees it' : 'shapes the model\'s tools', text: prof.AUDIENCE[k] })), h('td', { class: 'mono', title: show(row, val), text: show(row, val) }),
       h('td', {}, h('span', { class: 'from', 'data-from': from === 'this session' ? 'session' : from === 'defaults' ? 'default' : 'profile', text: from }), lockBy ? h('span', { class: 'lock', title: 'locked by ' + lockBy, text: ' 🔒' }) : ''),
-      h('td', {}, toggle)), edit];
+      h('td', {}, toggle));
+    inlineEdit(head, edit, input, { label: SCOPE_LABEL[k] || k, show: v => row.kind === 'cap' ? ({ '': 'inherit', '1': 'allow', '0': 'deny' }[v] ?? v) : (v === '' ? '(inherit)' : v), save: () => edit.querySelector('[data-act="scope-set"]').click() });
+    return [head, edit];
   }));
   slot($('#scopecount'), (s.frozen ? 'frozen · ' : '') + (e.path || 'no profile'));
   slot($('#sessname'), s.title);
@@ -646,6 +727,7 @@ function scopeSet(el) {
   const v = row.kind === 'cap' ? (raw === '' ? null : k === 'repo' ? raw : raw === '1') : raw === '' ? null : k === 'branchBudget' ? Number(raw) || null : k === 'logTranscripts' ? raw === 'true' : raw;
   if (k === 'logRepo' && v && !/^[\w.-]+\/[\w.-]+$/.test(v)) return modal({ title: 'Not changed', body: 'log repo is owner/name.' });
   const err = setAt(s, level, k, v, row.kind);
+  if (!err) openEdit = null;
   if (err) return modal({ title: 'Not changed', body: `${SCOPE_LABEL[k]}: ${err}.` });
   if (level === 'default') showSettings();
   else if (level !== 'session') renderProfiles();
@@ -1943,6 +2025,7 @@ export function boot(env) {
   renderSmells();
   applyInspector();
   bind();
+  uptext();
   if (!state.sessions[state.meta.active]) state.meta.active = state.meta.order[0] || '';
   state.meta.active ? activate(state.meta.active) : actions.new();
   loadModels();
