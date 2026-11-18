@@ -154,17 +154,18 @@ export function machine(env) {
       if (await seen.catch(() => false)) break;
     }
     // no echo, no prompt, no job notices: the console carries only what jobs print
-    input(`stty -echo 2>/dev/null; export PS1= PS2=; set +m; cd /root; mkdir -p ${JOBS}; chmod 700 ${JOBS}\r`);
-    await new Promise(r => setTimeout(r, 500));
+    // and nothing else is sent until it has run: input queued while the tty's settings
+    // change can be lost for good (seen: every later line dropped)
+    const set = waitFor(/__WH_SET_ok__/, 60e3);
+    input(`stty -echo 2>/dev/null; export PS1= PS2=; set +m; cd /root; mkdir -p ${JOBS}; chmod 700 ${JOBS}; echo __WH_SET_"ok"__\r`);
+    await set;
     // runtime policy: a sleep ahead of the real one on PATH refuses long fixed waits
     // however they are spelled (the argument check only sees the literal call)
     // one line per script: the console takes lines of about 2,000 characters at most
-    input(`mkdir -p /usr/local/bin && echo ${btoa(SLEEP_SHIM)} | base64 -d > /usr/local/bin/sleep && chmod +x /usr/local/bin/sleep\r`);
-    put('/usr/local/bin/wh-install', INSTALL, '755');
-    put('/usr/local/bin/wh-installd', INSTALLD, '700');
     // sessions' own users read the proxy CA (TLS through the page's network) and use the install service
-    input(`cp /.wasmenv/proxy.crt ${CA} 2>/dev/null; chmod 644 ${CA}; ( WH_SHELF='${SHELF}' /usr/local/bin/wh-installd </dev/null >/dev/null 2>&1 & )\r`);
-    input(`export WH_SHELF='${SHELF}'; hash -r\r`);
+    await feed(['mkdir -p /usr/local/bin', ...put('/usr/local/bin/wh-install', INSTALL, '755'), ...put('/usr/local/bin/wh-installd', INSTALLD, '700'),
+      `cp /.wasmenv/proxy.crt ${CA} 2>/dev/null; chmod 644 ${CA}; ( WH_SHELF='${SHELF}' /usr/local/bin/wh-installd </dev/null >/dev/null 2>&1 & )`,
+      `export WH_SHELF='${SHELF}'`, ...put('/usr/local/bin/sleep', SLEEP_SHIM, '755'), 'hash -r']);
     // the network stack (a second wasm) can come up after the shell: wait for its
     // proxy port (polled every second, stops as soon as it answers, at most ~60 s)
     // so the first networked command does not race it
@@ -177,12 +178,31 @@ export function machine(env) {
     say(r?.m[1] === 'up' ? 'ready' : 'ready (no network)');
   }
 
-  // write a file through the console in lines well under its limit
+  // the lines that write a file through the console (each well under its line limit)
   function put(path, text, mode) {
-    const b = btoa(text);
-    input(`: > ${path}.b64\r`);
-    for (let i = 0; i < b.length; i += 1500) input(`printf %s ${b.slice(i, i + 1500)} >> ${path}.b64\r`);
-    input(`base64 -d ${path}.b64 > ${path} && rm -f ${path}.b64 && chmod ${mode} ${path}\r`);
+    return [...chunks(btoa(text), path + '.b64'), `cat ${path}.b64.* | base64 -d > ${path} && rm -f ${path}.b64.* && chmod ${mode} ${path}`];
+  }
+  // base64 in numbered chunk files: each line can be sent again without harm
+  const chunks = (b, base) => { const out = [`rm -f ${base}.*`]; for (let i = 0, n = 0; i < b.length; i += 1500, n++) out.push(`printf %s ${b.slice(i, i + 1500)} > ${base}.${String(n).padStart(5, '0')}`); return out; };
+  // Flow control: the guest's tty drops input that arrives faster than the shell
+  // reads it (a few KB in one burst leaves the shell mid-line). Lines go in batches
+  // of about 2.5 KB; each batch ends with an echo the harness waits for.
+  async function feed(lines) {
+    const tag = Math.random().toString(36).slice(2, 8);
+    let batch = [], size = 0, k = 0;
+    // a lost batch is sent once more (after Ctrl-C clears a half-read line); every line is safe to repeat
+    const flush = async () => {
+      if (!batch.length) return;
+      for (let attempt = 0; ; attempt++) {
+        const n = ++k, ack = waitFor(new RegExp(`__WH_A_${tag}_${n}__`), 180e3); // computed below, so an echoed line does not match
+        for (const l of batch) input(l + '\r');
+        input(`echo __WH_A_${tag}_$((${n}+0))__\r`);
+        try { await ack; break; } catch (e) { if (attempt) throw new Error(`the machine’s console stopped reading input (batch ${k}: ${batch.map(l => l.slice(0, 60)).join(' | ')})`); input('\x03'); note('console input was lost; sent again'); }
+      }
+      batch = []; size = 0;
+    };
+    for (const l of lines) { if (size + l.length > 2500) await flush(); batch.push(l); size += l.length + 1; }
+    await flush();
   }
   function waitFor(re, ms) {
     return new Promise((ok, no) => {
@@ -215,8 +235,7 @@ export function machine(env) {
   async function job(cmd, timeoutS, opt) {
     const id = Math.random().toString(36).slice(2, 10), J = `${JOBS}/${id}`, my = gen;
     const b64 = btoa(String.fromCharCode(...new TextEncoder().encode(cmd)));
-    const lines = [`: > ${J}.b64`];
-    for (let i = 0; i < b64.length; i += 2000) lines.push(`printf %s ${b64.slice(i, i + 2000)} >> ${J}.b64`);
+    const lines = chunks(b64, J + '.b64');
     const u = opt.user, q = Math.max(0, Math.floor(Number(opt.quotaMB) || 0));
     let pre = '', run = `bash ${J}.sh`;
     if (u) {
@@ -224,12 +243,12 @@ export function machine(env) {
         + (q ? `if [ "$(du -sm /home/${u} | cut -f1)" -gt ${q} ]; then echo "quota: /home/${u} is over ${q} MB; delete files to go on" > ${J}.out; echo "__WH_D_${id}_122__"; exit; fi; ` : '');
       run = `su -s /bin/bash ${u} -c 'cd; export SSL_CERT_FILE=${CA} GIT_SSL_CAINFO=${CA}; ${q ? `ulimit -f ${q * 1024}; ` : ''}bash ~/.wh/${id}.sh; s=$?; rm -f ~/.wh/${id}.sh; exit $s'`;
     }
-    lines.push(`base64 -d ${J}.b64 > ${J}.sh; rm -f ${J}.b64; ( ( ${pre}timeout -k 5 -s INT ${timeoutS} ${run} </dev/null > ${J}.out 2>&1; echo "__WH_D_${id}_$?__" ) & )`);
+    lines.push(`[ -e ${J}.go ] || { : > ${J}.go; cat ${J}.b64.* | base64 -d > ${J}.sh; rm -f ${J}.b64.*; ( ( ${pre}timeout -k 5 -s INT ${timeoutS} ${run} </dev/null > ${J}.out 2>&1; echo "__WH_D_${id}_$?__" ) & ); }`);
     running.set(id, { cmd: opt.display ?? cmd, user: u, t0: Date.now(), label: opt.label, session: opt.session });
     let code = null, timedOut = false;
     try {
       const done = waitFor(new RegExp(`__WH_D_${id}_(\\d+)__`), (timeoutS + 20) * 1000);
-      await one(async () => { for (const l of lines) input(l + '\r'); });
+      await one(() => feed(lines));
       try { code = Number((await done).m[1]); } catch { timedOut = true; await cancel(id); }
       if (my !== gen) return { out: 'the machine restarted while this ran', code: null, timedOut: true };
       if (code === 124 || code === 137) timedOut = true;
@@ -280,6 +299,7 @@ export function machine(env) {
     jobs: () => [...running.entries()].map(([id, j]) => ({ id, ...j, ms: Date.now() - j.t0 })),
     cancel, save, restore, stop,
     send: data => input?.(data),
+    raw: (n = 4000) => out.slice(-n).replace(ANSI, ''), // the console's last bytes, for diagnosis
     onOutput: f => { listeners.add(f); return () => listeners.delete(f); },
     onView: f => { viewers.add(f); return () => viewers.delete(f); },
     onEvent: f => { watchers.add(f); return () => watchers.delete(f); },

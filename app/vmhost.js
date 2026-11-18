@@ -88,7 +88,7 @@ export function sharedMachine({ tab, local, info = () => ({}), dedicated = false
         const reply = (ok, v) => post({ t: 'reply', id: x.id, to: x.from, ok, v });
         try {
           const mm = becomeHost(), a = x.args || [];
-          const v = x.op === 'run' ? await api.run(a[0], a[1], a[2]) : x.op === 'jobs' ? mm.jobs() : x.op === 'cancel' ? await mm.cancel(a[0]) : x.op === 'send' ? mm.send(a[0]) : x.op === 'typed' ? mm.typed(a[0]) : x.op === 'handover' ? await handover() : null;
+          const v = x.op === 'run' ? await api.run(a[0], a[1], a[2]) : x.op === 'jobs' ? mm.jobs() : x.op === 'raw' ? mm.raw(a[0]) : x.op === 'cancel' ? await mm.cancel(a[0]) : x.op === 'send' ? mm.send(a[0]) : x.op === 'typed' ? mm.typed(a[0]) : x.op === 'handover' ? await handover() : null;
           reply(true, v ?? null);
         } catch (err) { reply(false, String(err.message || err)); }
       }
@@ -125,6 +125,7 @@ export function sharedMachine({ tab, local, info = () => ({}), dedicated = false
       }
       return rpc('run', [cmd, t, opt]);
     },
+    async raw(n) { return role === 'host' ? m?.raw?.(n) ?? '' : host ? rpc('raw', [n]) : ''; },
     async jobs() { return role === 'host' ? m?.jobs() || [] : host ? rpc('jobs', []) : []; },
     async cancel(id) { return role === 'host' ? m?.cancel(id) : host && rpc('cancel', [id]); },
     send(d) { role === 'host' ? m?.send(d) : host && rpc('send', [d]).catch(() => {}); },
