@@ -64,6 +64,7 @@ figure { margin: 0; }
 .audit button { font: inherit; padding: 0 6px; }
 .pat { border: 1px solid var(--line); border-radius: 4px; padding: 4px 6px; margin-top: 6px; }
 .pat .kind { font: 10px ui-monospace, monospace; color: var(--accent); text-transform: uppercase; }
+details.call pre.full { margin-top: 6px; padding-top: 6px; border-top: 1px dashed var(--line); }
 #composer { display: flex; gap: 6px; padding: 8px; border-top: 1px solid var(--line); }
 #composer textarea { flex: 1; font: inherit; }
 #app:not([data-busy]) [data-act=stop], #app[data-busy] #send { display: none; }

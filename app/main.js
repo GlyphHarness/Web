@@ -6,13 +6,13 @@ import { state, load, saveMeta, saveSession, saveKeys, newSession, dropSession, 
 import { SCHEMA } from './migrate.js';
 import { rule } from './styles.js';
 import { providers } from './providers.js';
-import { toolDefs, execTool } from './tools.js';
+import { toolDefs, execTool, SWAPPABLE, ARG_MAX } from './tools.js';
 import { render } from './widgets.js';
 import * as pat from './patterns.js';
 import { put, get, handlesIn } from './outstore.js';
 import { buildRequest, measure, report, padAttachment, inherit } from './context.js';
 
-export const VERSION = '0.6.0';
+export const VERSION = '0.7.0';
 const MAX_STEPS = 8; // model <-> tool round trips per user turn
 const MAX_BRANCHES = 6; // concerns per fan_out
 const FOLD_MAX = 2000; // chars of a fold handed back to the source
@@ -65,6 +65,8 @@ const SHELL = `
     <input id="ref" placeholder="e.g. v0.1.0">
     <label>API base URL (empty = provider default)</label>
     <input id="base" placeholder="">
+    <label>Helper model (extracts what was asked for from long tool output; empty = keyword filter)</label>
+    <input id="helper" list="models" placeholder="a small, cheap model id">
     <label>Branch token budget (prompt + output, per fan_out branch)</label>
     <input id="budget" type="number" min="1000" step="1000">
     <p class="note" id="build"></p>
@@ -137,9 +139,21 @@ function stagebox(s) {
   return b;
 }
 
+const staging = new Map(); // sessionId -> promise chain, so cards mount in log order even when arguments load from the store
+
 function showWidget(s, tc) {
-  let a = {};
-  try { a = JSON.parse(tc.function.arguments); } catch {}
+  let logged = {};
+  try { logged = JSON.parse(tc.function.arguments); } catch {}
+  const chip = h('button', { class: 'chip', type: 'button', text: '▣ ' + String(logged.name || logged.title || logged.slot || 'widget') });
+  staging.set(s.id, (staging.get(s.id) || Promise.resolve()).then(async () => {
+    let a = logged;
+    if (a.ref) { try { a = JSON.parse(await get(a.ref)); } catch { a = { kind: 'text', title: logged.name, data: { text: `Stored widget ${logged.ref} is not in this browser.` } }; } }
+    mountWidget(s, tc, a, chip);
+  }));
+  return chip;
+}
+
+function mountWidget(s, tc, a, chip) {
   if (!a.kind && a.html) a = { kind: 'html', title: a.title, data: { html: a.html } }; // calls stored before 0.5
   const slot = String(a.slot || tc.id), title = String(a.title || slot);
   const card = h('section', { class: 'card', 'data-kind': String(a.kind) },
@@ -148,9 +162,7 @@ function showWidget(s, tc) {
   card._slot = slot;
   const box = stagebox(s), old = [...box.children].find(c => c._slot === slot);
   old ? old.replaceWith(card) : box.prepend(card);
-  const chip = h('button', { class: 'chip', type: 'button', text: '▣ ' + title });
   chip._slot = slot;
-  return chip;
 }
 
 // A user interaction with a widget becomes a user message and a turn.
@@ -173,7 +185,14 @@ function messageNode(m, s) {
     if (m.x?.audit) el.append(auditTable(m.x.audit));
   } else if (m.content) el.append(...blocks(m.content));
   for (const tc of m.tool_calls || []) {
-    el.append(h('details', { class: 'call' }, h('summary', { text: `call ${tc.function.name} (${tc.id})` }), h('pre', { text: tc.function.arguments })));
+    const d = h('details', { class: 'call' }, h('summary', { text: `call ${tc.function.name} (${tc.id})` }), h('pre', { text: tc.function.arguments }));
+    const ref = /^\{"ref":"(os:[a-z0-9]+)"/.exec(tc.function.arguments)?.[1];
+    if (ref) d.addEventListener('toggle', async () => { // show the stored arguments on first open
+      if (!d.open || d._full) return;
+      d._full = true;
+      d.append(h('pre', { class: 'full', text: await get(ref).catch(() => null) ?? 'Stored arguments are not in this browser.' }));
+    });
+    el.append(d);
     if (tc.function.name === 'show_widget') el.append(showWidget(s, tc));
   }
   if (m.content) el.append(h('button', { class: 'copy', 'data-copy': 'msg', type: 'button', text: 'copy' }));
@@ -222,7 +241,7 @@ function sessionRow(s) {
 }
 
 function ledgerRow(e, i) {
-  const pct = e.kept == null ? '-' : Math.round(100 * e.kept / e.prevChars) + '%';
+  const pct = e.helper ? 'helper' : e.kept == null ? '-' : Math.round(100 * e.kept / e.prevChars) + '%';
   const hit = e.kept == null ? '' : e.kept === e.prevChars ? 'full' : 'broken';
   const n = v => v == null ? '-' : String(v);
   return h('tr', {},
@@ -380,6 +399,7 @@ async function turns(s, depth, onFirst) {
     by: () => ({ session: s.id, message: s.messages.length - 1, model: set.model, t: Date.now() }),
     knownRef: r => !!state.sessions[r] || s.messages.some(m => typeof m.content === 'string' && m.content.includes(r)),
     onPatterns: renderPatterns,
+    helper: set.helper ? (want, text) => helper(s, want, text) : null,
   };
   for (let step = 0; step < MAX_STEPS; step++) {
     const body = buildRequest(s, set.model, toolDefs);
@@ -415,6 +435,14 @@ async function turns(s, depth, onFirst) {
 
     const calls = failure ? [] : acc.calls.filter(Boolean); // drop half-streamed calls
     if (acc.content || calls.length) {
+      // Long arguments leave the log here, once, before the message is stored:
+      // the log keeps {ref, name} and the full text sits in the output store.
+      for (const c of calls) {
+        if (!SWAPPABLE.has(c.function.name) || c.function.arguments.length <= ARG_MAX) continue;
+        let a;
+        try { a = JSON.parse(c.function.arguments); } catch { continue; }
+        c.function.arguments = JSON.stringify({ ref: await put(c.function.arguments), name: String(a.name || a.title || '').slice(0, 60) || undefined });
+      }
       const m = { role: 'assistant', content: acc.content || null };
       if (calls.length) m.tool_calls = calls;
       m.x = { model: set.model, usage: acc.usage };
@@ -441,6 +469,29 @@ async function turns(s, depth, onFirst) {
   }
   notice(s, `Stopped after ${MAX_STEPS} tool rounds.`);
   return 'limit';
+}
+
+// ---------- helper model ----------
+// A small model that reads a long tool output and returns only what the caller
+// said it wanted. Its requests are traced and get their own ledger rows.
+
+const HELPER_SYSTEM = 'You filter tool output for another program. You are given WANT and OUTPUT. Reply with only the parts of OUTPUT that answer WANT: at most 12 short lines, values copied exactly, no commentary. If OUTPUT does not contain it, reply exactly: not found';
+
+async function helper(s, want, text) {
+  const set = state.meta.settings, p = provider();
+  const body = { model: set.helper, messages: [{ role: 'system', content: HELPER_SYSTEM }, { role: 'user', content: `WANT: ${want}\n\nOUTPUT:\n${text.slice(0, 60000)}` }], stream: true };
+  let out = '', usage = null;
+  for await (const ev of p.stream(body, state.keys[set.provider], ctl?.signal, opt())) {
+    if (ev.error) throw new Error(ev.error.message || 'helper failed');
+    if (ev.usage) usage = ev.usage;
+    out += ev.choices?.[0]?.delta?.content || '';
+  }
+  const entry = report({ t: Date.now(), model: set.helper, helper: true, chars: text.length, kept: null, prevChars: null }, usage);
+  s.ledger.push(entry);
+  saveSession(s);
+  if (s.id === state.meta.active) $('#ledger tbody').append(ledgerRow(entry, s.ledger.length - 1));
+  $('#tracen').textContent = trace.length + ' requests';
+  return out.trim();
 }
 
 // ---------- branch and fold ----------
@@ -578,7 +629,7 @@ const actions = {
   async export() {
     const s = cur(), bundle = exportBundle(s), blobs = {};
     // carry the stored outputs these sessions cite, so handles still resolve after import
-    for (const hd of new Set(bundle.sessions.flatMap(x => x.messages.flatMap(m => handlesIn(m.content))))) { const t = await get(hd).catch(() => null); if (t != null) blobs[hd] = t; }
+    for (const hd of new Set(bundle.sessions.flatMap(x => x.messages.flatMap(m => [...handlesIn(m.content), ...(m.tool_calls || []).flatMap(t => handlesIn(t.function.arguments))])))) { const t = await get(hd).catch(() => null); if (t != null) blobs[hd] = t; }
     if (Object.keys(blobs).length) bundle.blobs = blobs;
     if (pat.all().length) bundle.patterns = pat.all();
     download((s.title.replace(/[^\w\- ]+/g, '').trim() || 'session') + '.session', bundle);
@@ -671,6 +722,7 @@ function bind() {
   $('#key').addEventListener('change', e => { state.keys[state.meta.settings.provider] = e.target.value.trim(); saveKeys(); });
   $('#ref').addEventListener('change', e => { location.search = '?ref=' + encodeURIComponent(e.target.value.trim()); });
 
+  $('#helper').addEventListener('change', e => { state.meta.settings.helper = e.target.value.trim(); saveMeta(); });
   $('#budget').addEventListener('change', e => { state.meta.settings.branchBudget = Number(e.target.value) || BRANCH_BUDGET; saveMeta(); });
   // html widgets report through postMessage; match the sender to its card
   addEventListener('message', e => {
@@ -726,6 +778,7 @@ export function boot(env) {
   $('#key').value = state.keys[set.provider] || '';
   $('#sessions').append(...rows());
   $('#budget').value = set.branchBudget || BRANCH_BUDGET;
+  $('#helper').value = set.helper || '';
   setPane(set.pane || 'insp');
   showBase();
   renderPatterns();

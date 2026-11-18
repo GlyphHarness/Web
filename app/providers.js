@@ -93,12 +93,21 @@ const mock = {
       setTimeout(ok, 15);
     });
     let text = '';
+    if (String(body.messages[0]?.content).startsWith('You filter')) {
+      const said = 'mock-filtered: ' + /WANT: (.*)/.exec(last.content)[1];
+      yield { choices: [{ delta: { content: said } }] };
+      yield { choices: [{ delta: {}, finish_reason: 'stop' }], usage: { prompt_tokens: prompt, completion_tokens: 8, prompt_tokens_details: { cached_tokens: 0 }, cost: 0 } };
+      return;
+    }
     const concern = last.role === 'user' && /^<concern id="([^"]*)"/.exec(last.content);
     if (concern) text = `OUTCOME: done\nRESULT: mock result for ${concern[1]}\nEVIDENCE: folds received: ${(last.content.match(/<fold /g) || []).length}\nOPEN: none`;
     else if (last.role === 'tool') text = 'The tool returned:\n\n```text\n' + last.content + '\n```';
     else if (/^<widget_event/.test(last.content || '')) text = 'Got the event: ' + last.content.split('\n')[1];
     else if (/^<pocket_request/.test(last.content || '')) text = '## Goal\nmock goal\n## Settled\n- mock decision\n## Open\n- none';
-    else if (/run pattern (pt:\w+)/.test(last.content || '')) {
+    else if (/long script/.test(last.content || '')) {
+      const code = "const out = []; for (let i = 0; i < 300; i++) { out.push('row ' + i + '   '); if (i === 150) out.push('total=4950'); } out.push('same', 'same', 'same'); return out.join('\\n'); // " + 'padding '.repeat(60);
+      yield { choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_' + Date.now(), type: 'function', function: { name: 'run_js', arguments: JSON.stringify({ code, name: 'sum rows', want: 'total' }) } }] } }] };
+    } else if (/run pattern (pt:\w+)/.test(last.content || '')) {
       yield { choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_' + Date.now(), type: 'function', function: { name: 'pattern_run', arguments: JSON.stringify({ id: /run pattern (pt:\w+)/.exec(last.content)[1], values: { a: 6, b: 7 } }) } }] } }] };
     } else if (/store pattern/.test(last.content || '')) {
       yield { choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_' + Date.now(), type: 'function', function: { name: 'pattern_put', arguments: JSON.stringify({ kind: 'recipe', title: 'multiply two numbers', labels: ['math'], slots: ['a', 'b'], recipe: { tool: 'run_js', args: { code: 'return {{a}} * {{b}}' } }, refs: ['os:doesnotexist'] }) } }] } }] };

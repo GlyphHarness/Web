@@ -2,7 +2,7 @@
 
 A client-side LLM chat harness served straight from this repo with GitHub Pages. No server, no build step: the browser holds the API key, the sessions and the tools.
 
-Status: working skeleton (v0.6.0). The OpenRouter path is written from the OpenAI-compatible conventions and has not yet been run against the live API.
+Status: working skeleton (v0.7.0). The OpenRouter path is written from the OpenAI-compatible conventions and has not yet been run against the live API.
 
 ## Run
 
@@ -85,9 +85,19 @@ The right pane has two tabs, Stage and Inspector. The stage shows what the model
 - The thread shows a chip per widget; clicking it brings the card into view.
 - The stage is rebuilt from the session log, so it survives reload, export and import.
 
-### Large tool output
+### Keeping calls and results terse
 
-A tool result over 1,500 characters is stored whole in the browser (IndexedDB) under a handle such as `os:1k2j3h4g5f`. The log gets the first 900 and last 400 characters plus the handle, and the model can call `output_read` with `find` or an offset. Exports include the stored outputs their sessions cite.
+Both halves of a tool call can be bulky: the arguments the model wrote, and the result. Each is cut down once, when it enters the log, and the full text is kept in the browser (IndexedDB) under a handle such as `os:1k2j3h4g5f`.
+
+**Arguments.** A `run_js` or `show_widget` call with more than 400 characters of arguments is logged as `{ref, name}`. `name` is the label the model gave the call. Calling a tool with only `{ref}` runs the stored arguments again. Opening the call in the thread shows the full text.
+
+**Results.** Every result first has colour codes, trailing spaces, blank runs and repeated lines removed. If it is still over 1,500 characters it is reduced, in this order:
+
+1. The call said what it `want`s and a helper model is set in Settings: the helper returns at most 12 lines that answer it.
+2. The call said what it `want`s: the lines that mention those words.
+3. Otherwise: the first 900 and last 400 characters.
+
+Every reduced result starts with a tag such as `[os:... 305 lines, 2,514 chars; filter=keywords want="total"; 1 of 1 matching lines]`, so the model and you can see what was done and fetch the rest with `output_read`. A helper that fails falls through to the next step. Helper requests appear in the trace and the ledger. Exports include the stored text their sessions cite.
 
 ### Folding a session
 

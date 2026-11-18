@@ -51,7 +51,7 @@ check('slot reuse: the chart replaces the form card', await stage().locator('.ca
 await say('make it big');
 const big = await visible().locator('.msg[data-role=tool] pre').last().textContent();
 const handle = /os:[a-z0-9]+/.exec(big)?.[0];
-check('output store: long result is a short view with a handle', !!handle && big.length < 1800, `${big.length} chars`);
+check('output store: long result is a short view with a handle', !!handle && /filter=ends/.test(big) && big.length < 1800, `${big.length} chars`);
 await say('read ' + handle);
 check('output store: output_read finds a line by handle', /400: line 399/.test(await visible().locator('.msg[data-role=tool] pre').last().textContent()));
 
@@ -59,6 +59,18 @@ const kept = await page.locator('#ledger td[data-hit]').evaluateAll(n => n.map(x
 check('ledger: every follow-up request keeps the full prefix', kept.length >= 5 && kept.slice(1).every(k => k === 'full:100%'), kept.join(' '));
 const cached = await page.locator('#ledger tbody tr td:nth-child(4)').allTextContents();
 check('ledger: provider-reported cached tokens grow', Number(cached.at(-1)) > Number(cached[1]) && Number(cached[1]) > 0, cached.join(' '));
+
+await say('long script');
+const logged = await page.evaluate(() => { const m = JSON.parse(localStorage['wh:meta']); return JSON.parse(localStorage['wh:s:' + m.active]).messages.findLast(x => x.tool_calls).tool_calls[0].function.arguments; });
+check('arguments: a long call is logged as {ref, name}', /^\{"ref":"os:[a-z0-9]+","name":"sum rows"\}$/.test(logged), logged);
+const filtered = await visible().locator('.msg[data-role=tool] pre').last().textContent();
+check('results: want returns the matching line, not the bulk', /filter=keywords want="total"; 1 of 1/.test(filtered) && /total=4950/.test(filtered) && filtered.length < 300, filtered.replace(/\n/g, ' | '));
+await page.click('[data-pane=insp]');
+await page.fill('#helper', 'mock-1'); await page.dispatchEvent('#helper', 'change');
+await say('long script again');
+const helped = await visible().locator('.msg[data-role=tool] pre').last().textContent();
+check('results: with a helper model the extract comes from it, with its own ledger row', /filter=helper want="total"\]\nmock-filtered: total/.test(helped) && await page.locator('#ledger td:text-is("helper")').count() === 1, helped.replace(/\n/g, ' | '));
+await page.fill('#helper', ''); await page.dispatchEvent('#helper', 'change');
 
 await say('store pattern');
 const stored = /pt:[a-z0-9]+/.exec(await visible().locator('.msg[data-role=tool] pre').last().textContent())?.[0];
@@ -99,7 +111,7 @@ await page.waitForFunction(n => document.querySelectorAll('#sessions [data-id]')
 check('import: restored session shows the same messages', await visible().locator('.msg').count() === before, `${before}`);
 
 await page.reload();
-check('import: stored output came with the file', file.blobs && Object.keys(file.blobs).length === 1);
+check('import: stored output came with the file', file.blobs && Object.keys(file.blobs).length >= 2);
 check('reload: state restored from localStorage', await page.locator('#sessions [data-id]').count() === rowsBefore + 4 && await visible().locator('.msg').count() === before);
 
 await page.click('[data-act=epoch]');

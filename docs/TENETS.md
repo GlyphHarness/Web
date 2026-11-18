@@ -30,6 +30,9 @@ Origins: `L` = glyphcore/lodestar (`CLAUDE.md`, `docs/design/`), `S` = glyphcore
 | 21 | **Patterns are exposed progressively.** Index line first (session start, `pattern_find`), body on request (`pattern_get`). | `patterns.js` `index`, `line` | L2 |
 | 22 | **Structures become slots.** A recipe is a stored tool call with `{{slot}}` placeholders; the model supplies only the values. | `patterns.js` `fill`, `pattern_run`; smoke test "recipe" | W |
 | 23 | **Same content, same id.** A pattern's id is a fingerprint of its content; replacement is by `supersedes`, not edit. | `put` (hash id, `superseded_by`) | L4 |
+| 24 | **Long arguments leave the log once, at append time.** A call over 400 chars of arguments is logged as `{ref, name}`; the text is stored by handle. The logged form is itself a valid call. | `main.js` swap in `turns`, `tools.js` ref resolution; smoke test "arguments" | L `output-store.md` |
+| 25 | **Filters before models; a failed helper passes through.** Every result is squeezed deterministically. A long one is reduced by what the caller said it wants: helper model if set, else keyword lines, else head and tail. | `outstore.js` `squeeze`, `shortlist`, `present`; smoke tests "results" | L `output-store.md`, L `squeeze.md` |
+| 26 | **The helper is metered.** Each helper request is traced and has its own ledger row. | `main.js` `helper` | L6 |
 | 12 | **Secrets stay out of records.** The API key is never in a session file or trace. | `store.js` key separation, `providers.js` trace record | L9 |
 
 ## Concerns (no enforcer yet)
@@ -39,6 +42,10 @@ Origins: `L` = glyphcore/lodestar (`CLAUDE.md`, `docs/design/`), `S` = glyphcore
 | Fold break-even is advisory | The estimate is shown, not enforced, and assumes 600 pocket tokens and full cache hits. Calibrate from real traces. | L `shim.md` |
 | Two views, one prefix | Derive the wire request as stable prefix + ephemeral edge instead of replaying the log. Today scratchpads are baked into the user message. | L12 |
 | Stored output is never pruned | Blobs live in IndexedDB until the browser clears them; no retention rule. | L `output-store.md` Q5 |
+| Models may not send `want` | Filtering by intent depends on the model filling `want`. Measure how often a long result arrives without it. | W |
+| Helper accuracy | Nothing checks a helper extract against the stored output; a wrong extract looks like a fact. The handle is always attached. | L `output-store.md` (false-drop rate) |
+| Models imitating `{ref}` | A model may copy the logged form with a made-up handle; it gets a 'No stored call' result. Watch the rate. | W |
+| Auto-recipes from stored calls | A named stored call is not yet offered as a recipe; the trail has what is needed (`ref`, shape). | W |
 | View threshold vs cache floor | 1,500 chars is a guess; a view that is too thin shows up as an `output_read` after every call. Measure the read rate. | L `output-store.md` Q3 |
 | Persist text only | Rules for reasoning blocks and provider cache markers before `reasoning_details` pass-back is added. | L `shim.md` |
 | Suggest a fold or branch by size | Nothing prompts when a session passes a size threshold. | L11 |

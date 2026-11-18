@@ -1,10 +1,18 @@
 // Tools the model can call. Definitions are sent in a fixed order (they sit in
 // the cacheable prefix) and are worded without reference to where they run.
 //   { def: <OpenAI tool schema>, run(args, ctx) -> string | Promise<string> }
-import { view, read, handlesIn } from './outstore.js';
+import { present, read, get, handlesIn } from './outstore.js';
 import * as pat from './patterns.js';
 
-// ctx = { pads, savePads, depth, fanOut, branchRead, by(), knownRef(h), onPatterns() } from the host.
+// ctx = { pads, savePads, depth, fanOut, branchRead, by(), knownRef(h), onPatterns(), helper(want, text) } from the host.
+
+// Long arguments are stored by handle when the call is logged (main.js), so a
+// logged call can read {ref, name}. That form is also a valid call: it runs the
+// stored arguments again.
+const REF_NOTE = ' An earlier call may appear as {ref, name}: its arguments are stored under that handle and are implied; calling with {ref} repeats it.';
+const REF_PROPS = { ref: { type: 'string' }, name: { type: 'string', description: 'short name for this call, kept as its label' } };
+export const SWAPPABLE = new Set(['run_js', 'show_widget']);
+export const ARG_MAX = 400; // chars of arguments kept inline in the log
 
 const WORKER = `
 const fmt = v => { if (typeof v === 'string') return v; try { return JSON.stringify(v); } catch { return String(v); } };
@@ -46,8 +54,8 @@ const fn = (name, description, properties, required, run) =>
 
 export const tools = [
   fn('run_js',
-    'Run JavaScript in an isolated runtime. The code is the body of an async function: use `return` for the result. console output is captured. Returns the result as text, then any console output.',
-    { code: { type: 'string' } }, ['code'], runJs),
+    'Run JavaScript in an isolated runtime. The code is the body of an async function: use `return` for the result. console output is captured. Returns the result as text, then any console output. If the output may be long, say in `want` what you are looking for (a few words) and only that comes back.' + REF_NOTE,
+    { code: { type: 'string' }, want: { type: 'string' }, ...REF_PROPS }, [], runJs),
   fn('scratchpad_read',
     'Read a labelled scratchpad. With no label, lists the available labels.',
     { label: { type: 'string' } }, [],
@@ -66,8 +74,8 @@ export const tools = [
       return 'Saved.';
     }),
   fn('show_widget',
-    'Show something to the user in a side pane. kind and its data: html {html} (self-contained; call emit(value) to report an interaction), text {text}, image|audio|video|embed {url} (https), table {columns, rows}, chart {type: bar|line, labels, values}, form {fields: [{name, label, type: text|number|select|checkbox|textarea, options, value}], submit}. Reusing a slot replaces what it shows. A user interaction arrives later as a <widget_event> message.',
-    { slot: { type: 'string' }, kind: { type: 'string', enum: ['html', 'text', 'image', 'audio', 'video', 'embed', 'table', 'chart', 'form'] }, title: { type: 'string' }, data: { type: 'object' } }, ['kind', 'data'],
+    'Show something to the user in a side pane. kind and its data: html {html} (self-contained; call emit(value) to report an interaction), text {text}, image|audio|video|embed {url} (https), table {columns, rows}, chart {type: bar|line, labels, values}, form {fields: [{name, label, type: text|number|select|checkbox|textarea, options, value}], submit}. Reusing a slot replaces what it shows. A user interaction arrives later as a <widget_event> message.' + REF_NOTE,
+    { slot: { type: 'string' }, kind: { type: 'string', enum: ['html', 'text', 'image', 'audio', 'video', 'embed', 'table', 'chart', 'form'] }, title: { type: 'string' }, data: { type: 'object' }, ...REF_PROPS }, [],
     ({ slot }) => `Displayed${slot ? ` in slot "${slot}"` : ''}.`),
   fn('output_read',
     'Read stored output by its handle (os:...). Give `find` to get matching lines, or `offset` and `length` for a slice.',
@@ -122,7 +130,7 @@ export async function execTool(call, ctx, via) {
   const out = await exec(call, ctx);
   let args = {};
   try { args = JSON.parse(call.function.arguments || '{}'); } catch {}
-  pat.trailAdd({ t: Date.now(), ...ctx.by?.(), tool: call.function.name, shape: pat.shape(call.function.name, args), via: via || undefined, ok: !/^(Tool error|Error:|Unknown tool|Invalid JSON|Not stored|No )/.test(out), chars: out.length, out: handlesIn(out)[0], ms: Math.round(performance.now() - t0) });
+  pat.trailAdd({ t: Date.now(), ...ctx.by?.(), tool: call.function.name, shape: pat.shape(call.function.name, args), via: via || undefined, ok: !/^(Tool error|Error:|Unknown tool|Invalid JSON|Not stored|No )/.test(out), chars: out.length, ref: typeof args.ref === 'string' ? args.ref : undefined, out: handlesIn(out)[0], ms: Math.round(performance.now() - t0) });
   return out;
 }
 
@@ -131,9 +139,14 @@ async function exec(call, ctx) {
   if (!t) return `Unknown tool: ${call.function.name}`;
   let args;
   try { args = JSON.parse(call.function.arguments || '{}'); } catch (e) { return `Invalid JSON arguments: ${e.message}`; }
+  if (typeof args.ref === 'string' && Object.keys(args).every(k => k === 'ref' || k === 'name')) {
+    const stored = await get(args.ref).catch(() => null);
+    if (stored == null) return `No stored call "${args.ref}".`;
+    try { args = JSON.parse(stored); } catch { return `Stored call "${args.ref}" is not valid JSON.`; }
+  }
   try {
     const out = String(await t.run(args, ctx));
     // Bounded by construction: folds are capped, reads are sliced. Everything else goes through the store.
-    return WHOLE.has(call.function.name) ? out : await view(out);
+    return WHOLE.has(call.function.name) ? out : await present(out, { want: args.want, helper: ctx.helper });
   } catch (e) { return `Tool error: ${e.message || e}`; }
 }
