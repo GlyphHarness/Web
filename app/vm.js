@@ -131,7 +131,8 @@ export function machine(env) {
     // a stand-in terminal: what the guest writes is kept for run() and copied to the card
     master.activate({
       write(d, cb) { const s = typeof d === 'string' ? d : dec.decode(d, { stream: true }); out += s; for (const f of listeners) f(s); if (!quiet || env.showHarness?.()) view({ k: quiet ? 'raw' : 'out', text: s }); cb?.(); },
-      onData(f) { input = f; return { dispose() {} }; },
+      // paced: bursts overrun the guest console's input and it stops reading for good
+      onData(f) { input = paced(f); return { dispose() {} }; },
       onBinary() { return { dispose() {} }; },
       onResize() { return { dispose() {} }; },
     });
@@ -162,10 +163,6 @@ export function machine(env) {
     // runtime policy: a sleep ahead of the real one on PATH refuses long fixed waits
     // however they are spelled (the argument check only sees the literal call)
     // one line per script: the console takes lines of about 2,000 characters at most
-    // sessions' own users read the proxy CA (TLS through the page's network) and use the install service
-    await feed(['mkdir -p /usr/local/bin', ...put('/usr/local/bin/wh-install', INSTALL, '755'), ...put('/usr/local/bin/wh-installd', INSTALLD, '700'),
-      `cp /.wasmenv/proxy.crt ${CA} 2>/dev/null; chmod 644 ${CA}; ( WH_SHELF='${SHELF}' /usr/local/bin/wh-installd </dev/null >/dev/null 2>&1 & )`,
-      `export WH_SHELF='${SHELF}'`, ...put('/usr/local/bin/sleep', SLEEP_SHIM, '755'), 'hash -r']);
     // the network stack (a second wasm) can come up after the shell: wait for its
     // proxy port (polled every second, stops as soon as it answers, at most ~60 s)
     // so the first networked command does not race it
@@ -173,11 +170,23 @@ export function machine(env) {
     const net = waitFor(/__WH_NET_(up|down)__/, 75e3);
     input(`n=0; until timeout 1 bash -c '</dev/tcp/192.168.127.253/80' 2>/dev/null; do n=$((n+1)); [ $n -gt 60 ] && break; sleep 1; done; [ $n -gt 60 ] && echo __WH_NET_"down"__ || echo __WH_NET_"up"__\r`);
     const r = await net.catch(() => null);
+    // set-up after the network is up: input sent while the network stack starts can be lost
+    // sessions' own users read the proxy CA (TLS through the page's network) and use the install service
+    await feed(['mkdir -p /usr/local/bin', ...put('/usr/local/bin/wh-install', INSTALL, '755'), ...put('/usr/local/bin/wh-installd', INSTALLD, '700'),
+      `cp /.wasmenv/proxy.crt ${CA} 2>/dev/null; chmod 644 ${CA}; ( WH_SHELF='${SHELF}' /usr/local/bin/wh-installd </dev/null >/dev/null 2>&1 & )`,
+      `export WH_SHELF='${SHELF}'`, ...put('/usr/local/bin/sleep', SLEEP_SHIM, '755'), 'hash -r']);
     quiet--;
     note(r?.m[1] === 'up' ? 'machine ready' : 'machine ready (no network)');
     say(r?.m[1] === 'up' ? 'ready' : 'ready (no network)');
   }
 
+  // Console input at a pace the guest keeps up with: at most SLICE bytes per tick.
+  const SLICE = 128, TICK = 8;
+  function paced(f) {
+    let q = '', timer = null;
+    const pump = () => { timer = null; if (!q) return; const part = q.slice(0, SLICE); q = q.slice(SLICE); f(part); if (q) timer = setTimeout(pump, TICK); };
+    return data => { q += data; if (!timer) pump(); };
+  }
   // the lines that write a file through the console (each well under its line limit)
   function put(path, text, mode) {
     return [...chunks(btoa(text), path + '.b64'), `cat ${path}.b64.* | base64 -d > ${path} && rm -f ${path}.b64.* && chmod ${mode} ${path}`];
