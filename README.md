@@ -2,7 +2,7 @@
 
 A client-side LLM chat harness served straight from this repo with GitHub Pages. No server, no build step: the browser holds the API key, the sessions and the tools.
 
-Status: working skeleton (v0.25.0). The OpenRouter path is written from the OpenAI-compatible conventions and has not yet been run against the live API.
+Status: working skeleton (v0.26.0). The OpenRouter path is written from the OpenAI-compatible conventions and has not yet been run against the live API.
 
 ## Run
 
@@ -187,6 +187,17 @@ Sessions can belong to a profile (Inspector → Profiles). Access is decided by 
 - **Hierarchy of sessions:** branches and folded sessions inherit their source's profile, and a session can only be moved to its profile or one below it. "New sessions use" picks the profile for new sessions.
 - **In the sidebar** sessions are grouped under their scope path (`org / research`), with a coloured edge and badge.
 - Profiles are part of paste config (merged by name, `parent` by name) and of steering fingerprints and log-repo session rows.
+
+### Scoped values
+
+Named values a session can use (an endpoint, a region, a naming rule, a decision), kept in the scope they belong to: settings-wide, a profile, or one session. A session sees its own, its profile chain's and the settings-wide ones (Inspector → Values).
+
+- **Identity:** an incrementing id (`v1`, `v2`…), a short label, a role and a purpose. Many per scope; labels need not be unique.
+- **Who adds them:** you (+ value), the model on its own (`value_set`, in its session or its own profile, never a profile above), or the model asking you (`value_request`: a card with the label, role, purpose and why; you choose the value, where it is kept and what the model may see). Over the bridge, the paired agent can answer with `answer_value`.
+- **Revisions, not overwrites:** every change appends a revision with who made it, where and why; hiding is a revision; any earlier revision can be restored (appended again). `value_get id history` gives the model the list.
+- **What the model sees**, per value: the value; only the label and purpose, writing `{{v3}}` in tool arguments, which the harness fills in when the call runs (the logged call keeps `{{v3}}`); or nothing. Notes are yours and never sent.
+- **How it learns about them:** the values in scope are listed once in the first message; afterwards a value that is new or changed adds one line to the next message. Cached bytes are never rewritten and the model does not need tool calls to know what a value is for.
+- **Provenance:** made by whom (and whether the model asked for it), in which session, at which message, when, with which model; "go to source" opens that session. "show in chat" puts the value's purpose in the thread.
 
 ### Paste config
 

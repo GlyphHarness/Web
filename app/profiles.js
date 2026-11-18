@@ -62,7 +62,7 @@ export function effective(profiles, id, global, over = {}) {
 export function allowedTool(name, caps) {
   if (name === 'run_js') return caps.run_js;
   if (name === 'fan_out' || name === 'branch_read') return caps.fanout;
-  if (name === 'ask') return caps.ask;
+  if (name === 'ask' || /^value_/.test(name)) return caps.ask;
   if (name === 'shell') return caps.vm;
   if (name === 'repo_read') return REPO_RANK[caps.repo] >= 1;
   if (/^repo_/.test(name)) return REPO_RANK[caps.repo] >= 2;

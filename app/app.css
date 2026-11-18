@@ -220,3 +220,7 @@ button.primary { border-color: var(--accent); background: var(--accent); color: 
 .caps { display: grid; grid-template-columns: repeat(auto-fill, minmax(90px, 1fr)); gap: 6px; }
 .field input[type=color] { padding: 0; height: 28px; }
 #model:disabled { opacity: .7; cursor: not-allowed; }
+.msg[data-role=value] { border-left: 3px solid var(--ok); padding: 4px 10px; }
+.hist summary { font-size: 11px; color: var(--dim); cursor: pointer; }
+.histrow { display: flex; gap: 6px; align-items: baseline; flex-wrap: wrap; font-size: 11px; padding: 2px 0; border-top: 1px dashed var(--line); }
+.histrow button { font-size: 10px; padding: 0 6px; margin-left: auto; }

@@ -16,13 +16,14 @@ import { logRepo } from './logrepo.js';
 import * as asks from './ask.js';
 import * as config from './config.js';
 import * as prof from './profiles.js';
+import * as vals from './values.js';
 import * as bridge from './bridge.js';
 import { render } from './widgets.js';
 import * as pat from './patterns.js';
 import { put, get, handlesIn } from './outstore.js';
 import { buildRequest, measure, report, padAttachment, inherit, imitatesNote, keptLines, corePrompt, EDGE_MIN, markedOnly, edgeReplies, turnOf, KINDS } from './context.js';
 
-export const VERSION = '0.25.0';
+export const VERSION = '0.26.0';
 const MAX_STEPS = 8; // model <-> tool round trips per user turn
 const MAX_BRANCHES = 6; // concerns per fan_out
 const FOLD_MAX = 2000; // chars of a fold handed back to the source
@@ -104,6 +105,11 @@ const SHELL = `
     <select id="newprofile"></select>
     <div class="items" id="profiles"></div>
     <button data-act="prof-add">+ profile</button>
+  </details>
+  <details><summary>Values <span class="count" id="valcount"></span></summary>
+    <p class="note">Named values in this session's scope: its own, its profile chain's and settings-wide ones. Every change is a new revision; hiding is one too. The model is told each value's label and purpose (and the value, if visible) once, when it is new or changed; notes are never sent.</p>
+    <div class="items" id="values"></div>
+    <button data-act="val-add">+ value</button>
   </details>
   <details><summary>Policies <span class="count" id="polcount"></span></summary>
     <p class="note">Checked before every tool call. A call that breaks one is repaired by the policy model from the policy and the call alone, re-checked, and runs as repaired; the original stays visible. The pattern is matched against the call's arguments as JSON.</p>
@@ -268,6 +274,7 @@ function metrics(m) {
     out.push(['size', k(String(m.content || '').length) + ' chars']);
     if (x.ok != null) out.push(['', x.ok ? 'ok' : 'failed']);
     if (x.policy) out.push(['policy', x.policy.id]);
+    if (x.values) out.push(['values', x.values.join(' ')]);
   } else if (m.role === 'user' && typeof m.content === 'string') out.push(['', k(m.content.length) + ' chars']);
   return out;
 }
@@ -539,6 +546,7 @@ function activate(id) {
   $('#title').value = s.title;
   $('#system').value = s.system;
   showScope();
+  renderValues();
   $('#wire').value = s.wire || 'calls';
   $('#repotools').checked = !!s.tools?.includes('repo');
   $('#vmtools').checked = !!s.tools?.includes('vm');
@@ -690,7 +698,7 @@ async function send(text) {
   await stewarding; // a pass already under way may be condensing this session's edge
   await edgeFold(s);
   // a new session opens with the pattern index; it is part of the first message from then on
-  push(s, { role: 'user', content: text + (s.messages.length ? '' : pat.index() + ghNote(s)) + padAttachment(s, state.meta.pads) });
+  push(s, { role: 'user', content: text + (s.messages.length ? '' : pat.index() + ghNote(s)) + valueLines(s, !s.messages.length) + padAttachment(s, state.meta.pads) });
   await run(s);
 }
 
@@ -826,6 +834,7 @@ async function turns(s, depth, onFirst) {
     helper: set.helper ? (want, text) => helper(s, want, text) : null,
     vm: s.tools?.includes('vm') ? vm() : null,
     ask: a => askCard(s, a),
+    values: valueTools(s, () => ctx.by()),
     runtime: (id, what) => smell(s, { kind: 'policy-runtime', tool: 'shell', policy: id, detail: what.slice(0, 200), rule: policyList().find(p => p.name === id)?.rule }),
     git: s.tools?.includes('repo') ? gitClient({ token: gh.token, trace, get, confirm: what => approve(s, what), readOnly: () => [state.meta.settings.logRepo].filter(Boolean), scope: repo => eff(s).repoAllowed(repo) ? null : `${repo} is outside this session's scope (${eff(s).path}).` }) : null,
   };
@@ -921,15 +930,18 @@ async function turns(s, depth, onFirst) {
       } else {
         if (pol) await relog(s, tc, pol.to);
         tc._t0 = performance.now();
-        content = await execTool(pol ? { ...tc, function: { ...tc.function, arguments: pol.to } } : tc, ctx, pol ? 'policy' : undefined);
+        // {{v7}} in arguments becomes the value when the call runs; the log keeps the reference
+        const runArgs = pol ? pol.to : await fullArgs(tc), filled = vals.fill(runArgs, valuesFor(s));
+        if (filled.used.length) tc._used = filled.used;
+        content = await execTool({ ...tc, function: { ...tc.function, arguments: filled.args } }, ctx, pol ? 'policy' : undefined);
         if (pol) content = `[policy ${pol.id}: call rewritten]\n` + content;
       }
       if (pol) smell(s, { kind: pol.refused ? 'policy-refused' : 'policy-rewritten', tool: tc.function.name, policy: pol.id, rule: pol.rule, model: pol.model, from: pol.from.slice(0, 300), to: pol.to?.slice(0, 300), why: pol.refused });
       else if (/^(Tool error|Error:)/.test(content)) smell(s, { kind: 'tool-error', tool: tc.function.name, detail: content.split('\n')[0].slice(0, 200) });
       if (/\n\[timed out after/.test(content)) smell(s, { kind: 'tool-timeout', tool: tc.function.name, detail: content.slice(-120) });
       const m = { role: 'tool', tool_call_id: tc.id, content };
-      m.x = { tool: tc.function.name, ms: tc._t0 ? Math.round(performance.now() - tc._t0) : 0, ok: !/^(Tool error|Error:|Not run:|Unknown tool|Invalid JSON)/.test(content), ...(ctx.audit ? { audit: ctx.audit } : {}), ...(pol ? { policy: pol } : {}) };
-      delete tc._t0;
+      m.x = { tool: tc.function.name, ms: tc._t0 ? Math.round(performance.now() - tc._t0) : 0, ...(tc._used ? { values: tc._used } : {}), ok: !/^(Tool error|Error:|Not run:|Unknown tool|Invalid JSON)/.test(content), ...(ctx.audit ? { audit: ctx.audit } : {}), ...(pol ? { policy: pol } : {}) };
+      delete tc._t0; delete tc._used;
       push(s, m);
     }
   }
@@ -938,6 +950,145 @@ async function turns(s, depth, onFirst) {
 }
 
 const tools_known = name => defsFor({ tools: ['ask', 'repo', 'vm'] }).some(d => d.function.name === name);
+
+// ---------- scoped values (values.js) ----------
+
+const allValues = () => (state.meta.values ??= []);
+const valuesFor = s => vals.visible(allValues(), eff(s).chain, s.id);
+const scopeName = sc => sc.kind === 'global' ? 'settings' : sc.kind === 'session' ? 'session ' + (state.sessions[sc.id]?.title || sc.id) : 'profile ' + (profiles().find(p => p.id === sc.id)?.name || sc.id);
+
+// What the model is told about values: the index once, at the start; afterwards one
+// line per value that is new or changed since this session last saw it. Both ride
+// on a user message, so nothing already cached is rewritten.
+function valueLines(s, first) {
+  s.valSeen ??= {};
+  const out = [];
+  for (const v of valuesFor(s)) {
+    const r = vals.current(v), seen = s.valSeen[v.id];
+    if (seen === r.rev) continue;
+    const l = vals.line(v);
+    if (l) out.push(l); else if (seen != null) out.push(`${v.id} ${r.label}: no longer in use`);
+    s.valSeen[v.id] = r.rev;
+  }
+  if (!out.length) return '';
+  return '\n\n' + (first ? vals.INDEX_HEAD : 'values changed:') + '\n' + out.join('\n');
+}
+
+function valueBy(s, who, by) {
+  const b = by?.() || {};
+  return { who, session: s.id, title: s.title, message: b.message ?? s.messages.length - 1, model: who === 'model' ? cfg(s).model : undefined };
+}
+function valueChip(s, v, r, verb) {
+  if (!r.show) return;
+  thread(s).append(h('article', { class: 'msg', 'data-role': 'value' }, h('header', { class: 'mhead' }, h('span', { class: 'role', text: 'value ' + verb }), h('span', { class: 'mx', text: `${v.id} rev ${r.rev} · ${scopeName(v.scope)}` })),
+    h('div', { class: 'txt', text: `${r.label} [${r.role}]${r.purpose ? ' · ' + r.purpose : ''}` })));
+}
+
+// The value tools for one session.
+function valueTools(s, by) {
+  const find = id => valuesFor(s).find(v => v.id === String(id || '').trim());
+  const leaf = s.profile && profiles().some(p => p.id === s.profile) ? s.profile : null;
+  const done = v => { s.valSeen ??= {}; s.valSeen[v.id] = vals.current(v).rev; saveMeta(); saveSession(s); renderValues(); };
+  return {
+    async request(a) {
+      const v = await valueCard(s, a, by);
+      if (!v) return 'The person declined to give a value.';
+      done(v);
+      return vals.line(v) || `${v.id} stored (not visible to you)`;
+    },
+    set(a) {
+      if (a.id) {
+        const v = find(a.id);
+        if (!v) return `No value ${a.id} in this session's scope.`;
+        if (!vals.modelWritable(v, leaf, s.id)) return `Not changed: ${v.id} belongs to ${scopeName(v.scope)}; you can change values of this session${leaf ? ' or its profile' : ''} only.`;
+        const r = vals.revise(v, { label: a.label, role: a.role, value: a.value, purpose: a.purpose, hidden: a.hidden === true, why: a.why }, valueBy(s, 'model', by));
+        done(v); valueChip(s, v, r, r.hidden ? 'hidden' : 'revised');
+        return `${v.id} rev ${r.rev}${r.hidden ? ' (hidden)' : ''}`;
+      }
+      if (!a.label || a.value === undefined) return 'Give label and value (and role, purpose) to record a new value.';
+      const scope = a.scope === 'profile' && leaf ? { kind: 'profile', id: leaf } : { kind: 'session', id: s.id };
+      const v = vals.create(state.meta, scope, { label: a.label, role: a.role, value: a.value, purpose: a.purpose, why: a.why }, valueBy(s, 'model', by));
+      done(v); valueChip(s, v, vals.current(v), 'added');
+      return `${v.id} rev 1 in ${scope.kind === 'profile' ? 'the profile' : 'this session'}`;
+    },
+    get(a) {
+      const v = find(a.id);
+      if (!v) return `No value ${a.id} in this session's scope.`;
+      const r = vals.current(v);
+      if (a.history) return vals.history(v, r.expose === 'value');
+      if (r.hidden || r.expose === 'hidden') return `${v.id} is not available to you.`;
+      return vals.line(v);
+    },
+  };
+}
+
+// The person (or the paired agent) answers a value request on a card.
+const valueAsks = new Map();
+function valueCard(s, a, by) {
+  return new Promise(ok => {
+    const id = uid('r'), ch = eff(s).chain;
+    const type = ['text', 'number', 'choice', 'json'].includes(a.type) ? a.type : 'text';
+    const opt = (v, t, sel) => Object.assign(h('option', { value: v, text: t }), { selected: !!sel });
+    const input = type === 'choice' && Array.isArray(a.options) && a.options.length ? h('select', { name: 'value' }, ...a.options.map(o => opt(String(o), String(o))))
+      : Object.assign(h(type === 'json' ? 'textarea' : 'input', { name: 'value', ...(type === 'number' ? { type: 'number' } : {}), class: type === 'json' ? 'mono' : '' }), {});
+    const scopeSel = h('select', { name: 'scope' }, opt('session', 'this session', true), ...ch.slice().reverse().map(p => opt('profile:' + p.id, 'profile ' + prof.chain(profiles(), p.id).map(c => c.name).join(' / '))), opt('global', 'settings-wide'));
+    const expose = h('select', { name: 'expose' }, opt('value', 'the model reads it', true), opt('purpose', 'the model sees label and purpose only'), opt('hidden', 'hidden from the model'));
+    const err = h('p', { class: 'note bad' });
+    const card = h('article', { class: 'msg', 'data-role': 'ask', 'data-vreq': id },
+      h('header', { class: 'mhead' }, h('span', { class: 'role', text: 'value requested' }), h('span', { class: 'mx', text: 'waiting' })),
+      h('form', { class: 'askform', novalidate: '' },
+        h('div', { class: 'askp' }, h('span', { class: 'qtype', text: a.role || 'value' }), h('b', { text: ' ' + clipText(a.label, 60) }), h('span', { text: ' · ' + clipText(a.purpose, 300) })),
+        a.why ? h('p', { class: 'note', text: 'why: ' + clipText(a.why, 300) }) : '',
+        field('value', input), field('notes (yours; never sent)', h('textarea', { name: 'notes', rows: '2' })),
+        h('div', { class: 'row2' }, field('keep in', scopeSel), field('visibility', expose)),
+        h('label', { class: 'check' }, h('input', { type: 'checkbox', name: 'show' }), ' show its purpose in the chat'),
+        err, h('div', { class: 'actions' }, btn('decline', { 'data-vact': 'decline' }), h('button', { type: 'submit', class: 'primary', text: 'store' }))));
+    const finish = (v, who) => { valueAsks.delete(id); slot(card.querySelector('.mhead .mx'), v ? `${v.id} stored by ${who}` : `declined by ${who}`); for (const e of card.querySelectorAll('input, textarea, select, button')) e.disabled = true; link?.emit('value-done', { id, value: v?.id || null, who }); ok(v); };
+    const store = (raw, sc, ex, notes, show, who) => {
+      let value = raw;
+      if (type === 'number') { value = Number(raw); if (raw === '' || !Number.isFinite(value)) return 'a number is required'; }
+      else if (type === 'json') { try { value = JSON.parse(raw); } catch (e) { return 'not valid JSON: ' + e.message; } }
+      else if (String(raw).trim() === '') return 'a value is required';
+      const scope = sc === 'global' ? { kind: 'global' } : String(sc).startsWith('profile:') && ch.some(p => 'profile:' + p.id === sc) ? { kind: 'profile', id: sc.slice(8) } : { kind: 'session', id: s.id };
+      const v = vals.create(state.meta, scope, { label: a.label, role: a.role, purpose: a.purpose, value, notes, expose: ex, show, why: a.why }, { ...valueBy(s, who === 'you' ? 'you' : 'agent', by), requestedBy: 'model' });
+      saveMeta(); valueChip(s, v, vals.current(v), 'added'); finish(v, who); return null;
+    };
+    card.querySelector('form').addEventListener('submit', e => { e.preventDefault(); const f = e.target; err.textContent = store(f.value.value, f.scope.value, f.expose.value, f.notes.value, f.show.checked, 'you') || ''; });
+    card.querySelector('[data-vact=decline]').addEventListener('click', () => finish(null, 'you'));
+    valueAsks.set(id, { store: (x, who) => store(x.value, x.scope || 'session', x.expose || 'value', '', !!x.show, who), decline: who => finish(null, who), label: a.label });
+    thread(s).append(card); scrollDown();
+    link?.emit('value-request', { id, session: s.id, label: a.label, role: a.role, purpose: a.purpose, type });
+  });
+}
+const clipText = (t, n) => String(t ?? '').slice(0, n);
+
+// Inspector: the values in the current session's scope, with history and provenance.
+function renderValues() {
+  const s = cur(), box = $('#values');
+  if (!s || !box) return;
+  const list = valuesFor(s);
+  const exposeSel = r => h('select', { 'data-vf': 'expose' }, ...vals.EXPOSE.map(x => Object.assign(h('option', { value: x, text: { value: 'model reads it', purpose: 'model sees purpose only', hidden: 'hidden from the model' }[x] }), { selected: r.expose === x })));
+  box.replaceChildren(...list.map(v => {
+    const r = vals.current(v), b = r.by || {};
+    return item({ kind: r.role, name: `${v.id} ${r.label}`, meta: `${scopeName(v.scope)} · rev ${r.rev}${r.hidden ? ' · hidden' : ''}`, tone: r.hidden ? 'off' : r.expose === 'value' ? 'ok' : 'warn', attrs: { 'data-val': v.id },
+      body: [
+        field('value', Object.assign(h('textarea', { 'data-vf': 'value', rows: '2', class: 'mono' }), { value: typeof r.value === 'string' ? r.value : JSON.stringify(r.value) })),
+        field('purpose', h('input', { 'data-vf': 'purpose', value: r.purpose || '' })),
+        field('notes (yours; never sent)', Object.assign(h('textarea', { 'data-vf': 'notes', rows: '2' }), { value: r.notes || '' })),
+        h('div', { class: 'row2' }, field('visibility', exposeSel(r)), h('label', { class: 'check' }, Object.assign(h('input', { type: 'checkbox', 'data-vf': 'show' }), { checked: !!r.show }), ' show in chat')),
+        h('p', { class: 'note', text: `made by ${v.revs[0].by?.who || '?'}${v.revs[0].by?.requestedBy ? ' (asked for by the ' + v.revs[0].by.requestedBy + ')' : ''} in "${v.revs[0].by?.title || '?'}" at message ${v.revs[0].by?.message ?? '?'}, ${new Date(v.revs[0].t).toLocaleString()}${v.revs[0].by?.model ? ', ' + v.revs[0].by.model : ''}` }),
+        h('details', { class: 'hist' }, h('summary', { text: `${v.revs.length} revision${v.revs.length > 1 ? 's' : ''}` }),
+          ...v.revs.slice().reverse().map(x => h('div', { class: 'histrow' }, h('code', { text: 'rev ' + x.rev }), h('span', { class: 'note', text: ` ${new Date(x.t).toLocaleString()} by ${x.by?.who || '?'}${x.hidden ? ' (hidden)' : ''}${x.why ? ' · ' + x.why : ''}` }), h('span', { class: 'mono', text: ' ' + clipText(typeof x.value === 'string' ? x.value : JSON.stringify(x.value), 80) }),
+            x.rev !== r.rev ? btn('restore', { 'data-act': 'val-restore', 'data-rev': String(x.rev) }) : ''))),
+      ],
+      actions: [btn('go to source', { 'data-act': 'val-goto' }), btn(r.hidden ? 'unhide' : 'hide', { 'data-act': 'val-hide' })] });
+  }));
+  slot($('#valcount'), list.length || '');
+}
+function valueEdit(v, fields, why) {
+  vals.revise(v, fields, { who: 'you', session: cur()?.id, title: cur()?.title, message: (cur()?.messages.length || 0) - 1 }).why = why;
+  saveMeta(); renderValues();
+}
 
 // ---------- pacing: hold model requests and/or tool calls ----------
 
@@ -1241,7 +1392,7 @@ const download = (name, obj) => {
 
 const actions = {
   trace() { download('webharness-' + new Date().toISOString().replace(/[:.]/g, '-') + '.trace', { kind: 'webharness.trace', version: 1, build: VERSION, exchanges: trace, trail: pat.trail(), smells: smells.all(), proposals: smells.proposals() }); },
-  new() { logSync('session start'); const np = profiles().some(p => p.id === state.meta.settings.newProfile) ? state.meta.settings.newProfile : undefined; const s = newSession({ keep: true, core: 2, edge: 'marks', ...(np ? { profile: np } : {}), ...(() => { const t = ['ask', ...(gh.mode() ? ['repo'] : []), ...(vmWanted() && vmReady() ? ['vm'] : [])]; return t.length ? { tools: t } : {}; })() }); redrawSessions(); activate(s.id); $('#input').focus(); },
+  new() { logSync('session start'); const np = profiles().some(p => p.id === state.meta.settings.newProfile) ? state.meta.settings.newProfile : undefined; const s = newSession({ keep: true, core: 2, edge: 'marks', ...(np ? { profile: np } : {}), ...(() => { const t = ['ask', 'values', ...(gh.mode() ? ['repo'] : []), ...(vmWanted() && vmReady() ? ['vm'] : [])]; return t.length ? { tools: t } : {}; })() }); redrawSessions(); activate(s.id); $('#input').focus(); },
   import() { $('#file').click(); },
   async export() {
     const s = cur(), bundle = exportBundle(s), blobs = {};
@@ -1259,6 +1410,19 @@ const actions = {
     try { await navigator.clipboard.writeText(text); copied = true; } catch {}
     modal({ title: copied ? 'Config copied' : 'Config', body: [copied ? 'Copied to the clipboard (no credentials):' : 'Copy it from here (no credentials):', h('pre', { class: 'cfgshow', text })] });
   },
+  async 'val-add'() {
+    const s = cur(), ch = eff(s).chain;
+    const opt = (v, t) => h('option', { value: v, text: t });
+    const f = { label: h('input', { placeholder: 'short label' }), role: h('input', { placeholder: 'role, e.g. config, decision, endpoint', value: 'config' }), value: h('textarea', { rows: '2', class: 'mono' }), purpose: h('input', { placeholder: 'what it is for' }), scope: h('select', {}, opt('session', 'this session'), ...ch.slice().reverse().map(p => opt('profile:' + p.id, 'profile ' + p.name)), opt('global', 'settings-wide')) };
+    if (!await modal({ title: 'Add a value', body: Object.entries(f).map(([k, el]) => field(k, el)), actions: [{ text: 'Cancel', value: false, cancel: true }, { text: 'Add', value: true, primary: true }] })) return;
+    if (!f.label.value.trim()) return;
+    const sc = f.scope.value, scope = sc === 'global' ? { kind: 'global' } : sc.startsWith('profile:') ? { kind: 'profile', id: sc.slice(8) } : { kind: 'session', id: s.id };
+    vals.create(state.meta, scope, { label: f.label.value.trim(), role: f.role.value.trim() || 'config', value: f.value.value, purpose: f.purpose.value.trim() }, valueBy(s, 'you'));
+    saveMeta(); renderValues();
+  },
+  'val-hide'(el) { const v = allValues().find(x => x.id === el.closest('[data-val]').dataset.val); const r = vals.current(v); valueEdit(v, { hidden: !r.hidden }, r.hidden ? 'unhidden' : 'hidden'); },
+  'val-restore'(el) { const v = allValues().find(x => x.id === el.closest('[data-val]').dataset.val); const old = v.revs.find(x => x.rev === Number(el.dataset.rev)); valueEdit(v, { label: old.label, role: old.role, value: old.value, purpose: old.purpose, expose: old.expose, show: old.show }, 'restored rev ' + old.rev); },
+  'val-goto'(el) { const v = allValues().find(x => x.id === el.closest('[data-val]').dataset.val); const sid = v.revs[0].by?.session; if (state.sessions[sid]) activate(sid); },
   'prof-add'() { const ps = profiles(); const p = { id: uid('p'), name: 'profile-' + (ps.length + 1), color: prof.PALETTE[ps.length % prof.PALETTE.length], settings: {}, caps: {}, locks: [], policies: [] }; ps.push(p); saveMeta(); renderProfiles(); const c = $(`#profiles [data-prof="${p.id}"]`); c.open = true; c.querySelector('[data-pf=name]').focus(); },
   async 'prof-drop'(el) {
     const id = el.closest('[data-prof]').dataset.prof, ps = profiles(), p = ps.find(x => x.id === id);
@@ -1408,6 +1572,15 @@ function bind() {
     const s = cur();
     s.tools = e.target.checked ? [...new Set([...(s.tools || []), 'vm'])] : (s.tools || []).filter(t => t !== 'vm');
     saveSession(s);
+  });
+  $('#values').addEventListener('change', e => {
+    const f = e.target.dataset.vf, card = e.target.closest('[data-val]');
+    if (!f || !card) return;
+    const v = allValues().find(x => x.id === card.dataset.val);
+    let val = e.target.type === 'checkbox' ? e.target.checked : e.target.value;
+    if (f === 'value') { try { const j = JSON.parse(val); if (typeof j === 'object' && j !== null) val = j; } catch {} }
+    valueEdit(v, { [f]: val }, 'edited ' + f);
+    const again = $(`#values [data-val="${v.id}"]`); if (again) again.open = true;
   });
   renderProfiles();
   $('#newprofile').addEventListener('change', e => { state.meta.settings.newProfile = e.target.value || undefined; saveMeta(); });
@@ -1692,6 +1865,14 @@ async function startBridge(pair, env) {
         if (!x) throw new Error('nothing held with id ' + id + '; held: ' + [...held.keys()].join(' '));
         x.done(skip ? 'skip' : 'release', 'the paired agent');
         return { [skip ? 'skipped' : 'released']: id };
+      },
+      answer_value({ req, value, scope, expose, decline }) {
+        const x = valueAsks.get(req);
+        if (!x) throw new Error('no open value request with id ' + req);
+        if (decline) { x.decline('the paired agent'); return { declined: req }; }
+        const e = x.store({ value, scope, expose }, 'the paired agent');
+        if (e) throw new Error(e);
+        return { stored: req };
       },
       answer_ask({ ask, answers, decline }) {
         const x = asking.get(ask);

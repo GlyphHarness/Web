@@ -133,6 +133,14 @@ const mock = {
     } else if (/long script/.test(last.content || '')) {
       const code = "const out = []; for (let i = 0; i < 300; i++) { out.push('row ' + i + '   '); if (i === 150) out.push('total=4950'); } out.push('same', 'same', 'same'); return out.join('\\n'); // " + 'padding '.repeat(60);
       yield { choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_' + Date.now(), type: 'function', function: { name: 'run_js', arguments: JSON.stringify({ code, name: 'sum rows', want: 'total' }) } }] } }] };
+    } else if (/request a value|set a value|revise value v\d+|use value v\d+|history of v\d+/.test(last.content || '')) {
+      const c = last.content, id = /(v\d+)/.exec(c.replace(/^[^]*?(revise value|use value|history of) /, ''))?.[1];
+      const call = /request a value/.test(c) ? ['value_request', { label: 'region', role: 'config', purpose: 'where deploys go', type: 'choice', options: ['eu-west-1', 'us-east-1'], why: 'deploy step needs it' }]
+        : /set a value/.test(c) ? ['value_set', { label: 'naming', role: 'rule', value: 'kebab-case', purpose: 'how repos are named', why: 'agreed in chat' }]
+        : /revise value/.test(c) ? ['value_set', { id, value: 'snake_case', why: 'the person changed their mind' }]
+        : /use value/.test(c) ? ['run_js', { code: `return "deploying to {{${id}}}"` }]
+        : ['value_get', { id, history: true }];
+      yield { choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_' + Date.now(), type: 'function', function: { name: call[0], arguments: JSON.stringify(call[1]) } }] } }] };
     } else if (/ask me/.test(last.content || '')) {
       yield { choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_' + Date.now(), type: 'function', function: { name: 'ask', arguments: JSON.stringify({ questions: [
         { id: 'name', prompt: 'Repo name?', type: 'text' },

@@ -214,12 +214,27 @@ export const askTools = [
     { questions: { type: 'array', items: { type: 'object', properties: { id: { type: 'string' }, prompt: { type: 'string' }, type: { type: 'string', enum: ['text', 'number', 'choice', 'multi', 'confirm', 'json'] }, options: { type: 'array', items: { type: 'string' } }, default: {}, min: { type: 'number' }, max: { type: 'number' }, schema: { type: 'object' }, optional: { type: 'boolean' } }, required: ['id', 'prompt', 'type'] } } }, ['questions'],
     (a, ctx) => ctx.ask ? ctx.ask(a) : 'No one is available to answer.'),
 ];
-const all = () => [...tools, ...repoTools, ...vmTools, ...askTools];
+// Scoped values (values.js): request one from the person, set or revise one, read one.
+export const valueTools = [
+  fn('value_request',
+    'Ask the person for a value you need and keep it in scope for later (an endpoint, a region, a naming rule, a decision). Give a short label, a role, and the purpose it serves. type: text|number|choice|json; options for choice. Returns the stored value line.',
+    { label: { type: 'string' }, role: { type: 'string' }, purpose: { type: 'string' }, type: { type: 'string', enum: ['text', 'number', 'choice', 'json'] }, options: { type: 'array', items: { type: 'string' } }, why: { type: 'string' } }, ['label', 'purpose'],
+    (a, ctx) => ctx.values ? ctx.values.request(a) : 'Values are not available.'),
+  fn('value_set',
+    'Record a value worth keeping in scope, or revise one by id (a new revision; earlier ones are kept). Set hidden: true to retire one. scope: session (default) or profile.',
+    { id: { type: 'string' }, label: { type: 'string' }, role: { type: 'string' }, value: {}, purpose: { type: 'string' }, scope: { type: 'string', enum: ['session', 'profile'] }, hidden: { type: 'boolean' }, why: { type: 'string' } }, [],
+    (a, ctx) => ctx.values ? ctx.values.set(a) : 'Values are not available.'),
+  fn('value_get',
+    'Read a value in scope by id, or its revision history with history: true.',
+    { id: { type: 'string' }, history: { type: 'boolean' } }, ['id'],
+    (a, ctx) => ctx.values ? ctx.values.get(a) : 'Values are not available.'),
+];
+const all = () => [...tools, ...repoTools, ...vmTools, ...askTools, ...valueTools];
 
-const WHOLE = new Set(['ask', 'entry_read', 'fan_out', 'output_read', 'branch_read', 'pattern_find', 'pattern_get', 'pattern_put', 'pattern_run']);
+const WHOLE = new Set(['ask', 'value_request', 'value_set', 'value_get', 'entry_read', 'fan_out', 'output_read', 'branch_read', 'pattern_find', 'pattern_get', 'pattern_put', 'pattern_run']);
 
 export const toolDefs = tools.map(t => t.def);
-export const defsFor = s => [...toolDefs, ...(s.tools?.includes('ask') ? askTools.map(t => t.def) : []), ...(s.tools?.includes('repo') ? repoTools.map(t => t.def) : []), ...(s.tools?.includes('vm') ? vmTools.map(t => t.def) : [])];
+export const defsFor = s => [...toolDefs, ...(s.tools?.includes('ask') ? askTools.map(t => t.def) : []), ...(s.tools?.includes('values') ? valueTools.map(t => t.def) : []), ...(s.tools?.includes('repo') ? repoTools.map(t => t.def) : []), ...(s.tools?.includes('vm') ? vmTools.map(t => t.def) : [])];
 
 // Every call leaves a trail row written by the harness: tool, argument shape, outcome, size, time.
 export async function execTool(call, ctx, via) {

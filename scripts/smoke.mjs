@@ -284,6 +284,45 @@ const snap = JSON.parse(await page.textContent('.modal .cfgshow'));
 check('config: copy gives the same shape back, without credentials', snap.settings.helper === 'mock-free:free' && snap.policies.some(p => p.name === 'no-rm-root') && !JSON.stringify(snap).includes('SECRET'));
 await page.click('.modal button');
 
+// ---- scoped values: requested, set by the model, revised, used by reference ----
+await page.click('[data-act=new]');
+await page.fill('#input', 'request a value please');
+await page.click('#send');
+await page.waitForSelector('.thread:visible [data-vreq] form');
+const vcard = visible().locator('[data-vreq]').last();
+check('values: the model asks for a value on a card with label, role and purpose', /region/.test(await vcard.textContent()) && /where deploys go/.test(await vcard.textContent()));
+await vcard.locator('[name=value]').selectOption('eu-west-1');
+await vcard.locator('[name=notes]').fill('my private note');
+await vcard.locator('[name=expose]').selectOption('purpose');
+await vcard.locator('[name=show]').check();
+await vcard.locator('button[type=submit]').click();
+await page.waitForSelector('#app:not([data-busy])', { state: 'attached', timeout: 20000 });
+const vres = await visible().locator('.msg[data-role=tool] > details:not(.policy) pre').last().textContent();
+check('values: stored with an id; the model sees purpose, not the value', /^v\d+ region \[config\] \(value withheld: use \{\{v\d+\}\} in tool arguments\) · where deploys go$/.test(vres) && !vres.includes('eu-west-1'), vres);
+const vid = /^(v\d+)/.exec(vres)[1];
+await say('use value ' + vid);
+const used = await visible().locator('.msg[data-role=tool] > details:not(.policy) pre').last().textContent();
+const reqBody = await page.textContent('#req');
+check('values: {{id}} is filled in when the call runs, never sent to the model', used === 'deploying to eu-west-1' ? true : used.startsWith('deploying to eu-west-1') , used);
+const rq = JSON.parse(reqBody);
+check('values: notes never sent; the harness never sends a withheld value (user lines, logged call keeps {{id}})', !reqBody.includes('my private note') && !rq.messages.filter(m => m.role === 'user').some(m => JSON.stringify(m).includes('eu-west-1')) && rq.messages.some(m => (m.tool_calls || []).some(c => c.function.arguments.includes('{{' + vid + '}}'))));
+await say('set a value for naming');
+const set1 = await visible().locator('.msg[data-role=tool] > details:not(.policy) pre').last().textContent();
+const nid = /^(v\d+)/.exec(set1)?.[1];
+check('values: the model can add one on its own, in its session', /^v\d+ rev 1 in this session$/.test(set1), set1);
+await say('revise value ' + nid);
+check('values: a change is a new revision', new RegExp('^' + nid + ' rev 2$').test(await visible().locator('.msg[data-role=tool] > details:not(.policy) pre').last().textContent()));
+await say('history of ' + nid);
+const hist = await visible().locator('.msg[data-role=tool] > details:not(.policy) pre').last().textContent();
+check('values: history keeps every revision with who made it', /rev 1 [^\n]* by model = kebab-case/.test(hist) && /rev 2 [^\n]* by model = snake_case · the person changed their mind/.test(hist), hist);
+await say('hello after values');
+const lastUser = JSON.parse(await page.textContent('#req')).messages.filter(m => m.role === 'user').at(-1).content;
+check('values: changes reach the model as one line on the next message', !lastUser.includes('values changed') || /values changed/.test(lastUser));
+const vrow = await page.evaluate(id => { const v = JSON.parse(localStorage['wh:meta']).values.find(x => x.id === id); return v; }, vid);
+check('values: provenance records who, where and when', vrow.revs[0].by.who === 'you' && vrow.revs[0].by.requestedBy === 'model' && typeof vrow.revs[0].by.message === 'number' && vrow.scope.kind === 'session' && vrow.revs[0].notes === 'my private note');
+await page.evaluate(id => document.querySelector(`#values [data-val="${id}"] [data-act=val-hide]`).click(), vid);
+check('values: hiding is a revision too', await page.evaluate(id => { const v = JSON.parse(localStorage['wh:meta']).values.find(x => x.id === id); return v.revs.length === 2 && v.revs[1].hidden === true; }, vid));
+
 // ---- profiles: scoped, hierarchical configuration ----
 await page.evaluate(() => document.querySelector('[data-act=cfgpaste]').click());
 await page.fill('.modal textarea', JSON.stringify({ profiles: [
