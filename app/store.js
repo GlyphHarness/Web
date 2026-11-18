@@ -39,23 +39,30 @@ export function newSession(init = {}) {
   return s;
 }
 
+export const children = id => Object.values(state.sessions).filter(s => s.parent?.id === id);
+export const family = s => [s, ...children(s.id).flatMap(family)];
+
+// Deleting a session deletes its branches. Returns every id removed.
 export function dropSession(id) {
-  delete state.sessions[id];
-  state.meta.order = state.meta.order.filter(x => x !== id);
-  localStorage.removeItem('wh:s:' + id);
+  const ids = family(state.sessions[id]).map(s => s.id);
+  for (const x of ids) { delete state.sessions[x]; localStorage.removeItem('wh:s:' + x); }
+  state.meta.order = state.meta.order.filter(x => !ids.includes(x));
   saveMeta();
+  return ids;
 }
 
-// .session file: same bundle shape, one session, plus the scratchpads. No keys.
+// .session file: same bundle shape, one session with its branches, plus the scratchpads. No keys.
 export function exportBundle(s) {
-  return { kind: 'webharness.session', schema: SCHEMA, exported: new Date().toISOString(), sessions: [s], pads: state.meta.pads };
+  return { kind: 'webharness.session', schema: SCHEMA, exported: new Date().toISOString(), sessions: family(s), pads: state.meta.pads };
 }
 
 export function importBundle(obj) {
   const b = migrate(obj);
   const added = [];
-  for (const s of b.sessions || []) {
-    if (state.sessions[s.id]) s.id = uid('s');
+  const list = b.sessions || [], remap = {};
+  for (const s of list) if (state.sessions[s.id]) remap[s.id] = s.id = uid('s');
+  for (const s of list) {
+    if (s.parent && remap[s.parent.id]) s.parent.id = remap[s.parent.id];
     state.sessions[s.id] = s;
     state.meta.order.unshift(s.id);
     saveSession(s);

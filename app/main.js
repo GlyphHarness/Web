@@ -2,17 +2,20 @@
 // and never rebuilt. Which session is visible, row highlight and panel state are
 // expressed as style rules (styles.js), not by touching the nodes.
 
-import { state, load, saveMeta, saveSession, saveKeys, newSession, dropSession, exportBundle, importBundle, uid } from './store.js';
+import { state, load, saveMeta, saveSession, saveKeys, newSession, dropSession, children, family, exportBundle, importBundle, uid } from './store.js';
 import { SCHEMA } from './migrate.js';
 import { rule } from './styles.js';
 import { providers } from './providers.js';
 import { toolDefs, execTool } from './tools.js';
-import { buildRequest, measure, report, padAttachment } from './context.js';
+import { buildRequest, measure, report, padAttachment, inherit } from './context.js';
 
-export const VERSION = '0.3.0';
+export const VERSION = '0.4.0';
 const MAX_STEPS = 8; // model <-> tool round trips per user turn
+const MAX_BRANCHES = 6; // concerns per fan_out
+const FOLD_MAX = 2000; // chars of a fold handed back to the source
 
 const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const h = (tag, attrs = {}, ...kids) => {
   const e = document.createElement(tag);
   for (const [k, v] of Object.entries(attrs)) k === 'text' ? e.textContent = v : e.setAttribute(k, v);
@@ -35,6 +38,8 @@ const SHELL = `
     <input id="model" list="models" placeholder="model id" aria-label="Model">
     <datalist id="models"></datalist>
     <button data-act="export">export .session</button>
+    <button data-act="branch" title="Fork this session at its tail to work the text in the message box as one concern">branch</button>
+    <button data-act="foldback" title="Append this branch's last reply to its source as a fold">fold back</button>
     <button data-act="inspector">inspector</button>
   </header>
   <div id="threads"></div>
@@ -71,6 +76,7 @@ const SHELL = `
   <details open><summary>Cache ledger</summary>
     <p class="note">kept = how much of the previous request this one repeats byte-for-byte (local). cached = input tokens the provider reports as cache hits.</p>
     <table id="ledger"><thead><tr><th>#</th><th>kept</th><th>prompt</th><th>cached</th><th>out</th><th>$</th></tr></thead><tbody></tbody></table>
+    <p class="note" id="ledgersum"></p>
   </details>
   <details><summary>Last request</summary><pre id="req"></pre></details>
   <details><summary>Stream events</summary><pre id="events"></pre></details>
@@ -118,6 +124,7 @@ function messageNode(m) {
   if (m.x?.reasoning) el.append(h('div', { class: 'think', text: m.x.reasoning }));
   if (m.role === 'tool') {
     el.append(h('details', { class: 'call' }, h('summary', { text: 'result ' + m.tool_call_id }), h('pre', { text: m.content })));
+    if (m.x?.audit) el.append(auditTable(m.x.audit));
   } else if (m.content) el.append(...blocks(m.content));
   for (const tc of m.tool_calls || []) {
     el.append(h('details', { class: 'call' }, h('summary', { text: `call ${tc.function.name} (${tc.id})` }), h('pre', { text: tc.function.arguments })));
@@ -126,6 +133,15 @@ function messageNode(m) {
   if (m.content) el.append(h('button', { class: 'copy', 'data-copy': 'msg', type: 'button', text: 'copy' }));
   el._raw = m.content || '';
   return el;
+}
+
+// What each branch literally did, from the harness's own records (never from the model's account).
+function auditTable(audit) {
+  const head = h('tr', {}, ...['concern', 'status', 'requests', 'tool calls', 'prompt', 'cached', '$'].map(t => h('th', { text: t })));
+  return h('table', { class: 'audit' }, head, ...audit.map(a => h('tr', {},
+    h('td', {}, h('button', { type: 'button', 'data-goto': a.branch, text: a.concern })),
+    h('td', { text: a.status }), h('td', { text: String(a.requests) }), h('td', { text: a.tools || '-' }),
+    h('td', { text: String(a.prompt) }), h('td', { text: String(a.cached) }), h('td', { text: a.cost.toFixed(5) }))));
 }
 
 function thread(s) {
@@ -152,7 +168,9 @@ const notice = (s, text) => { thread(s).append(h('article', { class: 'msg', 'dat
 // ---------- sidebar, ledger, pads ----------
 
 function sessionRow(s) {
-  return h('div', { 'data-id': s.id }, h('span', { text: s.title }), h('button', { 'data-act': 'drop', type: 'button', title: 'Delete session', text: '×' }));
+  const attrs = { 'data-id': s.id };
+  if (s.parent) attrs['data-parent'] = s.parent.id;
+  return h('div', attrs, h('span', { text: s.title }), h('button', { 'data-act': 'drop', type: 'button', title: 'Delete session', text: '×' }));
 }
 
 function ledgerRow(e, i) {
@@ -160,7 +178,7 @@ function ledgerRow(e, i) {
   const hit = e.kept == null ? '' : e.kept === e.prevChars ? 'full' : 'broken';
   const n = v => v == null ? '-' : String(v);
   return h('tr', {},
-    h('td', { text: String(i + 1) }), h('td', { 'data-hit': hit, title: `${n(e.kept)} of ${n(e.prevChars)} chars; request ${e.chars} chars; ${e.model}`, text: pct }),
+    h('td', { text: String(i + 1) }), h('td', { 'data-hit': hit, title: `${e.broke ? 'first difference in ' + e.broke + '; ' : ''}${n(e.kept)} of ${n(e.prevChars)} chars; request ${e.chars} chars; ${e.model}`, text: pct }),
     h('td', { text: n(e.prompt) }), h('td', { text: n(e.cached) }), h('td', { text: n(e.completion) }),
     h('td', { text: e.cost == null ? '-' : Number(e.cost).toFixed(5) }));
 }
@@ -184,7 +202,22 @@ function activate(id) {
   $('#title').value = s.title;
   $('#system').value = s.system;
   $('#ledger tbody').replaceChildren(...s.ledger.map(ledgerRow));
+  s.parent ? app.setAttribute('data-branch', '') : app.removeAttribute('data-branch');
+  ledgerSum();
   scrollDown();
+}
+
+// Totals for the visible session, and with its branches when it has any.
+function ledgerSum() {
+  const s = cur();
+  if (!s) return;
+  const sum = list => {
+    const t = { n: 0, prompt: 0, cached: 0, out: 0, cost: 0 };
+    for (const e of list) { t.n++; t.prompt += e.prompt || 0; t.cached += e.cached || 0; t.out += e.completion || 0; t.cost += Number(e.cost) || 0; }
+    return `${t.n} requests, ${t.prompt} prompt (${t.prompt ? Math.round(100 * t.cached / t.prompt) : 0}% cached), ${t.out} out, $${t.cost.toFixed(5)}`;
+  };
+  const fam = family(s);
+  $('#ledgersum').textContent = 'this session: ' + sum(s.ledger) + (fam.length > 1 ? `\nwith ${fam.length - 1} branches: ` + sum(fam.flatMap(x => x.ledger)) : '');
 }
 
 function showBase() {
@@ -252,74 +285,184 @@ function showPrice() {
 async function send(text) {
   const s = cur();
   if (busy || !text.trim()) return;
-  if (s.title === 'New session') {
-    s.title = text.trim().slice(0, 40);
-    $('#title').value = s.title;
-    $(`#sessions [data-id="${s.id}"] span`).textContent = s.title;
-  }
+  if (s.title === 'New session') retitle(s, text.trim().slice(0, 40));
   push(s, { role: 'user', content: text + padAttachment(s, state.meta.pads) });
   await run(s);
 }
 
+function retitle(s, title) {
+  s.title = title;
+  saveSession(s);
+  if (s.id === state.meta.active) $('#title').value = title;
+  $(`#sessions [data-id="${s.id}"] span`).textContent = title;
+}
+
+// One user-initiated run. Branches started inside it go through turns() directly.
 async function run(s) {
-  const set = state.meta.settings, p = provider(), key = state.keys[set.provider];
+  const set = state.meta.settings, p = provider();
   if (!set.model) return notice(s, 'Choose a model first.');
-  if (p.needsKey && !key) return notice(s, 'Add an API key in Settings first.');
+  if (p.needsKey && !state.keys[set.provider]) return notice(s, 'Add an API key in Settings first.');
   busy = true; app.setAttribute('data-busy', ''); ctl = new AbortController();
-  const ctx = { pads: state.meta.pads, savePads: () => { saveMeta(); renderPads(); } };
-  try {
-    for (let step = 0; step < MAX_STEPS; step++) {
-      const body = buildRequest(s, set.model, toolDefs);
-      const entry = measure(s.id, body);
-      $('#req').textContent = JSON.stringify(body, null, 2);
-      $('#events').textContent = '';
+  try { return await turns(s, 0); }
+  finally { busy = false; app.removeAttribute('data-busy'); ctl = null; }
+}
 
-      const live = h('article', { class: 'msg', 'data-role': 'assistant', 'data-live': '' });
-      const think = h('div', { class: 'think' }), txt = h('div', { class: 'txt' });
-      live.append(think, txt);
-      thread(s).append(live);
-      const acc = { content: '', reasoning: '', calls: [], usage: null };
-      let failure = null;
-      try {
-        for await (const ev of p.stream(body, key, ctl.signal, opt())) {
-          $('#events').append(JSON.stringify(ev) + '\n');
-          if (ev.error) throw new Error(ev.error.message || JSON.stringify(ev.error));
-          if (ev.usage) acc.usage = ev.usage;
-          const d = ev.choices?.[0]?.delta;
-          if (!d) continue;
-          if (d.reasoning) { acc.reasoning += d.reasoning; think.append(d.reasoning); }
-          if (d.content) { acc.content += d.content; txt.append(d.content); scrollDown(); }
-          for (const tc of d.tool_calls || []) {
-            const c = acc.calls[tc.index ?? 0] ??= { id: '', type: 'function', function: { name: '', arguments: '' } };
-            if (tc.id) c.id = tc.id;
-            if (tc.function?.name) c.function.name ||= tc.function.name;
-            if (tc.function?.arguments) c.function.arguments += tc.function.arguments;
-          }
+// Request > stream > tool calls > repeat, for one session.
+// Returns 'done', 'failed' or 'limit'. onFirst fires on the first response event.
+async function turns(s, depth, onFirst) {
+  const set = state.meta.settings, p = provider(), key = state.keys[set.provider];
+  const shown = () => s.id === state.meta.active;
+  const ctx = {
+    pads: state.meta.pads, savePads: () => { saveMeta(); renderPads(); },
+    depth, fanOut: args => fanOut(s, args, ctx), branchRead,
+  };
+  for (let step = 0; step < MAX_STEPS; step++) {
+    const body = buildRequest(s, set.model, toolDefs);
+    const entry = measure(s.id, body);
+    if (shown()) { $('#req').textContent = JSON.stringify(body, null, 2); $('#events').textContent = ''; }
+
+    const live = h('article', { class: 'msg', 'data-role': 'assistant', 'data-live': '' });
+    const think = h('div', { class: 'think' }), txt = h('div', { class: 'txt' });
+    live.append(think, txt);
+    thread(s).append(live);
+    const acc = { content: '', reasoning: '', calls: [], usage: null };
+    let failure = null;
+    try {
+      for await (const ev of p.stream(body, key, ctl?.signal, opt())) {
+        if (onFirst) { onFirst(); onFirst = null; }
+        if (shown()) $('#events').append(JSON.stringify(ev) + '\n');
+        if (ev.error) throw new Error(ev.error.message || JSON.stringify(ev.error));
+        if (ev.usage) acc.usage = ev.usage;
+        const d = ev.choices?.[0]?.delta;
+        if (!d) continue;
+        if (d.reasoning) { acc.reasoning += d.reasoning; think.append(d.reasoning); }
+        if (d.content) { acc.content += d.content; txt.append(d.content); if (shown()) scrollDown(); }
+        for (const tc of d.tool_calls || []) {
+          const c = acc.calls[tc.index ?? 0] ??= { id: '', type: 'function', function: { name: '', arguments: '' } };
+          if (tc.id) c.id = tc.id;
+          if (tc.function?.name) c.function.name ||= tc.function.name;
+          if (tc.function?.arguments) c.function.arguments += tc.function.arguments;
         }
-      } catch (e) { failure = e; }
-      live.remove();
-      $('#tracen').textContent = trace.length + ' requests';
-
-      const calls = failure ? [] : acc.calls.filter(Boolean); // drop half-streamed calls
-      if (acc.content || calls.length) {
-        const m = { role: 'assistant', content: acc.content || null };
-        if (calls.length) m.tool_calls = calls;
-        m.x = { model: set.model, usage: acc.usage };
-        if (acc.reasoning) m.x.reasoning = acc.reasoning;
-        push(s, m);
       }
-      s.ledger.push(report(entry, acc.usage));
-      saveSession(s);
-      if (s.id === state.meta.active) $('#ledger tbody').append(ledgerRow(entry, s.ledger.length - 1));
+    } catch (e) { failure = e; }
+    live.remove();
+    $('#tracen').textContent = trace.length + ' requests';
 
-      if (failure) { if (failure.name !== 'AbortError') notice(s, String(failure.message || failure)); return; }
-      if (!calls.length) return;
-      for (const tc of calls) push(s, { role: 'tool', tool_call_id: tc.id, content: await execTool(tc, ctx) });
+    const calls = failure ? [] : acc.calls.filter(Boolean); // drop half-streamed calls
+    if (acc.content || calls.length) {
+      const m = { role: 'assistant', content: acc.content || null };
+      if (calls.length) m.tool_calls = calls;
+      m.x = { model: set.model, usage: acc.usage };
+      if (acc.reasoning) m.x.reasoning = acc.reasoning;
+      push(s, m);
     }
-    notice(s, `Stopped after ${MAX_STEPS} tool rounds.`);
-  } finally {
-    busy = false; app.removeAttribute('data-busy'); ctl = null;
+    s.ledger.push(report(entry, acc.usage));
+    saveSession(s);
+    if (shown()) $('#ledger tbody').append(ledgerRow(entry, s.ledger.length - 1));
+    ledgerSum();
+
+    if (failure) { if (failure.name !== 'AbortError') notice(s, String(failure.message || failure)); return 'failed'; }
+    if (!calls.length) return 'done';
+    for (const tc of calls) {
+      ctx.audit = null;
+      const m = { role: 'tool', tool_call_id: tc.id, content: await execTool(tc, ctx) };
+      if (ctx.audit) m.x = { audit: ctx.audit };
+      push(s, m);
+    }
   }
+  notice(s, `Stopped after ${MAX_STEPS} tool rounds.`);
+  return 'limit';
+}
+
+// ---------- branch and fold ----------
+//
+// A branch is a session that starts as a byte-identical copy of its source's
+// log up to a cut, plus one message naming a concern. Its turns stay in the
+// branch. Only its fold (the final message, in a fixed shape) goes back to the
+// source, appended as a new message: the source's earlier bytes never change.
+
+const FOLD_SHAPE = `When the work is finished, make your final message exactly this shape and nothing else:
+OUTCOME: done | partial | failed
+RESULT: what was found or produced, as tersely as accuracy allows
+EVIDENCE: the specifics needed to act on it (values, names, short excerpts)
+OPEN: what remains, or none
+Do not recount the steps taken or tools used; that record is attached automatically.`;
+
+const foldTag = (id, text, branch, did = '') => `<fold concern=${JSON.stringify(id)}${branch ? ` branch="${branch}"` : ''}${did}>\n${text}\n</fold>`;
+
+// The harness's own record of a branch: counted from its log and ledger.
+function auditOf(b, concern, status) {
+  const names = {};
+  for (const m of b.messages.slice(b.parent.at)) for (const t of m.tool_calls || []) names[t.function.name] = (names[t.function.name] || 0) + 1;
+  const sum = k => b.ledger.reduce((n, e) => n + (Number(e[k]) || 0), 0);
+  return { concern, branch: b.id, status, requests: b.ledger.length, tools: Object.entries(names).map(([k, n]) => `${k}:${n}`).join(' '), prompt: sum('prompt'), cached: sum('cached'), cost: sum('cost') };
+}
+const concernMessage = (id, task, deps = '') => `<concern id=${JSON.stringify(id)}>\n${task}\n</concern>\n${deps ? deps + '\n' : ''}\n${FOLD_SHAPE}`;
+
+function fork(source, id, cut) {
+  const b = newSession({
+    title: '↳ ' + id, system: source.system, padSeen: { ...source.padSeen },
+    parent: { id: source.id, at: cut, concern: id },
+    messages: structuredClone(source.messages.slice(0, cut)),
+  });
+  inherit(b.id, source.id);
+  ($$(`#sessions [data-parent="${source.id}"]`).at(-1) || $(`#sessions [data-id="${source.id}"]`)).after(sessionRow(b));
+  return b;
+}
+
+const foldOf = (b, status, task) => {
+  const m = b.messages.at(-1);
+  if (status === 'done' && m?.role === 'assistant' && m.content) return m.content.length > FOLD_MAX ? m.content.slice(0, FOLD_MAX) + '\n[truncated; see branch_read]' : m.content;
+  return `OUTCOME: failed\nRESULT: the branch ended without a fold (${status})\nEVIDENCE: none\nOPEN: ${task}`;
+};
+
+// The fan_out tool. Concerns with no unmet `after` run together as a wave; the
+// next wave gets the folds it depends on. The very first branch goes out alone
+// until its response starts, so its siblings can read the cache it writes.
+async function fanOut(source, args, ctx) {
+  const list = (Array.isArray(args?.concerns) ? args.concerns : [])
+    .filter(c => c && typeof c.id === 'string' && typeof c.task === 'string').slice(0, MAX_BRANCHES);
+  if (!list.length) return 'No valid concerns. Each needs {id, task}.';
+  if (new Set(list.map(c => c.id)).size !== list.length) return 'Concern ids must be unique.';
+  // The source log ends with the assistant message that made this call. Branches
+  // fork just before it: exactly the bytes of the source's last request.
+  const cut = source.messages.length - 1;
+  const folds = new Map(), branches = new Map(), audits = new Map(), pending = new Map(list.map(c => [c.id, c]));
+  let warm = null;
+  const work = async (c, first) => {
+    const deps = (c.after || []).filter(id => folds.has(id)).map(id => foldTag(id, folds.get(id))).join('\n');
+    const b = fork(source, c.id, cut);
+    branches.set(c.id, b.id);
+    push(b, { role: 'user', content: concernMessage(c.id, c.task, deps) });
+    let status;
+    if (first) {
+      let go;
+      warm = new Promise(r => go = r);
+      try { status = await turns(b, 1, go); } finally { go(); }
+    } else { await warm; status = await turns(b, 1); }
+    folds.set(c.id, foldOf(b, status, c.task));
+    audits.set(c.id, auditOf(b, c.id, status));
+  };
+  let started = false;
+  while (pending.size) {
+    const wave = [...pending.values()].filter(c => (c.after || []).every(id => !pending.has(id)));
+    if (!wave.length) { for (const c of pending.values()) folds.set(c.id, `OUTCOME: failed\nRESULT: dependency cycle in "after"\nEVIDENCE: none\nOPEN: ${c.task}`); break; }
+    for (const c of wave) pending.delete(c.id);
+    await Promise.all(wave.map((c, i) => work(c, !started && i === 0)));
+    started = true;
+  }
+  ctx.audit = list.map(c => audits.get(c.id)).filter(Boolean);
+  // The fold's attributes are harness-recorded facts; its body is the branch's own words.
+  return list.map(c => {
+    const a = audits.get(c.id);
+    return foldTag(c.id, folds.get(c.id), branches.get(c.id), a ? ` requests="${a.requests}"${a.tools ? ` tool_calls="${a.tools}"` : ''}` : '');
+  }).join('\n');
+}
+
+function branchRead({ branch }) {
+  const b = state.sessions[branch];
+  if (!b?.parent) return `No branch "${branch}".`;
+  return JSON.stringify(b.messages.slice(b.parent.at).map(m => ({ role: m.role, content: m.content, calls: m.tool_calls?.map(t => t.function) })));
 }
 
 // ---------- wiring ----------
@@ -340,14 +483,36 @@ const actions = {
   },
   inspector() { state.meta.settings.inspector = !state.meta.settings.inspector; saveMeta(); applyInspector(); },
   stop() { ctl?.abort(); },
+  // Manual branch: the message box text becomes the concern.
+  async branch() {
+    const src = cur(), task = $('#input').value.trim();
+    if (busy) return;
+    if (!task) return notice(src, 'Type the concern for the branch in the message box first.');
+    $('#input').value = '';
+    const b = fork(src, task.slice(0, 30), src.messages.length);
+    activate(b.id);
+    push(b, { role: 'user', content: concernMessage(b.parent.concern, task) });
+    await run(b);
+  },
+  // Manual fold: appended to the source, which is not run, so several folds can be batched before the next send.
+  foldback() {
+    const b = cur(), src = state.sessions[b.parent?.id];
+    if (busy || !src) return;
+    const m = b.messages.at(-1);
+    if (m?.role !== 'assistant' || !m.content) return notice(b, 'Nothing to fold: the branch has no final reply yet.');
+    if (b.folded && !confirm('This branch was already folded back. Append it again?')) return;
+    b.folded = true;
+    saveSession(b);
+    push(src, { role: 'user', content: foldTag(b.parent.concern, foldOf(b, 'done', ''), b.id) });
+    activate(src.id);
+  },
   models() { loadModels(true); },
   drop(el) {
     const id = el.closest('[data-id]').dataset.id;
     if (busy || !confirm(`Delete "${state.sessions[id].title}"? This cannot be undone.`)) return;
-    dropSession(id);
-    el.closest('[data-id]').remove();
-    $(`.thread[data-session="${id}"]`)?.remove();
-    if (state.meta.active === id) state.meta.order.length ? activate(state.meta.order[0]) : actions.new();
+    const gone = dropSession(id);
+    for (const x of gone) { $(`#sessions [data-id="${x}"]`)?.remove(); $(`.thread[data-session="${x}"]`)?.remove(); }
+    if (gone.includes(state.meta.active)) state.meta.order.length ? activate(state.meta.order[0]) : actions.new();
   },
   'pad-add'() { state.meta.pads.push({ id: uid('p'), label: 'pad ' + (state.meta.pads.length + 1), text: '', include: false }); saveMeta(); renderPads(); },
   'pad-drop'(el) { const id = el.closest('[data-pad]').dataset.pad; state.meta.pads = state.meta.pads.filter(p => p.id !== id); saveMeta(); renderPads(); },
@@ -361,6 +526,8 @@ function bind() {
       navigator.clipboard.writeText(text).then(() => { copy.textContent = 'copied'; setTimeout(() => copy.textContent = 'copy', 900); });
       return;
     }
+    const go = e.target.closest('[data-goto]');
+    if (go) return state.sessions[go.dataset.goto] ? activate(go.dataset.goto) : undefined;
     const act = e.target.closest('[data-act]');
     if (act) return actions[act.dataset.act]?.(act);
     const row = e.target.closest('#sessions [data-id]');
@@ -392,11 +559,19 @@ function bind() {
     if (!f) return;
     try {
       const added = importBundle(JSON.parse(await f.text()));
-      for (const s of added) $('#sessions').prepend(sessionRow(s));
+      $('#sessions').replaceChildren(...rows());
       renderPads();
-      if (added[0]) activate(added[0].id);
+      const top = added.find(s => !s.parent) || added[0];
+      if (top) activate(top.id);
     } catch (err) { alert('Import failed: ' + err.message); }
   });
+}
+
+// Sidebar rows: top-level sessions in order, each followed by its branches.
+function rows() {
+  const all = state.meta.order.map(id => state.sessions[id]);
+  const under = s => [sessionRow(s), ...all.filter(x => x.parent?.id === s.id).reverse().flatMap(under)];
+  return all.filter(s => !s.parent || !state.sessions[s.parent.id]).flatMap(under);
 }
 
 export function boot(env) {
@@ -411,7 +586,7 @@ export function boot(env) {
   $('#provider').value = set.provider;
   $('#model').value = set.model;
   $('#key').value = state.keys[set.provider] || '';
-  $('#sessions').append(...state.meta.order.map(id => sessionRow(state.sessions[id])));
+  $('#sessions').append(...rows());
   showBase();
   renderPads();
   applyInspector();

@@ -2,13 +2,13 @@
 
 A client-side LLM chat harness served straight from this repo with GitHub Pages. No server, no build step: the browser holds the API key, the sessions and the tools.
 
-Status: working skeleton (v0.3.0). The OpenRouter path is written from the OpenAI-compatible conventions and has not yet been run against the live API.
+Status: working skeleton (v0.4.0). The OpenRouter path is written from the OpenAI-compatible conventions and has not yet been run against the live API.
 
 ## Run
 
 - Hosted: enable Pages (Settings > Pages > Deploy from a branch > `main`, `/ (root)`), then open `https://glyphcore.github.io/WebHarness/`.
 - Local: `python3 -m http.server 8787` in the repo root, then open `http://localhost:8787/`.
-- No key needed to try it: choose the provider "Mock (offline)" and model `mock-1`. Say "tool" or "widget" to see a tool round trip.
+- No key needed to try it: choose the provider "Mock (offline)" and model `mock-1`. Say "tool", "widget" or "fan out" to see a tool round trip.
 - Smoke test (needs Playwright): `node scripts/smoke.mjs`
 
 ## How it fits together
@@ -53,9 +53,20 @@ The same "API base URL" setting points the OpenRouter provider at any other Open
 
 The model list and prices come from the provider's `/models` endpoint at run time and are cached per provider for a day (`wh:models:<provider>`, "refresh list" refetches). Nothing is hardcoded. The inspector shows the chosen model's price per 1M input, cached input, cache write, output and reasoning tokens, plus per-search and per-request charges. Price keys this build has no label for are shown raw. The ledger's cost column is what the provider reports per request.
 
+### Branch and fold
+
+A branch is a session forked from another at a cut point: a byte-identical copy of the source log plus one message naming a concern. Its turns stay in the branch. Only its fold comes back, in a fixed shape (OUTCOME, RESULT, EVIDENCE, OPEN), appended to the source.
+
+- **By the model:** the `fan_out` tool takes a list of `{id, task, after}` concerns. Concerns with no unmet `after` run in parallel as a wave; a later wave gets the folds it depends on. All folds return as one tool result. `branch_read` fetches a branch's transcript by id.
+- **By hand:** type a concern in the message box and press "branch". "fold back" appends the branch's last reply to its source without running it, so several folds can be batched.
+- **Audit:** the table under a `fan_out` result (status, requests, tool calls, tokens, cost per branch) is built from the harness's records, not from what the model says it did.
+- Limits: 6 concerns per call, 8 tool rounds per branch, no fan-out inside a branch.
+
+The rules this follows, where each is enforced, and what is still open are in [docs/TENETS.md](docs/TENETS.md).
+
 ### Tools
 
-Tool definitions make no mention of where they run. Current set: `run_js`, `scratchpad_read`, `scratchpad_write`, `show_widget`.
+Tool definitions make no mention of where they run. Current set: `run_js`, `scratchpad_read`, `scratchpad_write`, `show_widget`, `fan_out`, `branch_read`.
 
 - `run_js` runs in a dedicated Worker: no DOM, no localStorage (so no API key), killed after 5 s. It is not a network sandbox; code can still call `fetch`.
 - `show_widget` renders HTML in an iframe with `sandbox="allow-scripts"`, which cannot read the page or its storage.
@@ -74,5 +85,5 @@ Which session is visible, the highlighted row and the inspector toggle are each 
 
 - OpenRouter specifics: explicit `cache_control` breakpoints, provider pinning for cache affinity, passing `reasoning_details` back in tool loops.
 - Context files with gitignore-style include patterns (CLAUDE.md-like constraints, skills, agents).
-- Rewind and summarise, subagent fan-out on a shared prefix, paradigm comparison runs.
+- Rewind and folding of the source session, paradigm comparison runs. See the concerns list in `docs/TENETS.md`.
 - Markdown rendering beyond fenced code blocks.

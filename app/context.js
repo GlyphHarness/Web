@@ -30,8 +30,14 @@ export function measure(sessionId, body) {
   last.set(sessionId, cur);
   let kept = 0;
   if (prev) while (kept < prev.length && kept < cur.length && prev.charCodeAt(kept) === cur.charCodeAt(kept)) kept++;
+  // Name the first block that differs: line 0 is the model, 1 the tools, then one line per message.
+  let broke = null;
+  if (prev && kept < prev.length) {
+    const line = cur.slice(0, kept).split('\n').length - 1;
+    broke = line === 0 ? 'model' : line === 1 ? 'tools' : 'message ' + (line - 2);
+  }
   return {
-    t: Date.now(), model: body.model, chars: cur.length,
+    t: Date.now(), model: body.model, chars: cur.length, broke,
     // null = no earlier request in this page load to compare against
     kept: prev ? kept : null, prevChars: prev ? prev.length : null,
   };
@@ -48,6 +54,9 @@ export function report(entry, usage) {
   entry.cost = usage.cost ?? null;
   return entry;
 }
+
+// A branch starts as its source's last request plus a tail, so it is measured against that.
+export const inherit = (childId, parentId) => { if (last.has(parentId)) last.set(childId, last.get(parentId)); };
 
 const hash = s => { let h = 5381; for (let i = 0; i < s.length; i++) h = (h * 33 ^ s.charCodeAt(i)) >>> 0; return h.toString(36); };
 

@@ -1,7 +1,7 @@
 // Tools the model can call. Definitions are sent in a fixed order (they sit in
 // the cacheable prefix) and are worded without reference to where they run.
 //   { def: <OpenAI tool schema>, run(args, ctx) -> string | Promise<string> }
-// ctx = { pads, savePads } from the host.
+// ctx = { pads, savePads, depth, fanOut, branchRead } from the host.
 
 const WORKER = `
 const fmt = v => { if (typeof v === 'string') return v; try { return JSON.stringify(v); } catch { return String(v); } };
@@ -61,6 +61,14 @@ export const tools = [
     'Display a small self-contained HTML widget (inline CSS and JS allowed) to the user.',
     { title: { type: 'string' }, html: { type: 'string' } }, ['html'],
     () => 'Displayed.'),
+  fn('fan_out',
+    'Work several concerns in parallel, each in its own isolated continuation of this conversation, and get back one compact fold per concern (OUTCOME, RESULT, EVIDENCE, OPEN). Use it for work whose intermediate steps are not needed here. `after` makes a concern wait for the folds of the listed concern ids.',
+    { concerns: { type: 'array', items: { type: 'object', properties: { id: { type: 'string' }, task: { type: 'string' }, after: { type: 'array', items: { type: 'string' } } }, required: ['id', 'task'] } } }, ['concerns'],
+    (args, ctx) => ctx.depth ? 'fan_out is not available inside a concern.' : ctx.fanOut(args)),
+  fn('branch_read',
+    'Read the working transcript behind a fold, by its branch id. Use only when the fold lacks a needed detail.',
+    { branch: { type: 'string' } }, ['branch'],
+    (args, ctx) => ctx.branchRead(args)),
 ];
 
 export const toolDefs = tools.map(t => t.def);

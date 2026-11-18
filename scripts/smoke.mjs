@@ -42,6 +42,14 @@ check('ledger: every follow-up request keeps the full prefix', kept.length >= 5 
 const cached = await page.locator('#ledger tbody tr td:nth-child(4)').allTextContents();
 check('ledger: provider-reported cached tokens grow', Number(cached.at(-1)) > Number(cached[1]) && Number(cached[1]) > 0, cached.join(' '));
 
+await say('fan out please');
+const folds = await visible().locator('.msg[data-role=tool] pre').last().textContent();
+check('fan_out: three branches fold back, the dependent one received two folds', (folds.match(/<fold /g) || []).length === 3 && /concern="c"[^]*folds received: 2/.test(folds) && await page.locator('#sessions [data-parent]').count() === 3, folds.slice(0, 120));
+check('fan_out: audit table comes from harness records', await visible().locator('.audit tr').count() === 4);
+await visible().locator('.audit [data-goto]').nth(1).click();
+check('branch: first request keeps the whole source prefix', (await page.locator('#ledger td[data-hit]').first().textContent()) === '100%' && Number(await page.locator('#ledger tbody tr td:nth-child(4)').first().textContent()) > 0);
+await page.locator('#sessions > div:not([data-parent])').first().click();
+
 await page.fill('#system', 'Changed system prompt.');
 await page.dispatchEvent('#system', 'change');
 await say('after the edit');
@@ -53,13 +61,13 @@ check('export: bundle has schema and messages, no key', file.kind === 'webharnes
 
 const before = await visible().locator('.msg').count();
 await page.click('[data-act=new]');
-check('new session: old thread hidden by style rule, node kept', await visible().locator('.msg').count() === 0 && await page.locator('.thread').count() === 2);
+check('new session: old thread hidden by style rule, node kept', await visible().locator('.msg').count() === 0 && await page.locator('.thread').count() === 5);
 await page.setInputFiles('#file', await dl.path());
-await page.waitForFunction(n => document.querySelectorAll('#sessions [data-id]').length === n, 3);
+await page.waitForFunction(n => document.querySelectorAll('#sessions [data-id]').length === n, 9);
 check('import: restored session shows the same messages', await visible().locator('.msg').count() === before, `${before}`);
 
 await page.reload();
-check('reload: state restored from localStorage', await page.locator('#sessions [data-id]').count() === 3 && await visible().locator('.msg').count() === before);
+check('reload: state restored from localStorage', await page.locator('#sessions [data-id]').count() === 9 && await visible().locator('.msg').count() === before);
 
 await page.evaluate(() => { const m = JSON.parse(localStorage['wh:meta']); m.schema = 99; localStorage['wh:meta'] = JSON.stringify(m); });
 await page.reload();

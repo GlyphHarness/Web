@@ -6,6 +6,7 @@
 // Rules:
 // - steps[n] turns a schema-n bundle into schema n+1.
 // - A shipped step is never edited. A data change means SCHEMA+1 and a new step.
+// - An optional field that older builds can ignore (e.g. session.parent) needs no bump.
 // - A build never writes data it loaded from a newer schema (it refuses to start).
 
 export const SCHEMA = 1;

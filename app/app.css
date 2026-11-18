@@ -56,6 +56,12 @@ details.call summary, #inspect summary { cursor: pointer; color: var(--dim); }
 .widget iframe { width: 100%; height: 220px; border: 0; background: #fff; display: block; }
 figure { margin: 0; }
 
+#sessions > [data-parent] { margin-left: 14px; font-size: 13px; }
+#app:not([data-branch]) [data-act=foldback] { display: none; }
+#ledgersum { white-space: pre-line; }
+.audit { width: 100%; border-collapse: collapse; font: 11px ui-monospace, monospace; margin-top: 6px; }
+.audit th, .audit td { text-align: left; padding: 2px 4px; border-bottom: 1px solid var(--line); }
+.audit button { font: inherit; padding: 0 6px; }
 #composer { display: flex; gap: 6px; padding: 8px; border-top: 1px solid var(--line); }
 #composer textarea { flex: 1; font: inherit; }
 #app:not([data-busy]) [data-act=stop], #app[data-busy] #send { display: none; }

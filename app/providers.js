@@ -71,15 +71,20 @@ function openaiCompatible({ label, base }) {
 // Offline provider for demos and tests. It streams canned replies, calls a tool
 // when the user message contains "tool", and reports usage with a simulated
 // prefix cache (64-token units, ~4 chars per token) so the ledger can be exercised.
-let mockPrev = '';
+const mockSeen = []; // recent flattened requests, standing in for a provider-side prefix cache
 const mock = {
   label: 'Mock (offline)', needsKey: false,
   async models() { return [{ id: 'mock-1', name: 'Mock 1', ctx: 32000, pricing: { prompt: '0.00000015', completion: '0.0000006', input_cache_read: '0.000000003' } }]; },
   async *stream(body, _key, signal) {
     const flat = JSON.stringify(body.tools || []) + '\n' + body.messages.map(m => JSON.stringify(m)).join('\n');
     let kept = 0;
-    while (kept < mockPrev.length && kept < flat.length && mockPrev[kept] === flat[kept]) kept++;
-    mockPrev = flat;
+    for (const prev of mockSeen) {
+      let i = 0;
+      while (i < prev.length && i < flat.length && prev[i] === flat[i]) i++;
+      kept = Math.max(kept, i);
+    }
+    mockSeen.push(flat);
+    if (mockSeen.length > 20) mockSeen.shift();
     const prompt = Math.ceil(flat.length / 4);
     const cached = Math.floor(kept / 4 / 64) * 64;
     const last = body.messages[body.messages.length - 1];
@@ -88,16 +93,20 @@ const mock = {
       setTimeout(ok, 15);
     });
     let text = '';
-    if (last.role === 'tool') text = 'The tool returned:\n\n```json\n' + last.content + '\n```';
+    const concern = last.role === 'user' && /^<concern id="([^"]*)"/.exec(last.content);
+    if (concern) text = `OUTCOME: done\nRESULT: mock result for ${concern[1]}\nEVIDENCE: folds received: ${(last.content.match(/<fold /g) || []).length}\nOPEN: none`;
+    else if (last.role === 'tool') text = 'The tool returned:\n\n```json\n' + last.content + '\n```';
     else if (/widget/i.test(last.content || '')) {
       yield { choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_' + Date.now(), type: 'function', function: { name: 'show_widget', arguments: JSON.stringify({ title: 'Demo widget', html: '<button onclick="this.textContent=Number(this.textContent)+1">0</button>' }) } }] } }] };
+    } else if (/fan ?out/i.test(last.content || '')) {
+      yield { choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_' + Date.now(), type: 'function', function: { name: 'fan_out', arguments: JSON.stringify({ concerns: [{ id: 'a', task: 'First part.' }, { id: 'b', task: 'Second part.' }, { id: 'c', task: 'Combine a and b.', after: ['a', 'b'] }] }) } }] } }] };
     } else if (/tool/i.test(last.content || '')) {
       yield { choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_' + Date.now(), type: 'function', function: { name: 'run_js', arguments: '' } }] } }] };
       for (const part of ['{"code":', '"console.log(\'hi\'); ', 'return 6*7"}']) {
         await tick();
         yield { choices: [{ delta: { tool_calls: [{ index: 0, function: { arguments: part } }] } }] };
       }
-    } else text = 'Mock reply. Say "tool" or "widget" to see a tool call.\n\n```js\nconst echo = ' + JSON.stringify(String(last.content).slice(0, 60)) + ';\n```';
+    } else text = 'Mock reply. Say "tool", "widget" or "fan out" to see a tool call.\n\n```js\nconst echo = ' + JSON.stringify(String(last.content).slice(0, 60)) + ';\n```';
     for (const w of text.split(/(?<=\s)/)) { await tick(); yield { choices: [{ delta: { content: w } }] }; }
     yield { choices: [{ delta: {}, finish_reason: 'stop' }], usage: { prompt_tokens: prompt, completion_tokens: Math.ceil(text.length / 4), prompt_tokens_details: { cached_tokens: cached }, cost: 0 } };
   },
