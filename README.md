@@ -6,7 +6,7 @@ Status: working skeleton (v0.12.0). The OpenRouter path is written from the Open
 
 ## Run
 
-- Hosted: enable Pages (Settings > Pages > Deploy from a branch > `main`, `/ (root)`), then open `https://glyphcore.github.io/WebHarness/`.
+- Hosted: enable Pages (Settings > Pages > Source > GitHub Actions); every push to `main` deploys to `https://glyphharness.github.io/web/`.
 - Local: `python3 -m http.server 8787` in the repo root, then open `http://localhost:8787/`.
 - No key needed to try it: choose the provider "Mock (offline)" and model `mock-1`. Say "tool", "big", "widget", "form", "chart" or "fan out" to see a tool round trip.
 - Smoke test (needs Playwright): `node scripts/smoke.mjs`

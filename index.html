@@ -12,7 +12,7 @@
 // Everything else loads from ./app/ (this branch) or from a pinned git ref
 // (tag, branch or commit) of the repo via jsDelivr. Data stays on this origin
 // either way, so a pinned build reads the same localStorage.
-const REPO = 'glyphcore/WebHarness';
+const REPO = 'Glyphharness/web';
 const q = new URLSearchParams(location.search);
 if (q.has('ref')) localStorage.setItem('wh:ref', q.get('ref'));
 let ref = localStorage.getItem('wh:ref') || '';
