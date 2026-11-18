@@ -10,9 +10,9 @@ import { toolDefs, execTool, SWAPPABLE, ARG_MAX } from './tools.js';
 import { render } from './widgets.js';
 import * as pat from './patterns.js';
 import { put, get, handlesIn } from './outstore.js';
-import { buildRequest, measure, report, padAttachment, inherit, imitatesNote, keptLines } from './context.js';
+import { buildRequest, measure, report, padAttachment, inherit, imitatesNote, keptLines, corePrompt } from './context.js';
 
-export const VERSION = '0.9.0';
+export const VERSION = '0.10.0';
 const MAX_STEPS = 8; // model <-> tool round trips per user turn
 const MAX_BRANCHES = 6; // concerns per fan_out
 const FOLD_MAX = 2000; // chars of a fold handed back to the source
@@ -77,6 +77,9 @@ const SHELL = `
     <button data-act="models">refresh list</button> <span class="note" id="modelsn"></span>
   </details>
   <details open><summary>System prompt</summary>
+    <label>Core prompt (sent first; follows the two settings below)</label>
+    <pre id="core"></pre>
+    <label>Your system prompt</label>
     <textarea id="system" rows="6"></textarea>
     <label>How past tool calls are sent</label>
     <select id="wire"><option value="calls">calls: structured, as the model made them</option><option value="notes">notes: one text line per call, results as text</option></select>
@@ -285,6 +288,7 @@ function activate(id) {
   $('#system').value = s.system;
   $('#wire').value = s.wire || 'calls';
   $('#keep').checked = !!s.keep;
+  showCore();
   $('#ledger tbody').replaceChildren(...s.ledger.map(ledgerRow));
   s.parent ? app.setAttribute('data-branch', '') : app.removeAttribute('data-branch');
   ledgerSum();
@@ -308,6 +312,11 @@ function showBase() {
   const id = state.meta.settings.provider;
   $('#base').value = state.meta.settings.base?.[id] || '';
   $('#base').placeholder = providers[id].base || 'not used by this provider';
+}
+
+function showCore() {
+  const s = cur();
+  $('#core').textContent = s.core ? corePrompt(s) : 'Not used in this session (created before v0.10).';
 }
 
 function applyInspector() {
@@ -529,7 +538,7 @@ const concernMessage = (id, task, deps = '') => `concern ${id}: ${task}\n${deps 
 
 function fork(source, id, cut) {
   const b = newSession({
-    title: '↳ ' + id, system: source.system, wire: source.wire, keep: source.keep, padSeen: { ...source.padSeen },
+    title: '↳ ' + id, system: source.system, wire: source.wire, keep: source.keep, core: source.core, padSeen: { ...source.padSeen },
     parent: { id: source.id, at: cut, concern: id },
     messages: structuredClone(source.messages.slice(0, cut)),
   });
@@ -624,7 +633,7 @@ const download = (name, obj) => {
 
 const actions = {
   trace() { download('webharness-' + new Date().toISOString().replace(/[:.]/g, '-') + '.trace', { kind: 'webharness.trace', version: 1, build: VERSION, exchanges: trace, trail: pat.trail() }); },
-  new() { const s = newSession({ keep: true }); $('#sessions').prepend(sessionRow(s)); activate(s.id); $('#input').focus(); },
+  new() { const s = newSession({ keep: true, core: 1 }); $('#sessions').prepend(sessionRow(s)); activate(s.id); $('#input').focus(); },
   import() { $('#file').click(); },
   async export() {
     const s = cur(), bundle = exportBundle(s), blobs = {};
@@ -654,7 +663,7 @@ const actions = {
       pocket = m.content;
     }
     const epoch = (src.epoch || 1) + 1;
-    const n = newSession({ title: src.title.replace(/ · epoch \d+$/, '') + ' · epoch ' + epoch, system: src.system, wire: src.wire, keep: src.keep, epoch, from: src.id });
+    const n = newSession({ title: src.title.replace(/ · epoch \d+$/, '') + ' · epoch ' + epoch, system: src.system, wire: src.wire, keep: src.keep, core: src.core, epoch, from: src.id });
     $('#sessions').prepend(sessionRow(n));
     push(n, { role: 'user', content: 'Pocket:\n' + pocket });
     activate(n.id);
@@ -722,8 +731,8 @@ function bind() {
 
   $('#title').addEventListener('change', e => { const s = cur(); s.title = e.target.value || 'Untitled'; saveSession(s); $(`#sessions [data-id="${s.id}"] span`).textContent = s.title; });
   $('#system').addEventListener('change', e => { const s = cur(); s.system = e.target.value; saveSession(s); });
-  $('#keep').addEventListener('change', e => { const s = cur(); s.keep = e.target.checked; saveSession(s); });
-  $('#wire').addEventListener('change', e => { const s = cur(); s.wire = e.target.value; saveSession(s); });
+  $('#keep').addEventListener('change', e => { const s = cur(); s.keep = e.target.checked; saveSession(s); showCore(); });
+  $('#wire').addEventListener('change', e => { const s = cur(); s.wire = e.target.value; saveSession(s); showCore(); });
   $('#model').addEventListener('change', e => { state.meta.settings.model = e.target.value.trim(); saveMeta(); showPrice(); });
   $('#provider').addEventListener('change', e => { state.meta.settings.provider = e.target.value; saveMeta(); $('#key').value = state.keys[e.target.value] || ''; showBase(); loadModels(); });
   $('#base').addEventListener('change', e => { (state.meta.settings.base ??= {})[state.meta.settings.provider] = e.target.value.trim(); saveMeta(); loadModels(); });

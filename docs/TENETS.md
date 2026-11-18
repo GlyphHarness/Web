@@ -38,6 +38,7 @@ Origins: `L` = glyphcore/lodestar (`CLAUDE.md`, `docs/design/`), `S` = glyphcore
 | 29 | **An imitated call is detected, never executed.** In notes form, a reply that writes a `[called ...]` line as text is flagged and counted in the trail. | `imitatesNote`, `turns` | W |
 | 30 | **Markers are single lines, never wrappers.** Folds, concerns, events, pads, the pattern index and result tags each cost one short header line; no tag pairs. | `foldTag`, `concernMessage`, `widgetEvent`, `padAttachment`, `patterns.js` `index`, `outstore.js` `present` | W |
 | 31 | **The model marks what to keep; the harness does the keeping.** A line starting with `!` (or `!!`, critical) survives a fold. Nothing is cut mid-session. A fold built from marks needs no model request. | `context.js` `KEEP_NOTE`, `keptLines`; `epoch` action; smoke tests "keep marks" | W |
+| 32 | **Conventions are declared once, first.** A fixed core prompt opens the request: make real calls with full arguments; abbreviated past calls are the system's records, never to be written; what a result tag means; keep marks. | `context.js` `corePrompt`; smoke test "core prompt" | W |
 | 12 | **Secrets stay out of records.** The API key is never in a session file or trace. | `store.js` key separation, `providers.js` trace record | L9 |
 
 ## Concerns (no enforcer yet)
@@ -52,7 +53,7 @@ Origins: `L` = glyphcore/lodestar (`CLAUDE.md`, `docs/design/`), `S` = glyphcore
 | Stored output is never pruned | Blobs live in IndexedDB until the browser clears them; no retention rule. | L `output-store.md` Q5 |
 | Models may not send `want` | Filtering by intent depends on the model filling `want`. Measure how often a long result arrives without it. | W |
 | Helper accuracy | Nothing checks a helper extract against the stored output; a wrong extract looks like a fact. The handle is always attached. | L `output-store.md` (false-drop rate) |
-| Models imitating `{ref}` | A model may copy the logged form with a made-up handle; it gets a 'No stored call' result. Watch the rate. | W |
+| Imitation after the core prompt | The core prompt tells the model not to write call records; detection stays in place. Measure the imitation count with and without it. | W |
 | Auto-recipes from stored calls | A named stored call is not yet offered as a recipe; the trail has what is needed (`ref`, shape). | W |
 | View threshold vs cache floor | 1,500 chars is a guess; a view that is too thin shows up as an `output_read` after every call. Measure the read rate. | L `output-store.md` Q3 |
 | Persist text only | Rules for reasoning blocks and provider cache markers before `reasoning_details` pass-back is added. | L `shim.md` |

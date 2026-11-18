@@ -2,7 +2,7 @@
 
 A client-side LLM chat harness served straight from this repo with GitHub Pages. No server, no build step: the browser holds the API key, the sessions and the tools.
 
-Status: working skeleton (v0.9.0). The OpenRouter path is written from the OpenAI-compatible conventions and has not yet been run against the live API.
+Status: working skeleton (v0.10.0). The OpenRouter path is written from the OpenAI-compatible conventions and has not yet been run against the live API.
 
 ## Run
 
@@ -98,6 +98,10 @@ Both halves of a tool call can be bulky: the arguments the model wrote, and the 
 3. Otherwise: the first 900 and last 400 characters.
 
 Every reduced result starts with a short tag such as `[os:1k2j3h4g5f 305L keywords 1/1]` (handle, line count, filter), so the model and you can see what was done and fetch the rest with `output_read`. A helper that fails falls through to the next step. Helper requests appear in the trace and the ledger. Exports include the stored text their sessions cite.
+
+### Core prompt
+
+New sessions open every request with a short fixed block of conventions, ahead of your own system prompt. It tells the model to make real tool calls with complete arguments every time, that the abbreviated calls it sees in its history are records written by the system and must never be written by hand, what a result tag means, and (when on) how keep marks work. The exact text is shown above your system prompt in the inspector and changes only with the two settings below it. Sessions created before v0.10 do not get it, so their cached prefix is unchanged.
 
 ### How past tool calls are sent: calls or notes
 

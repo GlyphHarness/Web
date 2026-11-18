@@ -123,6 +123,7 @@ await say('long script');
 await say('and then');
 const wire = JSON.parse(await page.locator('#req').textContent());
 check('notes form: calls and results go out as text turns, roles alternate', !JSON.stringify(wire.messages).includes('tool_call') && wire.messages.every((m, i, a) => m.role !== 'tool' && m.role !== a[i - 1]?.role) && /\[called run_js "sum rows" os:[a-z0-9]+ want: total\]/.test(wire.messages[2].content) && /^\[result run_js "sum rows"\]\n\[os:[^]*total=4950/.test(wire.messages[3].content), JSON.stringify(wire.messages.map(m => m.role)));
+check('core prompt: declared first, and names the record form in use', /^Conventions of this environment:\n- To use a tool, make a real tool call[^]*\[called run_js[^]*Never write one yourself/.test(wire.messages[0].content));
 check('notes form: prefix stays byte-stable', (await page.locator('#ledger td[data-hit]').allTextContents()).slice(1).every(t => t === '100%'));
 
 await page.click('[data-act=new]');

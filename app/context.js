@@ -46,6 +46,24 @@ export const imitatesNote = text => /^\[called \w+/m.test(text || '');
 // session is folded, and the pocket is assembled from them without a model call.
 export const KEEP_NOTE = 'Start a line with ! if it must survive when this conversation is condensed, !! if it is critical. Unmarked lines may be dropped.';
 
+// Core prompt: the harness's own conventions, sent before the user's system
+// prompt in sessions created with session.core set. It is fixed text chosen by
+// the session's settings, so it sits at the very front of the cached prefix.
+// Its job is to say plainly which text is the model's to write and which is the
+// system's record, so an abbreviated past call is never mistaken for a way to call.
+export function corePrompt(session) {
+  const past = session.wire === 'notes'
+    ? 'Your earlier tool calls are shown as lines like [called run_js "name" os:1k2j3h want: ...], each followed by a [result ...] block.'
+    : 'Your earlier tool calls may be shown with their arguments replaced by {ref, name, want}.';
+  return [
+    'Conventions of this environment:',
+    '- To use a tool, make a real tool call with complete arguments, every time.',
+    `- ${past} These are records the system writes after the fact. Never write one yourself: it runs nothing.`,
+    '- When a tool\'s output may be long, state in `want` what you are looking for. A result that starts with a tag like [os:1k2j3h 305L keywords 1/1] was reduced to that; the rest is available from output_read with the handle.',
+    session.keep ? '- ' + KEEP_NOTE : '',
+  ].filter(Boolean).join('\n');
+}
+
 export function keptLines(session, max = 30) {
   const hits = [];
   session.messages.forEach((m, i) => {
@@ -58,7 +76,8 @@ export function keptLines(session, max = 30) {
 
 export function buildRequest(session, model, toolDefs) {
   const messages = [];
-  const system = [session.system, session.keep ? KEEP_NOTE : ''].filter(Boolean).join('\n\n');
+  // sessions from before the core prompt keep their old prefix (system, then the keep note)
+  const system = (session.core ? [corePrompt(session), session.system] : [session.system, session.keep ? KEEP_NOTE : '']).filter(Boolean).join('\n\n');
   if (system) messages.push({ role: 'system', content: system });
   const log = session.messages.map(({ x, ...wire }) => wire); // x = local-only metadata, never sent
   messages.push(...(session.wire === 'notes' ? asNotes(log) : log));
