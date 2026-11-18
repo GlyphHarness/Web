@@ -175,15 +175,31 @@ await page.locator('#sessions > div', { hasText: 'hello there · epoch 2' }).cli
 check('fold session: new epoch starts from the pocket, source kept', /^Pocket:\n[^]*## Settled/.test(await visible().locator('.msg').first().textContent()) && await visible().locator('.msg').count() === 1, await page.inputValue('#title'));
 
 // ---- policies: repaired before they run; smells tracked by steering version; review proposes ----
-await page.evaluate(() => { const t = document.querySelector('#policies'); t.value = 'run_js /while\\s*\\(true\\)/ Never loop without a bound; use a counted loop.'; t.dispatchEvent(new Event('change')); });
+check('policies: the default is a named card, not a text field', await page.evaluate(() => [...document.querySelectorAll('#policies .item .name')].map(e => e.textContent).join()) === 'bounded-waits');
+await page.evaluate(() => document.querySelector('[data-act="pol-add"]').click());
+await page.evaluate(() => {
+  const c = document.querySelector('#policies .item:last-child');
+  const set = (f, v) => { const i = c.querySelector(`[data-pf=${f}]`); i.value = v; i.dispatchEvent(new Event('change', { bubbles: true })); };
+  set('name', 'bounded-loops');
+});
+await page.evaluate(() => {
+  const c = document.querySelector('#policies .item:last-child');
+  const set = (f, v) => { const i = c.querySelector(`[data-pf=${f}]`); i.value = v; i.dispatchEvent(new Event('change', { bubbles: true })); };
+  set('tool', 'run_js');
+});
+await page.evaluate(() => {
+  const c = document.querySelector('#policies .item:last-child');
+  for (const [f, v] of [['pattern', 'while\\s*\\(true\\)'], ['rule', 'Never loop without a bound; use a counted loop.']]) { const i = document.querySelector('#policies .item:last-child').querySelector(`[data-pf=${f}]`); i.value = v; i.dispatchEvent(new Event('change', { bubbles: true })); }
+});
+check('policies: a new one is its own card with name, tool and rule', await page.evaluate(() => { const c = document.querySelector('#policies .item:last-child'); return c.querySelector('.name').textContent === 'bounded-loops' && c.querySelector('.chip').textContent === 'run_js' && /counted loop/.test(c.querySelector('.rule').textContent); }));
 await say('loop forever please');
 const toolOut = () => visible().locator('.msg[data-role=tool] > details:not(.policy) pre').last().textContent();
 const pres = await toolOut();
-check('policy: the breaking call was repaired and the repair ran', /^\[policy p1: call rewritten\]\n6$/.test(pres), JSON.stringify(pres));
+check('policy: the breaking call was repaired and the repair ran', /^\[policy bounded-loops: call rewritten\]\n6$/.test(pres), JSON.stringify(pres));
 const loggedCall = await page.evaluate(() => { const m = JSON.parse(localStorage['wh:meta']); const s = JSON.parse(localStorage['wh:s:' + m.active]); return s.messages.findLast(x => x.tool_calls)?.tool_calls[0].function.arguments; });
 check('policy: the log keeps the repaired call, the original is shown beside it', /for \(let k/.test(loggedCall) && /while \(true\)/.test(await visible().locator('details.policy pre').last().textContent()));
 await say('loop forever please, refuse me');
-check('policy: an unrepairable call does not run', /^Not run: policy p1/.test(await toolOut()));
+check('policy: an unrepairable call does not run', /^Not run: policy bounded-loops/.test(await toolOut()));
 const rows = await page.evaluate(() => JSON.parse(localStorage['wh:smells'] || '[]'));
 check('smells: both events recorded with the steering in effect', rows.filter(r => /^policy-/.test(r.kind)).length === 2 && rows.every(r => r.steer) && rows.some(r => r.kind === 'policy-refused'));
 check('smells: nothing was changed in the session (no automatic pattern)', !(await page.evaluate(() => localStorage['wh:patterns'] || '')).includes('Never loop'));
@@ -191,6 +207,7 @@ await page.evaluate(() => document.querySelector('[data-act=review]').click());
 await page.waitForSelector('#smells [data-kind=proposal]', { state: 'attached' });
 check('review: a pending proposal from the counts', /keep p1/.test(await page.textContent('#smells [data-kind=proposal]')));
 await page.evaluate(() => document.querySelector('#smells [data-act=propose][data-to=dismissed]').click());
+check('policies: the card shows how often it fired', /fired 2/.test(await page.evaluate(() => document.querySelector('#policies .item:last-child .meta').textContent)));
 check('review: dismissing records the decision', await page.evaluate(() => JSON.parse(localStorage['wh:proposals'])[0].status) === 'dismissed');
 
 await page.evaluate(() => { const m = JSON.parse(localStorage['wh:meta']); m.schema = 99; localStorage['wh:meta'] = JSON.stringify(m); });

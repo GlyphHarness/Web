@@ -6,24 +6,33 @@
 // log keeps it, and the original is kept beside it as evidence. No repair, or a
 // repair that still breaks the policy, means the call does not run.
 //
-// Policy text, one per line:   <tool|*> /<regex>/<flags> <rule in plain words>
-// Lines starting with # are comments.
+// A policy is a named item: {name, tool ('*' for any), pattern (regex source),
+// flags, rule (plain words), on}. Smells and the thread refer to it by name.
 
-export const DEFAULT_POLICIES = `# <tool|*> /<regex>/<flags> <rule>   (checked against the call's arguments as JSON)
-shell /\\bsleep\\s+([2-9]\\d|\\d{3,})\\b/ Do not pause with a long fixed sleep. Wait on the condition itself: an until-loop that checks it every few seconds, with an overall limit (for example: until <check> || [ $SECONDS -gt 300 ]; do sleep 3; done).`;
+export const DEFAULT_LIST = [{
+  name: 'bounded-waits', tool: 'shell', pattern: '\\bsleep\\s+([2-9]\\d|\\d{3,})\\b', flags: '', on: true,
+  rule: 'Do not pause with a long fixed sleep. Wait on the condition itself: an until-loop that checks it every few seconds, with an overall limit (for example: until <check> || [ $SECONDS -gt 300 ]; do sleep 3; done).',
+}];
 
-export function parse(text) {
+// The earlier one-line text form, "<tool|*> /<regex>/<flags> <rule>", converted once.
+export function fromText(text) {
   const out = [];
   for (const [i, raw] of String(text || '').split('\n').entries()) {
-    const line = raw.trim();
-    if (!line || line.startsWith('#')) continue;
-    const m = /^(\S+)\s+\/((?:\\.|[^/])+)\/([a-z]*)\s+(.+)$/.exec(line);
-    if (!m) { out.push({ id: 'p' + (i + 1), error: 'cannot read: ' + line.slice(0, 80) }); continue; }
-    try { out.push({ id: 'p' + (i + 1), tool: m[1], re: new RegExp(m[2], m[3]), rule: m[4] }); }
-    catch (e) { out.push({ id: 'p' + (i + 1), error: e.message }); }
+    const m = /^(\S+)\s+\/((?:\\.|[^/])+)\/([a-z]*)\s+(.+)$/.exec(raw.trim());
+    if (m && !raw.trim().startsWith('#')) out.push({ name: 'p' + (i + 1), tool: m[1], pattern: m[2], flags: m[3], rule: m[4], on: true });
   }
   return out;
 }
+
+// Ready to match: {id: name, tool, re, rule}; a bad pattern gives {id, error}.
+export function compile(list) {
+  return (list || []).filter(p => p.on !== false).map(p => {
+    if (!p.pattern || !p.rule) return { id: p.name, error: 'needs a pattern and a rule' };
+    try { return { id: p.name, tool: p.tool || '*', re: new RegExp(p.pattern, p.flags || ''), rule: p.rule }; }
+    catch (e) { return { id: p.name, error: e.message }; }
+  });
+}
+export const parse = text => compile(fromText(text)); // kept for the text form
 
 export const broken = (policies, name, args) => policies.filter(p => !p.error && (p.tool === '*' || p.tool === name) && p.re.test(args));
 

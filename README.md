@@ -2,7 +2,7 @@
 
 A client-side LLM chat harness served straight from this repo with GitHub Pages. No server, no build step: the browser holds the API key, the sessions and the tools.
 
-Status: working skeleton (v0.20.0). The OpenRouter path is written from the OpenAI-compatible conventions and has not yet been run against the live API.
+Status: working skeleton (v0.21.0). The OpenRouter path is written from the OpenAI-compatible conventions and has not yet been run against the live API.
 
 ## Run
 
@@ -178,7 +178,7 @@ A page can call `api.github.com` (it answers any origin) but not git's own HTTP 
 
 ### Policies: repair before a call runs
 
-Inspector → Policies holds rules checked against every tool call's arguments before it runs, one per line: `<tool|*> /regex/flags rule`. A call that breaks one is not just blocked: the policy model (Settings; else the helper, else the session's model) gets a small fixed context (the rule, the tool's schema and the call) and returns corrected arguments. The repair is checked again and runs instead. The log keeps the repaired call (that message has not been sent back yet, so no cached byte changes), the result starts with `[policy p1: call rewritten]`, and the thread shows the original beside it. No repair, or one that still breaks the rule, means `Not run: policy ...`. The default policy turns long fixed `sleep`s in `shell` into bounded waits on a condition.
+Inspector → Policies holds rules checked against every tool call's arguments before it runs. Each is its own card: a name (what smells and the thread refer to), the tool (`*` for any), a pattern matched against the call's arguments as JSON, the rule in plain words, and on/off; the card shows how often it has fired. Policies written in the earlier one-line text form are converted once. A call that breaks one is not just blocked: the policy model (Settings; else the helper, else the session's model) gets a small fixed context (the rule, the tool's schema and the call) and returns corrected arguments. The repair is checked again and runs instead. The log keeps the repaired call (that message has not been sent back yet, so no cached byte changes), the result starts with `[policy p1: call rewritten]`, and the thread shows the original beside it. No repair, or one that still breaks the rule, means `Not run: policy ...`. The default policy turns long fixed `sleep`s in `shell` into bounded waits on a condition.
 
 ### Smells and review: steering quality over time
 

@@ -19,7 +19,7 @@ import * as pat from './patterns.js';
 import { put, get, handlesIn } from './outstore.js';
 import { buildRequest, measure, report, padAttachment, inherit, imitatesNote, keptLines, corePrompt, EDGE_MIN, markedOnly, edgeReplies, turnOf, KINDS } from './context.js';
 
-export const VERSION = '0.20.0';
+export const VERSION = '0.21.0';
 const MAX_STEPS = 8; // model <-> tool round trips per user turn
 const MAX_BRANCHES = 6; // concerns per fan_out
 const FOLD_MAX = 2000; // chars of a fold handed back to the source
@@ -56,7 +56,7 @@ const SHELL = `
   </header>
   <div id="threads"></div>
   <form id="composer">
-    <textarea id="input" rows="3" placeholder="Message (Enter to send, Shift+Enter for a new line)"></textarea>
+    <textarea id="input" rows="3" placeholder="Message (Enter adds a line; send with the button)"></textarea>
     <button id="send">send</button>
     <button type="button" data-act="stop">stop</button>
   </form>
@@ -93,14 +93,15 @@ const SHELL = `
     <input id="budget" type="number" min="1000" step="1000">
     <p class="note" id="build"></p>
   </details>
-  <details><summary>Policies</summary>
-    <p class="note">Checked before every tool call. A call that breaks one is repaired by the policy model from the policy and the call alone, then runs as repaired; the original stays visible. One per line: <code>&lt;tool|*&gt; /regex/flags rule</code>.</p>
-    <textarea id="policies" rows="5" spellcheck="false"></textarea>
-    <p class="note" id="polerr"></p>
+  <details><summary>Policies <span class="count" id="polcount"></span></summary>
+    <p class="note">Checked before every tool call. A call that breaks one is repaired by the policy model from the policy and the call alone, re-checked, and runs as repaired; the original stays visible. The pattern is matched against the call's arguments as JSON.</p>
+    <div class="items" id="policies"></div>
+    <datalist id="toolnames"></datalist>
+    <button data-act="pol-add">+ policy</button>
     <label>Policy model (empty = helper model, else the session's model)</label>
     <input id="polmodel" list="models" placeholder="a small, cheap model id">
   </details>
-  <details><summary>Smells</summary>
+  <details><summary>Smells <span class="count" id="smellcount"></span></summary>
     <p class="note">Policy rewrites and refusals, call notes written as text, tool errors and timeouts, recorded as they happen with the steering in effect (core prompt, system prompt, policies, tools), across sessions. Nothing changes mid-session. "review" asks the policy model for steering changes from these counts alone; adopted ones are yours to apply, and reach new sessions only.</p>
     <div id="smells"></div>
     <button data-act="review">review</button> <button data-act="smellsclear">clear</button>
@@ -124,14 +125,14 @@ const SHELL = `
     <label><input type="checkbox" id="keep"> Keep marks: the model flags lines to keep with "!" (adds one sentence to the system prompt)</label>
     <p class="note">First bytes of every request. Editing it mid-session breaks the cached prefix; the ledger will show it.</p>
   </details>
-  <details><summary>Scratchpads</summary>
+  <details><summary>Scratchpads <span class="count" id="padcount"></span></summary>
     <p class="note">"In context" pads are attached to your next message when new or changed.</p>
-    <div id="pads"></div>
+    <div class="items" id="pads"></div>
     <button data-act="pad-add">+ pad</button>
   </details>
-  <details><summary>Patterns</summary>
+  <details><summary>Patterns <span class="count" id="patcount"></span></summary>
     <p class="note">Solutions, gotchas and recipes the model stored, with where each came from. The trail is one automatic row per tool call.</p>
-    <div id="patterns"></div>
+    <div class="items" id="patterns"></div>
     <p class="note" id="patn"></p>
   </details>
   <details><summary>Sessions</summary>
@@ -304,26 +305,68 @@ function ledgerRow(e, i) {
     h('td', { text: e.cost == null ? '-' : Number(e.cost).toFixed(5) }));
 }
 
+// One card for every list in the inspector (policies, patterns, scratchpads,
+// smells, proposals): a kind chip and a name in the header, a short meta line,
+// the body, then actions. tone: ok | warn | bad | off colours the edge.
+function item({ kind, name, meta = '', body = [], actions = [], tone = '', open = false, attrs = {} }) {
+  const el = h('details', { class: 'item', ...(tone ? { 'data-tone': tone } : {}), ...attrs },
+    h('summary', {}, h('span', { class: 'chip', text: kind }), h('span', { class: 'name', text: name }), meta ? h('span', { class: 'meta', text: meta }) : ''),
+    h('div', { class: 'body' }, ...body.filter(Boolean)),
+    actions.length ? h('div', { class: 'actions' }, ...actions) : '');
+  el.open = open;
+  return el;
+}
+const field = (label, input) => h('label', { class: 'field' }, h('span', { text: label }), input);
+const btn = (text, attrs = {}) => h('button', { type: 'button', text, ...attrs });
+
 function padNode(p) {
-  return h('div', { class: 'pad', 'data-pad': p.id },
-    h('div', {},
-      h('input', { 'data-f': 'label', value: p.label, 'aria-label': 'Label' }),
-      h('label', {}, Object.assign(h('input', { type: 'checkbox', 'data-f': 'include' }), { checked: !!p.include }), ' in context'),
-      h('button', { 'data-act': 'pad-drop', type: 'button', text: '×' })),
-    Object.assign(h('textarea', { 'data-f': 'text', rows: '4' }), { value: p.text }));
+  return item({ kind: 'pad', name: p.label || '(no label)', meta: p.include ? 'in context' : '', tone: p.include ? 'ok' : '', open: true, attrs: { 'data-pad': p.id },
+    body: [
+      field('label', h('input', { 'data-f': 'label', value: p.label })),
+      Object.assign(h('textarea', { 'data-f': 'text', rows: '4' }), { value: p.text }),
+      h('label', { class: 'check' }, Object.assign(h('input', { type: 'checkbox', 'data-f': 'include' }), { checked: !!p.include }), ' in context'),
+    ],
+    actions: [btn('delete', { 'data-act': 'pad-drop' })] });
 }
 function renderPatterns() {
   const list = pat.live().sort((a, b) => b.by.t - a.by.t);
-  $('#patterns').replaceChildren(...list.map(p => h('details', { class: 'pat', 'data-pat': p.id },
-    h('summary', {}, h('span', { class: 'kind', text: p.kind }), ' ' + p.title),
-    h('p', { class: 'note', text: `${p.id} · ${p.labels.map(l => '#' + l).join(' ') || 'no labels'} · used ${p.uses} · from ${state.sessions[p.by.session]?.title || p.by.session}, message ${p.by.message}, ${p.by.model}` }),
-    h('pre', { text: p.recipe ? JSON.stringify(p.recipe, null, 1) + (p.body ? '\n\n' + p.body : '') : p.body }),
-    p.refs?.length ? h('p', { class: 'note', text: 'refs: ' + p.refs.join(' ') }) : '',
-    h('button', { type: 'button', 'data-act': 'pat-drop', text: 'delete' }))));
-  $('#patn').textContent = `${list.length} patterns · ${pat.trail().length} trail rows`;
+  $('#patterns').replaceChildren(...list.map(p => item({ kind: p.kind, name: p.title, meta: `used ${p.uses}`, attrs: { 'data-pat': p.id },
+    body: [
+      h('p', { class: 'note', text: `${p.id} · ${p.labels.map(l => '#' + l).join(' ') || 'no labels'} · from ${state.sessions[p.by.session]?.title || p.by.session || p.by.steward || '?'}${p.by.message != null ? ', message ' + p.by.message : ''}${p.by.model ? ', ' + p.by.model : ''}` }),
+      h('pre', { text: p.recipe ? JSON.stringify(p.recipe, null, 1) + (p.body ? '\n\n' + p.body : '') : p.body }),
+      p.refs?.length ? h('p', { class: 'note', text: 'refs: ' + p.refs.join(' ') }) : null,
+    ],
+    actions: [btn('delete', { 'data-act': 'pat-drop' })] })));
+  $('#patn').textContent = `${pat.trail().length} trail rows`;
+  $('#patcount').textContent = list.length || '';
 }
 
-const renderPads = () => $('#pads').replaceChildren(...state.meta.pads.map(padNode));
+// ---------- policy items ----------
+function policyList() {
+  const set = state.meta.settings;
+  if (!Array.isArray(set.policyList)) { set.policyList = typeof set.policies === 'string' ? policy.fromText(set.policies) : structuredClone(policy.DEFAULT_LIST); delete set.policies; saveMeta(); }
+  return set.policyList;
+}
+function renderPolicies() {
+  const list = policyList(), compiled = policy.compile(list.map(p => ({ ...p, on: true })));
+  const fired = name => smells.count(r => r.policy === name && /^policy-/.test(r.kind));
+  $('#policies').replaceChildren(...list.map((p, i) => {
+    const err = compiled[i]?.error;
+    return item({ kind: p.tool || '*', name: p.name || '(unnamed)', meta: err ? 'error' : p.on === false ? 'off' : `fired ${fired(p.name)}`, tone: err ? 'bad' : p.on === false ? 'off' : 'warn', attrs: { 'data-pol': String(i) },
+      body: [
+        h('p', { class: 'rule', text: p.rule || '(no rule yet)' }),
+        h('div', { class: 'row2' }, field('name', h('input', { 'data-pf': 'name', value: p.name || '' })), field('tool', h('input', { 'data-pf': 'tool', value: p.tool || '*', list: 'toolnames' }))),
+        h('div', { class: 'row2' }, field('pattern', h('input', { 'data-pf': 'pattern', value: p.pattern || '', spellcheck: 'false', class: 'mono' })), field('flags', h('input', { 'data-pf': 'flags', value: p.flags || '', class: 'mono narrow' }))),
+        field('rule', Object.assign(h('textarea', { 'data-pf': 'rule', rows: '3' }), { value: p.rule || '' })),
+        err ? h('p', { class: 'note bad', text: err }) : null,
+        h('label', { class: 'check' }, Object.assign(h('input', { type: 'checkbox', 'data-pf': 'on' }), { checked: p.on !== false }), ' on'),
+      ],
+      actions: [btn('delete', { 'data-act': 'pol-drop' })] });
+  }));
+  $('#polcount').textContent = list.filter(p => p.on !== false).length + '/' + list.length;
+}
+
+const renderPads = () => { $('#pads').replaceChildren(...state.meta.pads.map(padNode)); $('#padcount').textContent = state.meta.pads.length || ''; };
 
 function activate(id) {
   state.meta.active = id;
@@ -725,7 +768,7 @@ async function turns(s, depth, onFirst) {
 // Returns null (no policy applies), {..., to} (run this instead) or {..., refused}.
 async function enforce(s, tc) {
   const set = state.meta.settings;
-  const pols = policy.parse(set.policies ?? policy.DEFAULT_POLICIES);
+  const pols = policy.compile(policyList());
   let args = tc.function.arguments || '{}';
   try {
     const a = JSON.parse(args);
@@ -763,12 +806,13 @@ async function relog(s, tc, to) {
 // reaches a session's cached prefix.
 function steerOf(s) {
   const set = state.meta.settings;
-  return smells.fp([s.core || 0, s.keep ? 1 : 0, s.edge || '', s.system || '', set.policies ?? policy.DEFAULT_POLICIES, JSON.stringify(defsFor(s).map(d => d.function.name + d.function.description))].join('\u0000'));
+  return smells.fp([s.core || 0, s.keep ? 1 : 0, s.edge || '', s.system || '', JSON.stringify(policyList()), JSON.stringify(defsFor(s).map(d => d.function.name + d.function.description))].join('\u0000'));
 }
 function smell(s, row) {
   const r = smells.add({ session: s.id, model: state.meta.settings.model, steer: steerOf(s), ...row });
   link?.emit('smell', r);
   renderSmells();
+  if (r.policy) renderPolicies();
 }
 
 function renderSmells() {
@@ -778,16 +822,16 @@ function renderSmells() {
   const steer = smells.bySteer(state.meta.order.map(id => state.sessions[id]).filter(Boolean).map(x => ({ steer: steerOf(x), requests: x.ledger.filter(e => !e.helper).length }))).filter(o => o.smells || o.requests);
   const props = smells.proposals();
   box.replaceChildren(
-    h('p', { class: 'note', text: list.length ? smells.summary(list).map(([k, n]) => `${k} ×${n}`).join(' · ') : 'Nothing recorded.' }),
-    h('table', { class: 'audit' }, h('tr', {}, ...['steering', 'requests', 'smells', 'per request'].map(t => h('th', { text: t }))),
-      ...steer.map(o => h('tr', {}, h('td', { text: o.steer + (o.steer === steerOf(cur()) ? ' (this session)' : '') }), h('td', { text: String(o.requests) }), h('td', { text: String(o.smells) }), h('td', { text: o.rate == null ? '-' : o.rate.toFixed(3) })))),
-    ...props.filter(p => p.status === 'pending').map(p => h('div', { class: 'smell', 'data-kind': 'proposal' },
-      h('b', { text: 'proposal ' + p.id }), h('pre', { text: p.text }),
-      h('button', { 'data-act': 'propose', 'data-id': p.id, 'data-to': 'adopted', text: 'adopt' }), ' ',
-      h('button', { 'data-act': 'propose', 'data-id': p.id, 'data-to': 'dismissed', text: 'dismiss' }))),
-    ...list.slice(-20).reverse().map(r => h('div', { class: 'smell', 'data-kind': r.kind },
-      h('b', { text: r.kind + (r.policy ? ' ' + r.policy : '') }), h('span', { class: 'note', text: ` ${new Date(r.t).toLocaleTimeString()} ${r.tool || ''} ${r.why || r.detail || r.rule || ''}`.slice(0, 220) }),
-      ...(r.from ? [h('details', {}, h('summary', { text: 'call' }), h('pre', { text: 'from: ' + r.from + (r.to ? '\nto:   ' + r.to : '') }))] : []))));
+    h('div', { class: 'chips' }, ...(list.length ? smells.summary(list).map(([k, n]) => h('span', { class: 'chip', text: `${k} ×${n}` })) : [h('span', { class: 'note', text: 'Nothing recorded.' })])),
+    steer.length ? h('table', { class: 'audit' }, h('tr', {}, ...['steering', 'requests', 'smells', 'per request'].map(t => h('th', { text: t }))),
+      ...steer.map(o => h('tr', {}, h('td', { text: o.steer + (o.steer === steerOf(cur()) ? ' (this session)' : '') }), h('td', { text: String(o.requests) }), h('td', { text: String(o.smells) }), h('td', { text: o.rate == null ? '-' : o.rate.toFixed(3) })))) : '',
+    h('div', { class: 'items' }, ...props.filter(p => p.status === 'pending').map(p => item({ kind: 'proposal', name: p.id, meta: p.model, tone: 'warn', open: true, attrs: { 'data-kind': 'proposal' },
+      body: [h('pre', { text: p.text })],
+      actions: [btn('adopt', { 'data-act': 'propose', 'data-id': p.id, 'data-to': 'adopted' }), btn('dismiss', { 'data-act': 'propose', 'data-id': p.id, 'data-to': 'dismissed' })] }))),
+    h('div', { class: 'items' }, ...list.slice(-20).reverse().map(r => item({ kind: r.kind, name: r.policy || r.tool || '', meta: new Date(r.t).toLocaleTimeString(),
+      tone: /refused|error|failed/.test(r.kind) ? 'bad' : r.kind === 'policy-rewritten' ? 'warn' : '', attrs: { 'data-kind': r.kind },
+      body: [h('p', { class: 'note', text: (r.why || r.detail || r.rule || '').slice(0, 300) }), r.from ? h('pre', { text: 'from: ' + r.from + (r.to ? '\nto:   ' + r.to : '') }) : null] }))));
+  $('#smellcount').textContent = list.length || '';
 }
 
 // One request to a side model (policy repair); traced, with its own ledger row.
@@ -959,6 +1003,8 @@ const actions = {
     download((s.title.replace(/[^\w\- ]+/g, '').trim() || 'session') + '.session', bundle);
   },
   smellsclear() { smells.clear(); renderSmells(); },
+  'pol-add'() { const list = policyList(); let n = list.length + 1; while (list.some(p => p.name === 'policy-' + n)) n++; list.push({ name: 'policy-' + n, tool: '*', pattern: '', flags: '', rule: '', on: true }); saveMeta(); renderPolicies(); const c = $(`#policies [data-pol="${list.length - 1}"]`); c.open = true; c.querySelector('[data-pf=name]').focus(); },
+  'pol-drop'(el) { const i = Number(el.closest('[data-pol]').dataset.pol); policyList().splice(i, 1); saveMeta(); renderPolicies(); },
   async logsetup() {
     const set = state.meta.settings, stat = $('#logstat'), l = logs();
     if (!l) { stat.textContent = 'Enter owner/name first.'; return; }
@@ -982,7 +1028,7 @@ const actions = {
     const model = set.policyModel || set.helper || set.model;
     const steer = smells.bySteer(state.meta.order.map(id => state.sessions[id]).filter(Boolean).map(x => ({ steer: steerOf(x), requests: x.ledger.filter(e => !e.helper).length })));
     const rows = smells.all().slice(-200).map(r => ({ kind: r.kind, steer: r.steer, tool: r.tool, policy: r.policy, why: r.why, detail: r.detail?.slice(0, 120) }));
-    const input = `STEERING VERSIONS:\n${JSON.stringify(steer)}\n\nRECENT ROWS:\n${rows.map(r => JSON.stringify(r)).join('\n')}\n\nCURRENT CONVENTIONS:\n${corePrompt(s)}\n\nCURRENT POLICIES:\n${set.policies ?? policy.DEFAULT_POLICIES}\n\nCURRENT SYSTEM PROMPT:\n${s.system || '(empty)'}`;
+    const input = `STEERING VERSIONS:\n${JSON.stringify(steer)}\n\nRECENT ROWS:\n${rows.map(r => JSON.stringify(r)).join('\n')}\n\nCURRENT CONVENTIONS:\n${corePrompt(s)}\n\nCURRENT POLICIES:\n${policyList().map(p => `${p.name} [${p.tool}${p.on === false ? ', off' : ''}] /${p.pattern}/${p.flags || ''} ${p.rule}`).join('\n')}\n\nCURRENT SYSTEM PROMPT:\n${s.system || '(empty)'}`;
     const text = await aux(s, model, smells.REVIEW_SYSTEM, input, 'review').catch(e => 'review failed: ' + (e.message || e));
     const list = smells.proposals();
     list.push({ id: 'r' + Date.now().toString(36), t: Date.now(), model, text, status: 'pending', basis: { rows: rows.length, steer: steer.length } });
@@ -1098,11 +1144,17 @@ function bind() {
     s.tools = e.target.checked ? [...new Set([...(s.tools || []), 'vm'])] : (s.tools || []).filter(t => t !== 'vm');
     saveSession(s);
   });
-  const showPol = () => { $('#polerr').textContent = policy.parse($('#policies').value).filter(p => p.error).map(p => p.id + ': ' + p.error).join('; '); };
-  $('#policies').value = state.meta.settings.policies ?? policy.DEFAULT_POLICIES;
   $('#polmodel').value = state.meta.settings.policyModel || '';
-  showPol();
-  $('#policies').addEventListener('change', e => { state.meta.settings.policies = e.target.value; saveMeta(); showPol(); });
+  $('#toolnames').replaceChildren(...['*', ...defsFor({ tools: ['repo', 'vm'] }).map(d => d.function.name)].map(n => h('option', { value: n })));
+  renderPolicies();
+  $('#policies').addEventListener('change', e => {
+    const f = e.target.dataset.pf, card = e.target.closest('[data-pol]');
+    if (!f || !card) return;
+    const p = policyList()[Number(card.dataset.pol)];
+    p[f] = f === 'on' ? e.target.checked : e.target.value.trim();
+    saveMeta();
+    const open = card.open; renderPolicies(); const again = $(`#policies [data-pol="${card.dataset.pol}"]`); if (again) again.open = open;
+  });
   $('#polmodel').addEventListener('change', e => { state.meta.settings.policyModel = e.target.value.trim(); saveMeta(); });
   $('#logrepo').value = state.meta.settings.logRepo || '';
   $('#logrepo').addEventListener('change', e => { state.meta.settings.logRepo = e.target.value.trim(); state.meta.settings.logReady = false; saveMeta(); $('#logstat').textContent = 'press "set up"'; });
@@ -1244,7 +1296,7 @@ function logs() {
 function logPayload(since) {
   const list = state.meta.order.map(id => state.sessions[id]).filter(Boolean);
   const sm = smells.all();
-  const steering = [...new Map(list.map(x => [steerOf(x), x])).entries()].map(([fp, x]) => ({ fp, core: corePrompt(x), system: x.system || '', policies: state.meta.settings.policies ?? policy.DEFAULT_POLICIES, tools: defsFor(x).map(d => d.function.name) }));
+  const steering = [...new Map(list.map(x => [steerOf(x), x])).entries()].map(([fp, x]) => ({ fp, core: corePrompt(x), system: x.system || '', policies: policyList(), tools: defsFor(x).map(d => d.function.name) }));
   const sessions = list.filter(x => (x.ledger.at(-1)?.t || x.created) > since).map(x => {
     const sum = k => x.ledger.reduce((n, e) => n + (Number(e[k]) || 0), 0);
     return { session: x.id, parent: x.parent?.id || null, created: x.created, model: x.ledger.at(-1)?.model || null, steer: steerOf(x), tools: x.tools || [], requests: x.ledger.filter(e => !e.helper).length, side: x.ledger.filter(e => e.helper).length, prompt: sum('prompt'), cached: sum('cached'), completion: sum('completion'), cost: +sum('cost').toFixed(6), smells: sm.filter(r => r.session === x.id).length };
