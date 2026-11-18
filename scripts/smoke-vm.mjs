@@ -31,6 +31,14 @@ await page.selectOption('#provider', 'mock');
 await page.fill('#model', 'mock-1'); await page.dispatchEvent('#model', 'change');
 await page.click('[data-act=new]');
 check('new sessions get the shell tool while the machine is on', await page.isChecked('#vmtools'));
+await page.click('[data-pane=machine]');
+await page.waitForSelector('#vmdiag .vrow');
+const diag = await page.evaluate(() => [...document.querySelectorAll('#vmdiag .vrow')].map(r => [r.querySelector('.slabel').textContent, r.dataset.ok, r.querySelector('.vdetail').textContent]));
+check('machine pane: says what is on and what is not yet (before first use)', diag.slice(0, 4).every(r => r[1] === 'true') && diag[4][1] === 'false' && /not yet/.test(diag[4][2]), JSON.stringify(diag));
+await page.click('#vmdiag button.primary');
+await page.waitForFunction(() => document.querySelectorAll('#vmdiag .vrow[data-ok=true]').length === 5, null, { timeout: 300000 });
+check('machine pane: "start now" boots it and every line turns to ready', true);
+await page.click('[data-pane=insp]');
 
 const t0 = Date.now();
 const run = async cmd => {

@@ -306,3 +306,10 @@ figure.handoff iframe { width: 100%; height: 260px; border: 0; background: #fff;
 .qbar:empty, .qbar[data-v=""], .qbar:not([data-v]) { display: none; }
 .qbar { border-color: #e0a040; color: #e0a040; font-size: 12px; }
 .cfgbar .field { flex: 1; min-width: 140px; }
+#vmdiag { margin-bottom: 8px; }
+.vrow { display: grid; grid-template-columns: 16px minmax(110px, 0.9fr) minmax(0, 1.4fr); gap: 6px; padding: 5px 8px; border-top: 1px solid var(--line); font-size: 12px; align-items: baseline; }
+.sgroup > .shead + .vrow { border-top: 0; }
+.vrow .vmark { font-weight: 700; color: var(--bad); text-align: center; }
+.vrow[data-ok=true] .vmark { color: var(--ok); }
+.vrow .vdetail { color: var(--dim); overflow-wrap: anywhere; }
+.vrow[data-ok=false] .vdetail { color: var(--fg); }

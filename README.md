@@ -2,7 +2,7 @@
 
 A client-side LLM chat harness served straight from this repo with GitHub Pages. No server, no build step: the browser holds the API key, the sessions and the tools.
 
-Status: working skeleton (v0.36.0). The OpenRouter path is written from the OpenAI-compatible conventions and has not yet been run against the live API.
+Status: working skeleton (v0.37.0). The OpenRouter path is written from the OpenAI-compatible conventions and has not yet been run against the live API.
 
 ## Run
 
@@ -283,6 +283,7 @@ Settings → "Linux machine" gives new sessions a `shell` tool: an x86_64 Alpine
 - **Isolation:** the emulator needs SharedArrayBuffer, so the switch registers `coi-serviceworker` (MIT), which adds COOP/COEP headers that Pages cannot send. Switching it off removes the service worker. COEP `credentialless` keeps CDN scripts and third-party media loading; Safari falls back to `require-corp`.
 - **Network:** the guest's HTTP(S) goes through container2wasm's network stack and leaves as the page's own `fetch`. Only hosts that allow cross-origin requests answer. `api.github.com` does, so `gh api ...` works; git's smart HTTP does not, so `git clone`/`push` over HTTPS do not.
 - **Credentials:** the guest's `GH_TOKEN` is the placeholder `wh-placeholder-token`. The page replaces it on requests to `api.github.com` with the configured credential (minted per repository and permission in app mode). No token exists inside the machine, so a model that runs `env` finds nothing.
+- **Status, for the current session:** the Machine pane lists what the machine needs and whether each holds: switched on in Defaults; the page cross-origin isolated (with the service worker's state, and what to do if it stays off); this session has the shell tool; its scope allows the machine; and whether it has started (it starts on first use, or with "start now").
 - **Visible:** the Machine pane shows everything the guest prints and has a line for typing into it. Guest requests appear in the trace (URL, method, status).
 - **State:** the machine persists for the page load and is shared by the sessions that have the tool. A reload starts a fresh machine.
 - **Image:** built with `c2w` from `Dockerfile` (Alpine + packages), split by `scripts/vm-pack.mjs`, kept on the `vm-image` branch and copied in by the Pages workflow. `node scripts/smoke-vm.mjs` runs it end to end (needs `app/vm/image/`).

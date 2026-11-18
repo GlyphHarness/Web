@@ -26,7 +26,7 @@ import * as pat from './patterns.js';
 import { put, get, handlesIn, setFallback } from './outstore.js';
 import { buildRequest, measure, report, padAttachment, inherit, imitatesNote, keptLines, corePrompt, EDGE_MIN, markedOnly, edgeReplies, turnOf, KINDS } from './context.js';
 
-export const VERSION = '0.36.0';
+export const VERSION = '0.37.0';
 const MAX_STEPS = 8; // model <-> tool round trips per user turn
 const MAX_BRANCHES = 6; // concerns per fan_out
 const FOLD_MAX = 2000; // chars of a fold handed back to the source
@@ -73,7 +73,7 @@ const SHELL = `
 <aside id="inspect">
   <nav id="panes"><button data-act="pane" data-pane="stage">Stage</button><button data-act="pane" data-pane="insp">Inspector</button><button data-act="pane" data-pane="machine">Machine</button></nav>
   <div id="stage"></div>
-  <div id="machine"><p class="note" id="vmstat">The machine is off. Switch it on in Settings.</p><div id="vmterm"></div></div>
+  <div id="machine"><div id="vmdiag"></div><p class="note" id="vmstat"></p><div id="vmterm"></div></div>
   <div id="insp">
   <details open><summary>Profiles <span class="count" id="profcount"></span></summary>
     <p class="note">Scopes for sessions, by configuration level. A session in a profile resolves its settings down the chain (a locked setting cannot be overridden below), its capabilities only narrow, its repositories must be allowed at every level that lists them, and policies add up. Branches stay in their profile or one below it.</p>
@@ -331,6 +331,7 @@ function widgetEvent(s, slot, value) {
 }
 
 function setPane(p) {
+  if (p === 'machine') setTimeout(machineDiag);
   state.meta.settings.pane = p;
   const hide = ['stage', 'insp', 'machine'].filter(x => x !== p).map(x => '#' + x).join(',');
   rule('pane', `${hide}{display:none}\n#panes [data-pane="${p}"]{border-color:var(--accent);color:var(--accent)}`);
@@ -842,6 +843,7 @@ function activate(id) {
   showScope();
   renderValues();
   renderProfiles(); // this session's card and chain come first
+  if (state.meta.settings.pane === 'machine') machineDiag();
   $('#wire').value = s.wire || 'calls';
   $('#repotools').checked = !!s.tools?.includes('repo');
   $('#sprivate').checked = !!s.private;
@@ -2075,6 +2077,31 @@ export function boot(env) {
   if (pair) startBridge(pair, env).catch(e => console.error('bridge:', e));
 }
 
+// ---------- machine status: what is on, what is missing, and why ----------
+
+// Each condition the machine needs, checked as it stands now, for the current session.
+async function machineDiag() {
+  const s = cur(), e = s ? eff(s) : null;
+  let sw = 'not supported';
+  try { if (navigator.serviceWorker) { const reg = await navigator.serviceWorker.getRegistration(); sw = reg ? (navigator.serviceWorker.controller ? 'registered, controlling this page' : 'registered, not controlling this page yet') : 'not registered'; } } catch { sw = 'unavailable'; }
+  const rows = [
+    ['switched on in Defaults', vmWanted(), vmWanted() ? 'on' : 'off: Defaults and connections → Linux machine'],
+    ['page is cross-origin isolated', vmReady(), vmReady() ? 'yes' : `no (service worker: ${sw}${!isSecureContext ? '; not a secure context' : ''}). ${vmWanted() ? 'Reload once; if it stays "no", the browser is blocking the service worker (private window, blocked site data or an extension).' : ''}`],
+    ['this session has the shell tool', !!s?.tools?.includes('vm'), s?.tools?.includes('vm') ? 'yes' : 'no: System prompt → "Linux machine (shell tool)" switch, or a new session'],
+    ['its scope allows the machine', !!e?.caps.vm, e?.caps.vm ? 'yes' : `no: denied by ${e?.capFrom.vm || 'its profile'}`],
+    ['machine started', !!vmInst && /ready/.test(vmInst.status()), vmInst ? vmInst.status() : 'not yet: it starts when a session first uses it, or with "start now"'],
+  ];
+  const box = $('#vmdiag');
+  const start = btn('start now', { class: 'primary' });
+  start.disabled = !(vmWanted() && vmReady()) || (vmInst && /ready|booting|loading|downloading|waiting/.test(vmInst.status()));
+  start.onclick = async () => { start.disabled = true; try { await vm().run('true', 60); } catch {} machineDiag(); };
+  const recheck = btn('check again'); recheck.onclick = () => machineDiag();
+  box.replaceChildren(h('div', { class: 'sgroup' }, h('div', { class: 'shead' }, h('span', { text: 'Machine' }), h('span', { class: 'note', text: rows.every(r => r[1]) ? 'ready' : 'what it needs, for this session' })),
+    ...rows.map(([label, ok, detail]) => h('div', { class: 'vrow', 'data-ok': String(!!ok) }, h('span', { class: 'vmark', text: ok ? '✓' : '·' }), h('span', { class: 'slabel', text: label }), h('span', { class: 'vdetail', text: detail })))),
+    h('div', { class: 'cfgbar' }, start, recheck));
+  return rows;
+}
+
 // ---------- the Linux machine (vm.js) ----------
 
 // One machine per page load, shared by the sessions that have the shell tool.
@@ -2084,7 +2111,7 @@ function vm() {
   if (vmInst) return vmInst;
   vmInst = machine({
     token: gh.token, trace,
-    onStatus: t => { slot($('#vmstat'), 'Machine: ' + t); link?.emit('notice', { session: 'machine', text: t }); },
+    onStatus: t => { slot($('#vmstat'), 'Machine: ' + t); link?.emit('notice', { session: 'machine', text: t }); machineDiag(); },
     mount(type) {
       const box = $('#vmterm');
       const pre = h('pre', { class: 'vmout' });

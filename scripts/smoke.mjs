@@ -335,6 +335,13 @@ check('import: an existing label is matched (a new revision, not a duplicate)', 
 await page.click('.modal .primary');
 check('import: the matched value got a second revision', await page.evaluate(() => { const v = JSON.parse(localStorage['wh:meta']).values.filter(v => v.revs[0].label === 'deploy region'); return v.length === 1 && v[0].revs.length === 2 && v[0].revs[1].value === 'us-east-1'; }));
 
+// ---- machine pane: diagnosis when it is off ----
+await page.click('[data-pane=machine]');
+await page.waitForSelector('#vmdiag .vrow');
+const offDiag = await page.evaluate(() => [...document.querySelectorAll('#vmdiag .vrow')].map(r => [r.dataset.ok, r.querySelector('.vdetail').textContent]));
+check('machine pane: when off, it says so and where to switch it on (start disabled)', offDiag[0][0] === 'false' && /Defaults and connections/.test(offDiag[0][1]) && await page.isDisabled('#vmdiag button.primary'));
+await page.click('[data-pane=insp]');
+
 // ---- handoff blocks: content to take away ----
 await page.click('[data-act=new]');
 check('handoff: new sessions declare the convention in the core prompt', /handoff:copy, handoff:file <name>/.test(await page.textContent('#core')));
