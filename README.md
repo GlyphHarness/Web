@@ -2,14 +2,14 @@
 
 A client-side LLM chat harness served straight from this repo with GitHub Pages. No server, no build step: the browser holds the API key, the sessions and the tools.
 
-Status: working skeleton (v0.14.0). The OpenRouter path is written from the OpenAI-compatible conventions and has not yet been run against the live API.
+Status: working skeleton (v0.15.0). The OpenRouter path is written from the OpenAI-compatible conventions and has not yet been run against the live API.
 
 ## Run
 
 - Hosted: enable Pages (Settings > Pages > Source > GitHub Actions); every push to `main` deploys to `https://glyphharness.github.io/web/`.
 - Local: `python3 -m http.server 8787` in the repo root, then open `http://localhost:8787/`.
 - No key needed to try it: choose the provider "Mock (offline)" and model `mock-1`. Say "tool", "big", "widget", "form", "chart" or "fan out" to see a tool round trip.
-- Smoke test (needs Playwright): `node scripts/smoke.mjs`
+- Smoke tests (need Playwright): `node scripts/smoke.mjs` and `node scripts/smoke-git.mjs` (fake GitHub API)
 
 ## How it fits together
 
@@ -153,8 +153,30 @@ The **Sessions** section of the inspector lists every session side by side from 
 
 Tool definitions make no mention of where they run. Current set: `run_js`, `scratchpad_read`, `scratchpad_write`, `show_widget`, `output_read`, `fan_out`, `branch_read`, `pattern_find`, `pattern_get`, `pattern_put`, `pattern_run`, `entry_read`.
 
-- `run_js` runs in a dedicated Worker: no DOM, no localStorage (so no API key), killed after 5 s. It is not a network sandbox; code can still call `fetch`.
+- `run_js` runs in a network-less sandbox (see Sandbox); killed after 5 s.
 - An `html` widget runs in an iframe with `sandbox="allow-scripts"`, which cannot read the page or its storage. An `embed` is a third-party page and gets its own origin.
+
+### Repositories (GitHub from the page)
+
+A page can call `api.github.com` (it answers any origin) but not git's own HTTP endpoints or GitHub's sign-in token exchange, which send no CORS headers. So there is no clone and no OAuth flow. Reads, commits, branches and pull requests go through the REST and GraphQL APIs with a token you paste in Settings.
+
+- **Token:** a fine-grained personal access token limited to the repos it may touch, with Contents read/write, Pull requests read/write and Metadata read. It is stored with the other keys, never exported, recorded in no trace and redacted from the bridge. "check" shows which account it belongs to.
+- **Tools:** sessions created while a token is set get `repo_read` (file, tree, log, diff, branches, prs), `repo_commit` and `repo_pr`. Older sessions keep their tool list, so their cached prefix is unchanged.
+- **Commits:** one commit per call through GraphQL `createCommitOnBranch`, guarded by the branch head it read. A change is whole `content`, `edits` (exact find/replace, each match unique), `from` (an `os:` handle) or `delete`. A missing branch is created from `from` or the default branch.
+- **Approval:** every commit and pull request waits for a click on a card showing what will be written, built from the resolved files rather than the model's description.
+
+### Sandbox
+
+`run_js` runs in a Worker started inside a hidden `sandbox="allow-scripts"` iframe whose CSP is `default-src 'none'`. The code cannot fetch, open sockets, import scripts or reach the page's storage. It is killed on timeout. `html` widgets get the same no-network CSP, so remote media goes only through the click-gated kinds. Verified in Chromium (`scripts/smoke-git.mjs`); Firefox and Safari are untested.
+
+### Debug bridge
+
+Opening the page with `#bridge=<owner/repo>~<branch>~<key>` connects it to an agent running `scripts/bridge.mjs`. The channel is a git branch: the page commits encrypted batches to `up/` through the API with your GitHub token; the agent pushes directives to `down/` with plain git; the page polls with ETags (304s are free). Payloads are AES-GCM; the key exists only in the fragment, which is moved to sessionStorage and removed from the address bar.
+
+- **Up, automatically:** hello, errors, console warnings and errors, notices, approval requests, finished trace records.
+- **Directives:** `ping`, `state`, `session`, `trace`, `trail`, `dom` (read-only selector), `run` (in the sandbox), `act` (new, inspector). `send`, `set` (provider, model and helper; never the API base) and `reload` wait for your click in the banner.
+- **Keys:** stored key values are replaced with `[key]` in every payload before encryption.
+- **Agent side:** `node scripts/bridge.mjs pair --repo OWNER/NAME` prints the link; `listen`, `do NAME JSON`, `show N`, `close`.
 
 ### Cosmetic state
 

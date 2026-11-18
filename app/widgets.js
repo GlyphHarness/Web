@@ -25,8 +25,11 @@ function remote(url, make) {
 }
 
 // srcdoc iframe without allow-same-origin: it cannot read this page or its storage.
+// Its CSP allows no network, so a widget cannot load or send anything either;
+// remote media goes through the click-gated kinds below.
 // emit(value) inside the widget reports an interaction to the host.
-const EMIT = '<script>window.emit=function(v){parent.postMessage({wh:1,data:v},"*")}<\/script>';
+export const WIDGET_CSP = "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; media-src data: blob:";
+const EMIT = `<meta http-equiv="Content-Security-Policy" content="${WIDGET_CSP}">` + '<script>window.emit=function(v){parent.postMessage({wh:1,data:v},"*")}<\/script>';
 
 export const kinds = {
   html: d => h('iframe', { sandbox: 'allow-scripts', srcdoc: EMIT + String(d.html || '') }),

@@ -6,13 +6,15 @@ import { state, load, saveMeta, saveSession, saveKeys, newSession, dropSession, 
 import { SCHEMA } from './migrate.js';
 import { rule } from './styles.js';
 import { providers } from './providers.js';
-import { toolDefs, execTool, SWAPPABLE, ARG_MAX } from './tools.js';
+import { defsFor, execTool, SWAPPABLE, ARG_MAX, runJs } from './tools.js';
+import { client as gitClient } from './git.js';
+import * as bridge from './bridge.js';
 import { render } from './widgets.js';
 import * as pat from './patterns.js';
 import { put, get, handlesIn } from './outstore.js';
 import { buildRequest, measure, report, padAttachment, inherit, imitatesNote, keptLines, corePrompt, EDGE_MIN, markedOnly, edgeReplies, turnOf, KINDS } from './context.js';
 
-export const VERSION = '0.14.0';
+export const VERSION = '0.15.0';
 const MAX_STEPS = 8; // model <-> tool round trips per user turn
 const MAX_BRANCHES = 6; // concerns per fan_out
 const FOLD_MAX = 2000; // chars of a fold handed back to the source
@@ -61,6 +63,9 @@ const SHELL = `
   <details open><summary>Settings</summary>
     <label>API key (kept in this browser only, never exported)</label>
     <input id="key" type="password" autocomplete="off">
+    <label>GitHub token (fine-grained, limited to the repos it may touch; kept in this browser only). New sessions get repository tools while one is set.</label>
+    <div style="display:flex;gap:6px"><input id="ghkey" type="password" autocomplete="off"><button data-act="ghcheck">check</button></div>
+    <p class="note" id="ghwho"></p>
     <label>Pinned code ref (tag, branch or commit; empty = this branch)</label>
     <input id="ref" placeholder="e.g. v0.1.0">
     <label>API base URL (empty = provider default)</label>
@@ -117,7 +122,7 @@ const SHELL = `
   </div>
 </aside>`;
 
-let app, busy = false, ctl = null;
+let app, busy = false, ctl = null, link = null;
 const trace = []; // raw request/response records, memory only
 const opt = () => ({ base: state.meta.settings.base?.[state.meta.settings.provider] || '', trace });
 const cur = () => state.sessions[state.meta.active];
@@ -245,7 +250,7 @@ function push(s, m) {
   scrollDown();
 }
 
-const notice = (s, text) => { thread(s).append(h('article', { class: 'msg', 'data-role': 'error' }, h('div', { class: 'txt', text }))); scrollDown(); };
+const notice = (s, text) => { link?.emit('notice', { session: s.id, text }); thread(s).append(h('article', { class: 'msg', 'data-role': 'error' }, h('div', { class: 'txt', text }))); scrollDown(); };
 
 // ---------- sidebar, ledger, pads ----------
 
@@ -568,9 +573,10 @@ async function turns(s, depth, onFirst) {
     knownRef: r => !!state.sessions[r] || s.messages.some(m => typeof m.content === 'string' && m.content.includes(r)),
     onPatterns: renderPatterns,
     helper: set.helper ? (want, text) => helper(s, want, text) : null,
+    git: s.tools?.includes('repo') ? gitClient({ token: () => state.keys.github, trace, get, confirm: what => approve(s, what) }) : null,
   };
   for (let step = 0; step < MAX_STEPS; step++) {
-    const body = buildRequest(s, set.model, toolDefs);
+    const body = buildRequest(s, set.model, defsFor(s));
     s.sent = s.messages.length; // everything in the log has now gone out; its wire form is fixed
     const entry = measure(s.id, body);
     if (shown()) { $('#req').textContent = JSON.stringify(body, null, 2); $('#events').textContent = ''; }
@@ -693,7 +699,7 @@ const concernMessage = (id, task, deps = '') => `concern ${id}: ${task}\n${deps 
 
 function fork(source, id, cut) {
   const b = newSession({
-    title: '↳ ' + id, system: source.system, wire: source.wire, keep: source.keep, core: source.core, edge: source.edge, sent: Math.min(source.sent || 0, cut), padSeen: { ...source.padSeen },
+    title: '↳ ' + id, system: source.system, tools: source.tools, wire: source.wire, keep: source.keep, core: source.core, edge: source.edge, sent: Math.min(source.sent || 0, cut), padSeen: { ...source.padSeen },
     parent: { id: source.id, at: cut, concern: id },
     messages: structuredClone(source.messages.slice(0, cut)),
   });
@@ -760,7 +766,7 @@ const POCKET_REQUEST = 'Write the pocket that replaces this conversation for who
 // Rough cost case for folding now, from the last request and the catalogue prices.
 function foldCase(s) {
   const now = s.ledger.at(-1)?.prompt || Math.ceil(JSON.stringify(s.messages).length / 4);
-  const after = Math.ceil((s.system.length + JSON.stringify(toolDefs).length) / 4) + 600;
+  const after = Math.ceil((s.system.length + JSON.stringify(defsFor(s)).length) / 4) + 600;
   const m = catalogue.find(m => m.id === state.meta.settings.model);
   const pin = Number(m?.pricing.prompt) || 0, pc = m?.pricing.input_cache_read != null ? Number(m.pricing.input_cache_read) : pin, pout = Number(m?.pricing.completion) || 0;
   const saving = (now - after) * pc, cost = now * pc + 600 * pout + after * (pin - pc);
@@ -788,7 +794,7 @@ const download = (name, obj) => {
 
 const actions = {
   trace() { download('webharness-' + new Date().toISOString().replace(/[:.]/g, '-') + '.trace', { kind: 'webharness.trace', version: 1, build: VERSION, exchanges: trace, trail: pat.trail() }); },
-  new() { const s = newSession({ keep: true, core: 2, edge: 'marks' }); $('#sessions').prepend(sessionRow(s)); activate(s.id); $('#input').focus(); },
+  new() { const s = newSession({ keep: true, core: 2, edge: 'marks', ...(state.keys.github ? { tools: ['repo'] } : {}) }); $('#sessions').prepend(sessionRow(s)); activate(s.id); $('#input').focus(); },
   import() { $('#file').click(); },
   async export() {
     const s = cur(), bundle = exportBundle(s), blobs = {};
@@ -797,6 +803,12 @@ const actions = {
     if (Object.keys(blobs).length) bundle.blobs = blobs;
     if (pat.all().length) bundle.patterns = pat.all();
     download((s.title.replace(/[^\w\- ]+/g, '').trim() || 'session') + '.session', bundle);
+  },
+  async ghcheck() {
+    const who = $('#ghwho');
+    who.textContent = 'checking…';
+    try { who.textContent = 'signed in as ' + await gitClient({ token: () => state.keys.github, trace }).whoami(); }
+    catch (e) { who.textContent = e.message; }
   },
   inspector() { state.meta.settings.inspector = !state.meta.settings.inspector; saveMeta(); applyInspector(); },
   stop() { ctl?.abort(); },
@@ -818,7 +830,7 @@ const actions = {
       pocket = m.content;
     }
     const epoch = (src.epoch || 1) + 1;
-    const n = newSession({ title: src.title.replace(/ · epoch \d+$/, '') + ' · epoch ' + epoch, system: src.system, wire: src.wire, keep: src.keep, core: src.core, edge: src.edge, epoch, from: src.id });
+    const n = newSession({ title: src.title.replace(/ · epoch \d+$/, '') + ' · epoch ' + epoch, system: src.system, tools: src.tools, wire: src.wire, keep: src.keep, core: src.core, edge: src.edge, epoch, from: src.id });
     $('#sessions').prepend(sessionRow(n));
     push(n, { role: 'user', content: 'Pocket:\n' + pocket });
     activate(n.id);
@@ -901,6 +913,7 @@ function bind() {
   $('#picker').addEventListener('mousedown', e => { const r = e.target.closest('[data-model]'); if (r) { e.preventDefault(); pickModel(r.dataset.model); $('#model').blur(); } });
   $('#provider').addEventListener('change', e => { state.meta.settings.provider = e.target.value; saveMeta(); $('#key').value = state.keys[e.target.value] || ''; showBase(); loadModels(); });
   $('#base').addEventListener('change', e => { (state.meta.settings.base ??= {})[state.meta.settings.provider] = e.target.value.trim(); saveMeta(); loadModels(); });
+  $('#ghkey').addEventListener('change', e => { state.keys.github = e.target.value.trim(); saveKeys(); $('#ghwho').textContent = ''; });
   $('#key').addEventListener('change', e => { state.keys[state.meta.settings.provider] = e.target.value.trim(); saveKeys(); });
   $('#ref').addEventListener('change', e => { location.search = '?ref=' + encodeURIComponent(e.target.value.trim()); });
 
@@ -958,6 +971,7 @@ export function boot(env) {
   $('#provider').value = set.provider;
   $('#model').value = set.model;
   $('#key').value = state.keys[set.provider] || '';
+  $('#ghkey').value = state.keys.github || '';
   $('#sessions').append(...rows());
   $('#budget').value = set.branchBudget || BRANCH_BUDGET;
   $('#helper').value = set.helper || '';
@@ -970,4 +984,84 @@ export function boot(env) {
   if (!state.sessions[state.meta.active]) state.meta.active = state.meta.order[0] || '';
   state.meta.active ? activate(state.meta.active) : actions.new();
   loadModels();
+  const pair = bridge.pairing();
+  if (pair) startBridge(pair, env).catch(e => console.error('bridge:', e));
+}
+
+// ---------- approvals for outward-facing writes ----------
+
+// A repository write waits for a click. The card shows what will be written,
+// built from the resolved changes, not from the model's description of them.
+function approve(s, what) {
+  link?.emit('approve', { session: s.id, what: { ...what, preview: undefined } });
+  return new Promise(ok => {
+    const card = h('article', { class: 'msg approve', 'data-role': 'approve' });
+    const head = what.what === 'commit'
+      ? `${what.repo} ${what.branch}${what.newBranchFrom ? ' (new, from ' + what.newBranchFrom + ')' : ''}\n${what.message}\n\n${what.files.join('\n')}`
+      : `${what.repo} ${what.head} -> ${what.base}\n${what.title}\n\n${what.body}`;
+    card.append(h('b', { text: what.what === 'commit' ? 'Commit to GitHub?' : 'Open a pull request?' }), h('pre', { text: head }));
+    for (const f of what.preview || []) {
+      const d = h('details', {}, h('summary', { text: f.path }), h('pre', { class: 'full', text: f.text.length > 20000 ? f.text.slice(0, 20000) + '\n…' : f.text }));
+      card.append(d);
+    }
+    const yes = h('button', { text: 'allow' }), no = h('button', { text: 'deny' });
+    const done = v => { yes.disabled = no.disabled = true; card.dataset.done = v ? 'allowed' : 'denied'; ok(v); };
+    yes.onclick = () => done(true); no.onclick = () => done(false);
+    card.append(h('div', { class: 'row' }, yes, no));
+    thread(s).append(card);
+    scrollDown();
+  });
+}
+
+// ---------- debug bridge (bridge.js) ----------
+
+const BRIDGE_ACTS = new Set(['new', 'inspector']);
+async function startBridge(pair, env) {
+  const set = state.meta.settings;
+  const hello = () => ({ build: VERSION, schema: SCHEMA, ref: env.ref || '', url: location.origin + location.pathname, ua: navigator.userAgent, provider: set.provider, model: set.model, helper: set.helper || '', sessions: state.meta.order.length });
+  const lastReply = s => { const m = [...s.messages].reverse().find(m => m.role === 'assistant'); return m?.content || ''; };
+  link = await bridge.start(pair, {
+    trace, hello, token: () => state.keys.github,
+    secrets: () => Object.values(state.keys),
+    gated: new Set(['send', 'set', 'reload']),
+    directives: {
+      ping: hello,
+      state: () => ({ active: state.meta.active, busy, settings: { ...set }, sessions: state.meta.order.map(id => { const s = state.sessions[id]; return { id, title: s.title, parent: s.parent?.id || null, messages: s.messages.length, ledger: s.ledger?.length || 0 }; }) }),
+      session: ({ id }) => exportBundle(state.sessions[id || state.meta.active]),
+      trace: ({ from = 0 }) => trace.slice(from),
+      trail: () => pat.trail(),
+      dom: ({ sel, html, max = 20 }) => [...document.querySelectorAll(sel)].slice(0, max).map(e => (html ? e.outerHTML : e.textContent).slice(0, 4000)),
+      run: ({ code, timeout = 5000 }) => runJs({ code }, null, timeout),
+      act: ({ name }) => { if (!BRIDGE_ACTS.has(name)) throw new Error('act allows: ' + [...BRIDGE_ACTS].join(' ')); actions[name](); return state.meta.active; },
+      async send({ text, session }) {
+        if (session) activate(session);
+        await send(String(text || ''));
+        return { session: state.meta.active, reply: lastReply(cur()), ledger: cur().ledger?.slice(-3) };
+      },
+      set({ provider, model, helper }) { // never base: that would move where the key is sent
+        if (provider) set.provider = provider;
+        if (model) { set.model = model; $('#model').value = model; }
+        if (helper != null) { set.helper = helper; $('#helper').value = helper; }
+        saveMeta();
+        return { provider: set.provider, model: set.model, helper: set.helper };
+      },
+      reload({ ref }) { const u = new URL(location.href); ref ? u.searchParams.set('ref', ref) : u.searchParams.delete('ref'); setTimeout(() => location.assign(u), 300); return { to: u.search }; },
+    },
+    banner() {
+      const b = h('div', { id: 'bridgebar' }, h('b', { text: 'Debug bridge on' }),
+        h('span', { class: 'note', text: 'Sends errors, notices, traces and what the paired agent asks for, encrypted. Never the keys.' }),
+        h('span', { class: 'note', 'data-bstat': '' }), h('span', { 'data-bask': '' }), h('button', { 'data-bend': '', text: 'end' }));
+      document.body.append(b);
+      return b;
+    },
+    ask(text) {
+      const slot = $('#bridgebar [data-bask]');
+      return new Promise(ok => {
+        const yes = h('button', { text: 'allow' }), no = h('button', { text: 'deny' });
+        const done = v => { slot.replaceChildren(); ok(v); };
+        yes.onclick = () => done(true); no.onclick = () => done(false);
+        slot.replaceChildren(h('span', { text: text + ' ' }), yes, no);
+      });
+    },
+  });
 }

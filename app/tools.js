@@ -11,7 +11,7 @@ import * as pat from './patterns.js';
 // stored arguments again.
 const REF_NOTE = ' An earlier call may appear as {ref, name}: its arguments are stored under that handle and are implied; calling with {ref} repeats it.';
 const REF_PROPS = { ref: { type: 'string' }, name: { type: 'string', description: 'short name for this call, kept as its label' } };
-export const SWAPPABLE = new Set(['run_js', 'show_widget']);
+export const SWAPPABLE = new Set(['run_js', 'show_widget', 'repo_commit']);
 export const ARG_MAX = 400; // chars of arguments kept inline in the log
 
 const WORKER = `
@@ -26,26 +26,64 @@ onmessage = async e => {
   } catch (err) { postMessage({ ok: false, error: String(err), logs }); }
 };`;
 
-// Code runs in a dedicated Worker: no DOM, no localStorage (so no API key), and
-// it is terminated on timeout. It is not a network sandbox: fetch still works.
-function runJs({ code }, _ctx, timeout = 5000) {
+// Code runs in a Worker started inside a hidden sandboxed iframe whose CSP
+// allows no network at all: no fetch, XHR, WebSocket, EventSource or script
+// import, and (opaque origin) no access to this page, its storage or the API key.
+// The frame terminates the Worker on timeout. Verified in Chromium (smoke test).
+// 'unsafe-eval' is needed to run the code as a function body; it grants no network.
+export const RUNNER_CSP = "default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval' blob: data:; worker-src blob: data:";
+const FRAME = `<meta http-equiv="Content-Security-Policy" content="${RUNNER_CSP}"><script>
+const SRC = ${JSON.stringify(WORKER)};
+const start = () => { try { return new Worker(URL.createObjectURL(new Blob([SRC], { type: 'text/javascript' }))); } catch { return new Worker('data:text/javascript,' + encodeURIComponent(SRC)); } };
+onmessage = e => {
+  const { id, code, timeout } = e.data || {};
+  if (!id) return;
+  let w;
+  const done = out => { clearTimeout(t); try { w && w.terminate(); } catch {} parent.postMessage({ whRun: id, out }, '*'); };
+  const t = setTimeout(() => done({ ok: false, error: 'Timed out after ' + timeout + ' ms' }), timeout);
+  try { w = start(); } catch (err) { return done({ ok: false, error: 'runtime unavailable: ' + err.message }); }
+  w.onmessage = m => { let out = m.data; try { JSON.stringify(out); } catch { out = { ok: true, result: String(out.result), logs: out.logs }; } done(out); };
+  w.onerror = m => done({ ok: false, error: m.message || 'Script error' });
+  w.postMessage(code);
+};
+parent.postMessage({ whRunReady: 1 }, '*');
+<\/script>`;
+
+let runner = null; // { frame, ready: Promise, waiting: Map }
+function getRunner() {
+  if (runner?.frame.isConnected) return runner;
+  const frame = document.createElement('iframe');
+  frame.sandbox = 'allow-scripts';
+  frame.hidden = true;
+  frame.dataset.runner = '';
+  frame.srcdoc = FRAME;
+  const waiting = new Map();
+  let ready;
+  const p = new Promise(ok => { ready = ok; });
+  addEventListener('message', e => {
+    if (e.source !== frame.contentWindow) return;
+    if (e.data?.whRunReady) ready();
+    const w = waiting.get(e.data?.whRun);
+    if (w) { waiting.delete(e.data.whRun); w(e.data.out); }
+  });
+  document.body.append(frame);
+  return runner = { frame, ready: p, waiting };
+}
+
+// Plain text, not JSON: a long result keeps its line breaks, so it can be searched by line later.
+const asText = o => {
+  const r = o.ok ? (typeof o.result === 'string' ? o.result : JSON.stringify(o.result)) : 'Error: ' + o.error;
+  return o.logs?.length ? `${r}\n[console]\n${o.logs.join('\n')}` : r;
+};
+
+export async function runJs({ code }, _ctx, timeout = 5000) {
+  const r = getRunner();
+  await Promise.race([r.ready, new Promise(ok => setTimeout(ok, 3000))]);
+  const id = Math.random().toString(36).slice(2);
   return new Promise(resolve => {
-    const url = URL.createObjectURL(new Blob([WORKER], { type: 'text/javascript' }));
-    const w = new Worker(url);
-    // Plain text, not JSON: a long result keeps its line breaks, so it can be searched by line later.
-    const text = o => {
-      const r = o.ok ? (typeof o.result === 'string' ? o.result : JSON.stringify(o.result)) : 'Error: ' + o.error;
-      return o.logs?.length ? `${r}\n[console]\n${o.logs.join('\n')}` : r;
-    };
-    const done = out => { clearTimeout(t); w.terminate(); URL.revokeObjectURL(url); resolve(text(out)); };
-    const t = setTimeout(() => done({ ok: false, error: `Timed out after ${timeout} ms` }), timeout);
-    w.onmessage = e => {
-      let out = e.data;
-      try { JSON.stringify(out); } catch { out = { ok: true, result: String(out.result), logs: out.logs }; }
-      done(out);
-    };
-    w.onerror = e => done({ ok: false, error: e.message || 'Script error' });
-    w.postMessage(String(code ?? ''));
+    const guard = setTimeout(() => { r.waiting.delete(id); r.frame.remove(); resolve(asText({ ok: false, error: `No answer from the runtime after ${timeout + 2000} ms` })); }, timeout + 2000);
+    r.waiting.set(id, out => { clearTimeout(guard); resolve(asText(out)); });
+    r.frame.contentWindow.postMessage({ id, code: String(code ?? ''), timeout }, '*');
   });
 }
 
@@ -134,9 +172,30 @@ export const tools = [
     }),
 ];
 
+// Repository tools (git.js). Only sessions created with repository access get
+// them, so a session's tool list, which sits in the cached prefix, never changes.
+const CHANGE = { type: 'object', properties: { path: { type: 'string' }, content: { type: 'string' }, from: { type: 'string', description: 'an os: handle whose stored text becomes the file' }, edits: { type: 'array', items: { type: 'object', properties: { find: { type: 'string' }, replace: { type: 'string' } }, required: ['find', 'replace'] } }, delete: { type: 'boolean' } }, required: ['path'] };
+const noRepo = 'No repository access is configured.';
+export const repoTools = [
+  fn('repo_read',
+    'Read a GitHub repository. op: file (path, optional lines "a-b"; a directory path lists it), tree (all file paths, optional path prefix), log (optional path, n), diff (base, head, optional path), branches, prs (state). ref is a branch, tag or commit; default branch if omitted. Say in `want` what you are looking for when the output may be long.',
+    { repo: { type: 'string', description: 'owner/name' }, op: { type: 'string', enum: ['file', 'tree', 'log', 'diff', 'branches', 'prs'] }, path: { type: 'string' }, ref: { type: 'string' }, lines: { type: 'string' }, n: { type: 'integer' }, base: { type: 'string' }, head: { type: 'string' }, state: { type: 'string' }, want: { type: 'string' } }, ['repo'],
+    (a, ctx) => ctx.git ? ctx.git.read(a) : noRepo),
+  fn('repo_commit',
+    'Commit changes to a branch in one commit; the branch is created from `from` (default branch if omitted) when it does not exist. Each change is {path, content}, {path, edits: [{find, replace}]} (each find must occur exactly once in the current file; prefer this for small changes), {path, from: "os:..."} or {path, delete: true}. The user approves each commit.' + REF_NOTE,
+    { repo: { type: 'string' }, branch: { type: 'string' }, from: { type: 'string' }, message: { type: 'string' }, changes: { type: 'array', items: CHANGE }, ...REF_PROPS }, [],
+    (a, ctx) => ctx.git ? ctx.git.commit(a) : noRepo),
+  fn('repo_pr',
+    'Open a pull request from head into base (default branch if omitted). The user approves it.',
+    { repo: { type: 'string' }, head: { type: 'string' }, base: { type: 'string' }, title: { type: 'string' }, body: { type: 'string' }, draft: { type: 'boolean' } }, ['repo', 'head', 'title'],
+    (a, ctx) => ctx.git ? ctx.git.pr(a) : noRepo),
+];
+const all = () => [...tools, ...repoTools];
+
 const WHOLE = new Set(['entry_read', 'fan_out', 'output_read', 'branch_read', 'pattern_find', 'pattern_get', 'pattern_put', 'pattern_run']);
 
 export const toolDefs = tools.map(t => t.def);
+export const defsFor = s => s.tools?.includes('repo') ? [...toolDefs, ...repoTools.map(t => t.def)] : toolDefs;
 
 // Every call leaves a trail row written by the harness: tool, argument shape, outcome, size, time.
 export async function execTool(call, ctx, via) {
@@ -149,7 +208,7 @@ export async function execTool(call, ctx, via) {
 }
 
 async function exec(call, ctx) {
-  const t = tools.find(t => t.def.function.name === call.function.name);
+  const t = all().find(t => t.def.function.name === call.function.name);
   if (!t) return `Unknown tool: ${call.function.name}`;
   let args;
   try { args = JSON.parse(call.function.arguments || '{}'); } catch (e) { return `Invalid JSON arguments: ${e.message}`; }

@@ -124,6 +124,12 @@ const mock = {
     } else if (/long script/.test(last.content || '')) {
       const code = "const out = []; for (let i = 0; i < 300; i++) { out.push('row ' + i + '   '); if (i === 150) out.push('total=4950'); } out.push('same', 'same', 'same'); return out.join('\\n'); // " + 'padding '.repeat(60);
       yield { choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_' + Date.now(), type: 'function', function: { name: 'run_js', arguments: JSON.stringify({ code, name: 'sum rows', want: 'total' }) } }] } }] };
+    } else if (/repo (read|commit|pr)/.test(last.content || '')) {
+      const op = /repo (read|commit|pr)/.exec(last.content)[1];
+      const call = op === 'read' ? ['repo_read', { repo: 'o/r', op: 'file', path: 'a.txt' }]
+        : op === 'commit' ? ['repo_commit', { repo: 'o/r', branch: 'feat', message: 'Change greeting\n\nfrom the mock', changes: [{ path: 'a.txt', edits: [{ find: 'hello', replace: 'goodbye' }] }, { path: 'b.txt', content: 'new file' }] }]
+        : ['repo_pr', { repo: 'o/r', head: 'feat', title: 'Change greeting' }];
+      yield { choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_' + Date.now(), type: 'function', function: { name: call[0], arguments: JSON.stringify(call[1]) } }] } }] };
     } else if (/run pattern (pt:\w+)/.test(last.content || '')) {
       yield { choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_' + Date.now(), type: 'function', function: { name: 'pattern_run', arguments: JSON.stringify({ id: /run pattern (pt:\w+)/.exec(last.content)[1], values: { a: 6, b: 7 } }) } }] } }] };
     } else if (/store pattern/.test(last.content || '')) {
