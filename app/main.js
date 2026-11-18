@@ -2572,15 +2572,24 @@ function mountMachine() {
       const addAct = (label, meta, kind = '') => { count++; slot(nAct, count); acts.append(h('div', { class: 'vmact', 'data-kind': kind }, h('span', { class: 'vmt', text: new Date().toLocaleTimeString() }), h('span', { class: 'vml', text: label }), h('span', { class: 'vmm', text: meta || '' }))); acts.scrollTop = acts.scrollHeight; };
       vmInst.onEvent(e => addAct(e.label, e.ms != null ? `${e.ms} ms · ${e.bytes} chars${e.timedOut ? ' · timed out' : e.code ? ' · exit ' + e.code : ''}` : '', e.kind));
       const put = (cls, text) => { term.append(h('div', { class: cls, text })); while (term.childElementCount > 4000) term.firstElementChild.remove(); term.scrollTop = term.scrollHeight; };
+      // the console's own bytes (person typing, plumbing) vs a job's result (seg.code set):
+      // markers are cut out of a line (the guest may print one with no newline after it)
+      const MARK = /__WH_(?:A|D|S|R|SET|NET|UP)_[\w"$()+]*?__/g;
+      const flush = () => { const c = raw.checked ? carry : carry.replace(MARK, ''); if (c.trim()) put('vmline', c); carry = ''; };
+      const emit = (l, cls) => {
+        const rt = /__WH_RUNTIME_POLICY (\S+) (.*?)__/.exec(l);
+        if (rt) { addAct(`policy ${rt[1]}: refused ${rt[2]}`, '', 'policy'); if (!raw.checked) return; }
+        put(cls, l);
+      };
       vmInst.onView(seg => {
-        if (seg.k === 'in') { if (carry) { put('vmline', carry); carry = ''; } const [first, ...more] = String(seg.text).split('\n'); put('vmin-line', '$ ' + first); for (const m of more) put('vmin-line', '> ' + m); return; }
+        if (seg.k === 'in') { flush(); const [first, ...more] = String(seg.text).split('\n'); put('vmin-line', '$ ' + first); for (const m of more) put('vmin-line', '> ' + m); return; }
+        if (seg.code !== undefined || seg.timedOut) { flush(); for (const l of String(seg.text).replace(/\x1b\[[0-9;?]*[ -/]*[@-~]|\r/g, '').replace(/\n$/, '').split('\n')) if (seg.text) emit(l, 'vmline'); return; }
         const text = carry + seg.text.replace(/\x1b\[[0-9;?]*[ -/]*[@-~]|\r/g, '');
         const parts = text.split('\n'); carry = parts.pop();
-        for (const l of parts) {
-          const rt = /__WH_RUNTIME_POLICY (\S+) (.*?)__/.exec(l);
-          if (rt) { addAct(`policy ${rt[1]}: refused ${rt[2]}`, '', 'policy'); if (!raw.checked) continue; }
-          if (!raw.checked && /__WH_\w+__|__WH_UP_|__WH_NET_|\/var\/wh\/|^\s*stty -echo/.test(l)) continue; // plumbing (the guest echoes what is typed)
-          put(seg.k === 'raw' ? 'vmline vmraw' : 'vmline', l);
+        for (const l0 of parts) {
+          const l = raw.checked ? l0 : l0.replace(MARK, '');
+          if (!raw.checked && (!l.trim() || /__WH_UP_|__WH_NET_|\/var\/wh\/|^\s*stty -echo/.test(l))) continue; // plumbing (the guest echoes what is typed)
+          emit(l, seg.k === 'raw' ? 'vmline vmraw' : 'vmline');
         }
       });
       return term;
