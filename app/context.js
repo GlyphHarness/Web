@@ -64,6 +64,14 @@ export function corePrompt(session) {
   ].filter(Boolean).join('\n');
 }
 
+// Edge: messages the model has not been sent back yet. A reply at the edge can be
+// condensed for free: it has never been part of a cached prefix, so the short
+// form is what gets cached. Once sent, a message's wire form never changes.
+export const EDGE_MIN = 600; // chars; shorter replies are not worth condensing
+export const markedOnly = text => text.split('\n').filter(l => /^!!?\s*\S/.test(l)).join('\n');
+export const edgeReplies = s => s.messages.map((m, i) => ({ m, i }))
+  .filter(({ m, i }) => i >= (s.sent || 0) && m.role === 'assistant' && !m.tool_calls && (m.content || '').length > EDGE_MIN && m.x?.wire == null);
+
 export function keptLines(session, max = 30) {
   const hits = [];
   session.messages.forEach((m, i) => {
@@ -79,7 +87,9 @@ export function buildRequest(session, model, toolDefs) {
   // sessions from before the core prompt keep their old prefix (system, then the keep note)
   const system = (session.core ? [corePrompt(session), session.system] : [session.system, session.keep ? KEEP_NOTE : '']).filter(Boolean).join('\n\n');
   if (system) messages.push({ role: 'system', content: system });
-  const log = session.messages.map(({ x, ...wire }) => wire); // x = local-only metadata, never sent
+  // x = local-only metadata, never sent. x.wire, when set, is the condensed text
+  // that goes out in place of the message's content (see edge folding in main.js).
+  const log = session.messages.map(({ x, ...wire }) => x?.wire != null ? { ...wire, content: x.wire } : wire);
   messages.push(...(session.wire === 'notes' ? asNotes(log) : log));
   const body = { model, messages, stream: true };
   if (toolDefs.length) body.tools = toolDefs;

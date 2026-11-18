@@ -2,7 +2,7 @@
 
 A client-side LLM chat harness served straight from this repo with GitHub Pages. No server, no build step: the browser holds the API key, the sessions and the tools.
 
-Status: working skeleton (v0.12.0). The OpenRouter path is written from the OpenAI-compatible conventions and has not yet been run against the live API.
+Status: working skeleton (v0.13.0). The OpenRouter path is written from the OpenAI-compatible conventions and has not yet been run against the live API.
 
 ## Run
 
@@ -119,6 +119,20 @@ The risk with notes is that a model copies the pattern and writes a `[called ...
 New sessions have "Keep marks" on (System prompt section). It adds one sentence to the system prompt telling the model to start a line with `!` if it must survive condensing, or `!!` if it is critical. That costs one character per kept line and no wrapper markup.
 
 Nothing is cut while the session runs, because that would break the cached prefix. The marks are read when you fold the session: the pocket is the marked lines, critical ones first, then in order of appearance, up to 30. A fold built this way makes no model request. A session with no marked lines falls back to asking the model for a pocket.
+
+### Edge folding and the steward
+
+A reply the model has just written has not been sent back to it yet, so it is not in any cached prefix. That makes it the one place where text can be shortened for free. Each session has a setting for it (System prompt section, "Replies, when first sent back to the model"):
+
+- **off**: replies go back whole.
+- **marks** (default for new sessions): a reply over 600 characters that has `!` lines goes back as those lines only.
+- **helper**: as marks; a long reply with no marks is condensed by the helper model.
+
+The full reply stays in the log and on screen; a condensed one has a coloured edge and a "sent back as" line showing what the model will see. Once a reply has been sent, its form never changes again.
+
+The **steward** is a single helper-model request that serves all sessions at once, about a second after the app goes idle. It receives numbered items (a reply to condense, a session to title), not conversations, and the harness applies its answers. If it fails, nothing is changed. It needs a helper model in Settings.
+
+The **Sessions** section of the inspector lists every session side by side from the ledgers alone: branches, requests, context size, cached share, condensed and pending replies, cost, plus the steward's own totals.
 
 ### Folding a session
 

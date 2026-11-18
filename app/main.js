@@ -10,9 +10,9 @@ import { toolDefs, execTool, SWAPPABLE, ARG_MAX } from './tools.js';
 import { render } from './widgets.js';
 import * as pat from './patterns.js';
 import { put, get, handlesIn } from './outstore.js';
-import { buildRequest, measure, report, padAttachment, inherit, imitatesNote, keptLines, corePrompt } from './context.js';
+import { buildRequest, measure, report, padAttachment, inherit, imitatesNote, keptLines, corePrompt, EDGE_MIN, markedOnly, edgeReplies } from './context.js';
 
-export const VERSION = '0.12.0';
+export const VERSION = '0.13.0';
 const MAX_STEPS = 8; // model <-> tool round trips per user turn
 const MAX_BRANCHES = 6; // concerns per fan_out
 const FOLD_MAX = 2000; // chars of a fold handed back to the source
@@ -83,6 +83,8 @@ const SHELL = `
     <textarea id="system" rows="6"></textarea>
     <label>How past tool calls are sent</label>
     <select id="wire"><option value="calls">calls: structured, as the model made them</option><option value="notes">notes: one text line per call, results as text</option></select>
+    <label>Replies, when first sent back to the model</label>
+    <select id="edge"><option value="off">off: sent whole</option><option value="marks">marks: a long reply with "!" lines is sent as those lines</option><option value="helper">helper: marks, else condensed by the helper model</option></select>
     <label><input type="checkbox" id="keep"> Keep marks: the model flags lines to keep with "!" (adds one sentence to the system prompt)</label>
     <p class="note">First bytes of every request. Editing it mid-session breaks the cached prefix; the ledger will show it.</p>
   </details>
@@ -95,6 +97,11 @@ const SHELL = `
     <p class="note">Solutions, gotchas and recipes the model stored, with where each came from. The trail is one automatic row per tool call.</p>
     <div id="patterns"></div>
     <p class="note" id="patn"></p>
+  </details>
+  <details><summary>Sessions</summary>
+    <p class="note">All sessions from their ledgers, with branches included. context = last request's prompt tokens; condensed = replies sent back in short form; edge = long replies not yet sent back.</p>
+    <table id="overview" class="audit"></table>
+    <p class="note" id="stewardsum"></p>
   </details>
   <details open><summary>Cache ledger</summary>
     <p class="note">kept = how much of the previous request this one repeats byte-for-byte (local). cached = input tokens the provider reports as cache hits.</p>
@@ -203,6 +210,8 @@ function messageNode(m, s) {
   }
   if (m.content) el.append(h('button', { class: 'copy', 'data-copy': 'msg', type: 'button', text: 'copy' }));
   el._raw = m.content || '';
+  el._m = m;
+  if (m.x?.wire != null) wireNote(el, m);
   return el;
 }
 
@@ -288,6 +297,7 @@ function activate(id) {
   $('#system').value = s.system;
   $('#wire').value = s.wire || 'calls';
   $('#keep').checked = !!s.keep;
+  $('#edge').value = s.edge || 'off';
   showCore();
   $('#ledger tbody').replaceChildren(...s.ledger.map(ledgerRow));
   s.parent ? app.setAttribute('data-branch', '') : app.removeAttribute('data-branch');
@@ -299,6 +309,7 @@ function activate(id) {
 function ledgerSum() {
   const s = cur();
   if (!s) return;
+  overview();
   const sum = list => {
     const t = { n: 0, prompt: 0, cached: 0, out: 0, cost: 0 };
     for (const e of list) { t.n++; t.prompt += e.prompt || 0; t.cached += e.cached || 0; t.out += e.completion || 0; t.cost += Number(e.cost) || 0; }
@@ -429,7 +440,9 @@ function showPrice() {
 async function send(text) {
   const s = cur();
   if (busy || !text.trim()) return;
-  if (s.title === 'New session') retitle(s, text.trim().slice(0, 40));
+  if (s.title === 'New session') { retitle(s, text.trim().slice(0, 40)); s.autoTitle = true; }
+  await stewarding; // a pass already under way may be condensing this session's edge
+  await edgeFold(s);
   // a new session opens with the pattern index; it is part of the first message from then on
   push(s, { role: 'user', content: text + (s.messages.length ? '' : pat.index()) + padAttachment(s, state.meta.pads) });
   await run(s);
@@ -449,7 +462,89 @@ async function run(s) {
   if (p.needsKey && !state.keys[set.provider]) return notice(s, 'Add an API key in Settings first.');
   busy = true; app.setAttribute('data-busy', ''); ctl = new AbortController();
   try { return await turns(s, 0); }
-  finally { busy = false; app.removeAttribute('data-busy'); ctl = null; }
+  finally { busy = false; app.removeAttribute('data-busy'); ctl = null; queueSteward(); }
+}
+
+// ---------- edge folding and the steward ----------
+//
+// Edge folding: before a reply is first sent back to the model, it may be
+// replaced on the wire by a short form (x.wire). The stored message is untouched
+// and still shown. Per session (session.edge):
+//   'off'     send replies whole
+//   'marks'   a long reply with "!" lines is sent as those lines only
+//   'helper'  marks first; a long reply without marks is condensed by the steward
+//
+// The steward is one helper-model request that serves every session at once. It
+// is given items (a reply to condense, a session to title), not conversations,
+// and its answer is applied by the harness. It runs when the app goes idle.
+
+function setWire(s, i, text) {
+  const m = s.messages[i];
+  if (i < (s.sent || 0) || !text || text.length >= m.content.length) return false; // never rewrite sent bytes; never grow
+  (m.x ??= {}).wire = text;
+  saveSession(s);
+  const node = $$(`.thread[data-session="${s.id}"] > .msg`).find(n => n._m === m);
+  if (node) wireNote(node, m);
+  return true;
+}
+
+function wireNote(el, m) {
+  el.setAttribute('data-condensed', '');
+  el.append(h('details', { class: 'call wire' }, h('summary', { text: `sent back as ${m.x.wire.length} of ${m.content.length} chars` }), h('pre', { text: m.x.wire })));
+}
+
+// Deterministic part, run right before a send. Anything left for the helper is done here too if the idle pass has not got to it.
+async function edgeFold(s) {
+  if (!s.edge || s.edge === 'off') return;
+  for (const { m, i } of edgeReplies(s)) { const kept = markedOnly(m.content); if (kept) setWire(s, i, kept); }
+  if (s.edge === 'helper' && edgeReplies(s).length) await steward(s);
+}
+
+const STEWARD_SYSTEM = 'You condense records for other programs. The input is a list of items, each starting with a line "#n title" or "#n reply". For a title item, answer with a title of at most 6 words. For a reply item, answer with only the lines a later reader needs to continue the work: decisions, exact values, names, open questions; at most 8 short lines, no narration. Output one block per item, each starting with its "#n" line, and nothing else.';
+
+let stewarding = null, stewardTimer = 0;
+const queueSteward = () => { clearTimeout(stewardTimer); stewardTimer = setTimeout(() => { if (!busy) steward(); }, 800); };
+
+function steward(only) {
+  return stewarding = (async () => {
+    const set = state.meta.settings, items = [];
+    if (!set.helper) return;
+    for (const s of only ? [only] : Object.values(state.sessions)) {
+      if (s.autoTitle && !s.parent && s.messages.length >= 2) items.push({ kind: 'title', s, text: s.messages.slice(0, 2).map(m => String(m.content || '').slice(0, 300)).join('\n') });
+      if (s.edge === 'helper') for (const { m, i } of edgeReplies(s)) if (!markedOnly(m.content)) items.push({ kind: 'reply', s, i, text: m.content.slice(0, 8000) });
+    }
+    if (!items.length) return;
+    const body = { model: set.helper, stream: true, messages: [{ role: 'system', content: STEWARD_SYSTEM }, { role: 'user', content: items.map((it, n) => `#${n + 1} ${it.kind}\n${it.text}`).join('\n\n') }] };
+    let out = '', usage = null;
+    try {
+      for await (const ev of provider().stream(body, state.keys[set.provider], undefined, opt())) { if (ev.error) throw new Error(ev.error.message); if (ev.usage) usage = ev.usage; out += ev.choices?.[0]?.delta?.content || ''; }
+    } catch (e) { console.warn('steward failed:', e); return; } // nothing is applied; replies go out whole
+    let applied = 0;
+    for (const block of out.split(/^#(?=\d+)/m).slice(1)) {
+      const n = parseInt(block), it = items[n - 1], text = block.replace(/^\d+[^\n]*\n?/, '').trim();
+      if (!it || !text) continue;
+      if (it.kind === 'title') { it.s.autoTitle = false; retitle(it.s, text.split('\n')[0].slice(0, 60)); applied++; }
+      else if (setWire(it.s, it.i, text.slice(0, 1200))) applied++;
+    }
+    (state.meta.steward ??= []).push(report({ t: Date.now(), model: set.helper, items: items.length, applied, sessions: new Set(items.map(it => it.s.id)).size }, usage));
+    saveMeta();
+    $('#tracen').textContent = trace.length + ' requests';
+    overview();
+  })();
+}
+
+// Every session side by side, from the ledgers alone: no message text.
+function overview() {
+  const row = s => {
+    const fam = family(s), led = fam.flatMap(x => x.ledger), sum = k => led.reduce((n, e) => n + (Number(e[k]) || 0), 0);
+    const prompt = sum('prompt'), condensed = fam.reduce((n, x) => n + x.messages.filter(m => m.x?.wire != null).length, 0);
+    return h('tr', {}, h('td', {}, h('button', { type: 'button', 'data-goto': s.id, text: s.title.slice(0, 22) })),
+      ...[fam.length - 1, led.length, s.ledger.at(-1)?.prompt ?? '-', prompt ? Math.round(100 * sum('cached') / prompt) + '%' : '-', condensed, edgeReplies(s).length, sum('cost').toFixed(4)].map(v => h('td', { text: String(v) })));
+  };
+  const tops = state.meta.order.map(id => state.sessions[id]).filter(s => !s.parent);
+  $('#overview').replaceChildren(h('tr', {}, ...['session', 'branches', 'requests', 'context', 'cached', 'condensed', 'edge', '$'].map(t => h('th', { text: t }))), ...tops.map(row));
+  const st = state.meta.steward || [];
+  $('#stewardsum').textContent = st.length ? `steward: ${st.length} passes, ${st.reduce((n, e) => n + (e.applied || 0), 0)} items applied, ${st.reduce((n, e) => n + (e.prompt || 0), 0)} prompt tokens, $${st.reduce((n, e) => n + (Number(e.cost) || 0), 0).toFixed(5)}` : 'steward: no passes yet';
 }
 
 // Request > stream > tool calls > repeat, for one session.
@@ -468,6 +563,7 @@ async function turns(s, depth, onFirst) {
   };
   for (let step = 0; step < MAX_STEPS; step++) {
     const body = buildRequest(s, set.model, toolDefs);
+    s.sent = s.messages.length; // everything in the log has now gone out; its wire form is fixed
     const entry = measure(s.id, body);
     if (shown()) { $('#req').textContent = JSON.stringify(body, null, 2); $('#events').textContent = ''; }
 
@@ -589,7 +685,7 @@ const concernMessage = (id, task, deps = '') => `concern ${id}: ${task}\n${deps 
 
 function fork(source, id, cut) {
   const b = newSession({
-    title: '↳ ' + id, system: source.system, wire: source.wire, keep: source.keep, core: source.core, padSeen: { ...source.padSeen },
+    title: '↳ ' + id, system: source.system, wire: source.wire, keep: source.keep, core: source.core, edge: source.edge, sent: Math.min(source.sent || 0, cut), padSeen: { ...source.padSeen },
     parent: { id: source.id, at: cut, concern: id },
     messages: structuredClone(source.messages.slice(0, cut)),
   });
@@ -684,7 +780,7 @@ const download = (name, obj) => {
 
 const actions = {
   trace() { download('webharness-' + new Date().toISOString().replace(/[:.]/g, '-') + '.trace', { kind: 'webharness.trace', version: 1, build: VERSION, exchanges: trace, trail: pat.trail() }); },
-  new() { const s = newSession({ keep: true, core: 1 }); $('#sessions').prepend(sessionRow(s)); activate(s.id); $('#input').focus(); },
+  new() { const s = newSession({ keep: true, core: 1, edge: 'marks' }); $('#sessions').prepend(sessionRow(s)); activate(s.id); $('#input').focus(); },
   import() { $('#file').click(); },
   async export() {
     const s = cur(), bundle = exportBundle(s), blobs = {};
@@ -714,7 +810,7 @@ const actions = {
       pocket = m.content;
     }
     const epoch = (src.epoch || 1) + 1;
-    const n = newSession({ title: src.title.replace(/ · epoch \d+$/, '') + ' · epoch ' + epoch, system: src.system, wire: src.wire, keep: src.keep, core: src.core, epoch, from: src.id });
+    const n = newSession({ title: src.title.replace(/ · epoch \d+$/, '') + ' · epoch ' + epoch, system: src.system, wire: src.wire, keep: src.keep, core: src.core, edge: src.edge, epoch, from: src.id });
     $('#sessions').prepend(sessionRow(n));
     push(n, { role: 'user', content: 'Pocket:\n' + pocket });
     activate(n.id);
@@ -780,8 +876,9 @@ function bind() {
   $('#composer').addEventListener('submit', e => { e.preventDefault(); const i = $('#input'); const v = i.value; if (busy || !v.trim()) return; i.value = ''; send(v); });
   $('#input').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); $('#composer').requestSubmit(); } });
 
-  $('#title').addEventListener('change', e => { const s = cur(); s.title = e.target.value || 'Untitled'; saveSession(s); $(`#sessions [data-id="${s.id}"] span`).textContent = s.title; });
+  $('#title').addEventListener('change', e => { const s = cur(); s.title = e.target.value || 'Untitled'; s.autoTitle = false; saveSession(s); $(`#sessions [data-id="${s.id}"] span`).textContent = s.title; });
   $('#system').addEventListener('change', e => { const s = cur(); s.system = e.target.value; saveSession(s); });
+  $('#edge').addEventListener('change', e => { const s = cur(); s.edge = e.target.value; saveSession(s); });
   $('#keep').addEventListener('change', e => { const s = cur(); s.keep = e.target.checked; saveSession(s); showCore(); });
   $('#wire').addEventListener('change', e => { const s = cur(); s.wire = e.target.value; saveSession(s); showCore(); });
   $('#model').addEventListener('change', e => { state.meta.settings.model = e.target.value.trim(); saveMeta(); showPrice(); });

@@ -99,6 +99,12 @@ const mock = {
       setTimeout(ok, 15);
     });
     let text = '';
+    if (String(body.messages[0]?.content).startsWith('You condense')) {
+      const said = [...last.content.matchAll(/^#(\d+) (title|reply)$/gm)].map(m => `#${m[1]}\n${m[2] === 'title' ? 'Mock Title ' + m[1] : 'condensed item ' + m[1]}`).join('\n');
+      yield { choices: [{ delta: { content: said } }] };
+      yield { choices: [{ delta: {}, finish_reason: 'stop' }], usage: { prompt_tokens: prompt, completion_tokens: 12, prompt_tokens_details: { cached_tokens: 0 }, cost: 0 } };
+      return;
+    }
     if (String(body.messages[0]?.content).startsWith('You filter')) {
       const said = 'mock-filtered: ' + /WANT: (.*)/.exec(last.content)[1];
       yield { choices: [{ delta: { content: said } }] };
@@ -111,7 +117,8 @@ const mock = {
     else if (/^event \S+: /.test(last.content || '')) text = 'Got the event: ' + last.content;
     else if (/^Write the pocket/.test(last.content || '')) text = '## Goal\nmock goal\n## Settled\n- mock decision\n## Open\n- none';
     else if (/^\[result /.test(last.content || '')) text = 'The result was read.';
-    else if (/decide/.test(last.content || '')) text = 'Thinking it over at length.\n! port is 8787\nSome more musing.\n!! use the flash model\nDone musing.';
+    else if (/decide/.test(last.content || '')) text = 'Thinking it over at length.\n! port is 8787\nSome more musing.\n!! use the flash model\nDone musing. ' + 'filler '.repeat(120);
+    else if (/ramble/.test(last.content || '')) text = 'word '.repeat(200);
     else if (/long script/.test(last.content || '')) {
       const code = "const out = []; for (let i = 0; i < 300; i++) { out.push('row ' + i + '   '); if (i === 150) out.push('total=4950'); } out.push('same', 'same', 'same'); return out.join('\\n'); // " + 'padding '.repeat(60);
       yield { choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_' + Date.now(), type: 'function', function: { name: 'run_js', arguments: JSON.stringify({ code, name: 'sum rows', want: 'total' }) } }] } }] };

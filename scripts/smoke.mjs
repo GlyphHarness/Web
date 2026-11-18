@@ -136,6 +136,26 @@ check('notes form: prefix stays byte-stable', (await page.locator('#ledger td[da
 
 await page.click('[data-act=new]');
 await say('decide');
+await say('next');
+const sentBack = () => page.evaluate(() => JSON.parse(document.querySelector('#req').textContent).messages.find(m => m.role === 'assistant').content);
+check('edge fold (marks): a long marked reply goes back as its marked lines only', await sentBack() === '! port is 8787\n!! use the flash model' && await visible().locator('.msg[data-condensed]').count() === 1 && /Done musing/.test(await visible().locator('.msg[data-role=assistant]').first().textContent()));
+await say('again');
+check('edge fold: the condensed form is what gets cached', (await page.locator('#ledger td[data-hit]').allTextContents()).slice(1).every(t => t === '100%'));
+
+await page.click('[data-act=new]');
+await page.click('[data-pane=insp]');
+await page.selectOption('#edge', 'helper');
+await page.fill('#helper', 'mock-1'); await page.dispatchEvent('#helper', 'change');
+await say('ramble please');
+await page.waitForFunction(() => /^Mock Title/.test(document.querySelector('#title').value), null, { timeout: 5000 });
+check('steward: one idle pass serves several sessions: titles, and this one\'s unmarked reply condensed', await visible().locator('.msg[data-condensed]').count() === 1 && /1 passes, [2-9] items applied/.test(await page.locator('#stewardsum').textContent()), await page.locator('#stewardsum').textContent());
+await say('next');
+check('steward: the condensed reply is what goes back', /^condensed item \d$/.test(await sentBack()));
+check('overview: sessions listed from ledgers', await page.locator('#overview tr').count() >= 4);
+await page.fill('#helper', ''); await page.dispatchEvent('#helper', 'change');
+
+await page.click('[data-act=new]');
+await say('decide');
 check('keep marks: the note is in the system prompt of a new session', /Start a line with !/.test(JSON.parse(await page.locator('#req').textContent()).messages[0].content));
 const reqs = await page.locator('#tracen').textContent();
 await page.click('[data-act=epoch]');
