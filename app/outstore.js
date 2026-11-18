@@ -51,23 +51,23 @@ export function shortlist(text, want, max = 20) {
 }
 
 // What goes into the log in place of a long result. In order of preference:
-//   1. want + helper model: the helper's extract        (filter=helper)
-//   2. want: the matching lines                         (filter=keywords)
-//   3. head and tail                                    (filter=ends)
+//   1. want + helper model: the helper's extract        [os:.. 305L helper]
+//   2. want: the matching lines                         [os:.. 305L keywords 1/1]
+//   3. head and tail                                    [os:.. 305L ends]
 // The whole text is stored first, so every view carries a handle to the rest.
 export async function present(raw, { want, helper } = {}) {
   const text = squeeze(raw);
   if (text.length <= VIEW_MAX) return text;
   const handle = await put(text), lines = text.split('\n').length;
-  const tag = extra => `[${handle} ${lines} lines, ${text.length} chars; ${extra}]`;
+  // One short tag: handle, size, which filter ran. The want itself is already on the call.
+  const tag = extra => `[${handle} ${lines}L ${extra}]`;
   if (want) {
-    const w = JSON.stringify(String(want).slice(0, 80));
     const extract = helper ? await helper(String(want), text).catch(() => null) : null; // a failed helper falls through
-    if (extract) return `${tag(`filter=helper want=${w}`)}\n${extract.slice(0, 1200)}`;
+    if (extract) return `${tag('helper')}\n${extract.slice(0, 1200)}`;
     const hits = shortlist(text, want);
-    if (hits) return `${tag(`filter=keywords want=${w}; ${Math.min(20, hits.total)} of ${hits.total} matching lines`)}\n${hits.text}`;
+    if (hits) return `${tag(`keywords ${Math.min(20, hits.total)}/${hits.total}`)}\n${hits.text}`;
   }
-  return `${tag('filter=ends; first 900 and last 400 chars')}\n${text.slice(0, 900)}\n[...]\n${text.slice(-400)}`;
+  return `${tag('ends')}\n${text.slice(0, 900)}\n[...]\n${text.slice(-400)}`;
 }
 
 export async function read({ handle, find, offset = 0, length = 3000 }) {

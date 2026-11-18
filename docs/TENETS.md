@@ -15,7 +15,7 @@ Origins: `L` = glyphcore/lodestar (`CLAUDE.md`, `docs/design/`), `S` = glyphcore
 | 5 | **Evidence, not claims.** What happened is shown from the harness's own records (requests, tool calls, tokens, cost, raw trace). The model is told not to recount its steps. | `auditOf` and the audit table, fold attributes, `FOLD_SHAPE`, `.trace` export | W |
 | 6 | **One concern per branch.** A branch works one named concern and cannot fan out further. | `fan_out` depth check, unique-id check | L1, S |
 | 7 | **Fork from the built prefix, do not grow.** A branch starts as the byte-identical source log; its turns never enter the source. | `fork`, `inherit`; smoke test "branch keeps the whole source prefix" | L11, S |
-| 8 | **The fold is a pocket, not a log.** Fixed shape (OUTCOME, RESULT, EVIDENCE, OPEN), capped at 2,000 chars, appended as one batch, never spliced. | `FOLD_SHAPE`, `foldOf`, `fanOut` return value | L `worker.md` |
+| 8 | **The fold is a pocket, not a log.** Four lines (OUTCOME, RESULT, EVIDENCE, OPEN), capped at 2,000 chars, appended as one batch, never spliced. | `FOLD_SHAPE`, `foldOf`, `fanOut` return value | L `worker.md` |
 | 9 | **Graft by handle.** A fold carries its branch id; the full transcript is fetched only on demand. | `foldTag`, `branch_read` | L7, L5 |
 | 10 | **Siblings wait for the first cache write.** The first branch goes out alone until its response starts. | `fanOut` (`warm`) | W |
 | 11 | **Forward-only data.** Schema number, migration steps never edited, newer data refuses to load. | `migrate.js`; smoke test "newer-schema data" | W |
@@ -36,6 +36,8 @@ Origins: `L` = glyphcore/lodestar (`CLAUDE.md`, `docs/design/`), `S` = glyphcore
 | 27 | **Two views, one log.** The stored log is always structured; the wire form (`calls` or `notes`) is a pure function of it, so either keeps the prefix byte-stable. | `context.js` `buildRequest`, `asNotes`; smoke tests "notes form" | L12 |
 | 28 | **The stated want stays in the prefix.** A swapped call keeps `want` inline, and in notes form it sits on the call line right before its result. | `main.js` swap, `callNote` | W |
 | 29 | **An imitated call is detected, never executed.** In notes form, a reply that writes a `[called ...]` line as text is flagged and counted in the trail. | `imitatesNote`, `turns` | W |
+| 30 | **Markers are single lines, never wrappers.** Folds, concerns, events, pads, the pattern index and result tags each cost one short header line; no tag pairs. | `foldTag`, `concernMessage`, `widgetEvent`, `padAttachment`, `patterns.js` `index`, `outstore.js` `present` | W |
+| 31 | **The model marks what to keep; the harness does the keeping.** A line starting with `!` (or `!!`, critical) survives a fold. Nothing is cut mid-session. A fold built from marks needs no model request. | `context.js` `KEEP_NOTE`, `keptLines`; `epoch` action; smoke tests "keep marks" | W |
 | 12 | **Secrets stay out of records.** The API key is never in a session file or trace. | `store.js` key separation, `providers.js` trace record | L9 |
 
 ## Concerns (no enforcer yet)
@@ -44,6 +46,8 @@ Origins: `L` = glyphcore/lodestar (`CLAUDE.md`, `docs/design/`), `S` = glyphcore
 |---|---|---|
 | Fold break-even is advisory | The estimate is shown, not enforced, and assumes 600 pocket tokens and full cache hits. Calibrate from real traces. | L `shim.md` |
 | Ephemeral edge | The wire is derived from the log, but there is still no unpersisted tail; scratchpads are baked into the user message. | L12 |
+| Keep marks are the model's judgement | A model may mark too little (the fold loses something) or too much (the pocket hits the 30-line cap and drops the newest ordinary lines). Compare a marked fold against a model-written pocket on the same session. | W |
+| Keep marks on tool results | Only assistant lines can be marked; a needed value that only appears in a tool result is lost unless the model restates it on a `!` line. | W |
 | Notes vs calls is unmeasured | Notes saves call ids and JSON framing and frees the log from provider pairing rules, but may teach the model to write notes instead of calling. Compare cost and the imitation count on the same task. | W |
 | Stored output is never pruned | Blobs live in IndexedDB until the browser clears them; no retention rule. | L `output-store.md` Q5 |
 | Models may not send `want` | Filtering by intent depends on the model filling `want`. Measure how often a long result arrives without it. | W |

@@ -2,7 +2,7 @@
 
 A client-side LLM chat harness served straight from this repo with GitHub Pages. No server, no build step: the browser holds the API key, the sessions and the tools.
 
-Status: working skeleton (v0.8.0). The OpenRouter path is written from the OpenAI-compatible conventions and has not yet been run against the live API.
+Status: working skeleton (v0.9.0). The OpenRouter path is written from the OpenAI-compatible conventions and has not yet been run against the live API.
 
 ## Run
 
@@ -58,7 +58,7 @@ The model list and prices come from the provider's `/models` endpoint at run tim
 
 ### Branch and fold
 
-A branch is a session forked from another at a cut point: a byte-identical copy of the source log plus one message naming a concern. Its turns stay in the branch. Only its fold comes back, in a fixed shape (OUTCOME, RESULT, EVIDENCE, OPEN), appended to the source.
+A branch is a session forked from another at a cut point: a byte-identical copy of the source log plus one message naming a concern. Its turns stay in the branch. Only its fold comes back, as four lines (OUTCOME, RESULT, EVIDENCE, OPEN) under a one-line header, appended to the source.
 
 - **By the model:** the `fan_out` tool takes a list of `{id, task, after}` concerns. Concerns with no unmet `after` run in parallel as a wave; a later wave gets the folds it depends on. All folds return as one tool result. `branch_read` fetches a branch's transcript by id.
 - **By hand:** type a concern in the message box and press "branch". "fold back" appends the branch's last reply to its source without running it, so several folds can be batched.
@@ -81,7 +81,7 @@ The right pane has two tabs, Stage and Inspector. The stage shows what the model
 | `form` | `{fields, submit}` |
 
 - A call that reuses a `slot` replaces that card in place.
-- A form submit or an `emit` call is sent as a `<widget_event>` user message and starts a turn.
+- A form submit or an `emit` call is sent as a one-line `event <slot>: <json>` user message and starts a turn.
 - The thread shows a chip per widget; clicking it brings the card into view.
 - The stage is rebuilt from the session log, so it survives reload, export and import.
 
@@ -97,7 +97,7 @@ Both halves of a tool call can be bulky: the arguments the model wrote, and the 
 2. The call said what it `want`s: the lines that mention those words.
 3. Otherwise: the first 900 and last 400 characters.
 
-Every reduced result starts with a tag such as `[os:... 305 lines, 2,514 chars; filter=keywords want="total"; 1 of 1 matching lines]`, so the model and you can see what was done and fetch the rest with `output_read`. A helper that fails falls through to the next step. Helper requests appear in the trace and the ledger. Exports include the stored text their sessions cite.
+Every reduced result starts with a short tag such as `[os:1k2j3h4g5f 305L keywords 1/1]` (handle, line count, filter), so the model and you can see what was done and fetch the rest with `output_read`. A helper that fails falls through to the next step. Helper requests appear in the trace and the ledger. Exports include the stored text their sessions cite.
 
 ### How past tool calls are sent: calls or notes
 
@@ -108,24 +108,15 @@ Each session has a setting under the system prompt for how its earlier tool call
 
 The risk with notes is that a model copies the pattern and writes a `[called ...]` line instead of making a real call. That is detected: nothing runs, a notice appears, and the trail counts it. Changing the setting mid-session rewrites the prefix once; branches and folded sessions inherit it.
 
+### Keep marks
+
+New sessions have "Keep marks" on (System prompt section). It adds one sentence to the system prompt telling the model to start a line with `!` if it must survive condensing, or `!!` if it is critical. That costs one character per kept line and no wrapper markup.
+
+Nothing is cut while the session runs, because that would break the cached prefix. The marks are read when you fold the session: the pocket is the marked lines, critical ones first, then in order of appearance, up to 30. A fold built this way makes no model request. A session with no marked lines falls back to asking the model for a pocket.
+
 ### Folding a session
 
-"fold session" asks the model, in a branch, for a pocket of at most 30 lines (Goal, Settled, Worked, Do not retry, Open), then starts a new session from that pocket. The original is untouched. Before spending anything it shows the context size before and after, and how many turns the fold needs to pay for itself at the model's prices.
-
-### Pattern store and trail
-
-Two records build up in the browser as the model works:
-
-- **Trail (automatic):** one row per tool call: tool, argument shape, outcome, size, time, session. The harness writes it; the model is not asked. It is included in `.trace` exports.
-- **Patterns (authored):** solutions, gotchas, patterns, philosophies and recipes the model stores with `pattern_put`. Each is at most 1,200 characters, labelled, and linked to outputs or branches by handle. Its id is a fingerprint of its content. Who stored it (session, message, model, time) is recorded by the harness.
-
-How the model uses them:
-
-- A new session's first message carries a one-line-per-pattern index of the 20 most used.
-- `pattern_find` searches by words, labels or kind; `pattern_get` returns one in full.
-- A **recipe** is a stored tool call with `{{slot}}` placeholders. `pattern_run(id, values)` fills the slots and runs it, so a solved problem costs a few tokens the next time.
-
-The Patterns section of the inspector lists every pattern with its origin and use count, and lets you delete one. Patterns travel in `.session` exports.
+"fold session" starts a new session from a pocket and leaves the original untouched. The pocket is the lines the model marked to keep; if there are none, the model is asked, in a branch, for at most 30 lines under Goal, Settled, Worked, Do not retry and Open. Before anything is spent, a dialog shows the context size before and after, how many turns the fold needs to pay for itself at the model's prices, and which of the two pocket sources will be used.
 
 ### Tools
 

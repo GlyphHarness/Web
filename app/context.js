@@ -40,9 +40,26 @@ function asNotes(log) {
 // A reply that writes a call note instead of making the call did nothing. Detected, never executed.
 export const imitatesNote = text => /^\[called \w+/m.test(text || '');
 
+// Keep marks: the model flags a line worth keeping by starting it with "!"
+// ("!!" for critical). One character per kept line, no wrappers. Nothing is cut
+// mid-session (that would break the cached prefix); the marks are read when the
+// session is folded, and the pocket is assembled from them without a model call.
+export const KEEP_NOTE = 'Start a line with ! if it must survive when this conversation is condensed, !! if it is critical. Unmarked lines may be dropped.';
+
+export function keptLines(session, max = 30) {
+  const hits = [];
+  session.messages.forEach((m, i) => {
+    if (m.role !== 'assistant' || !m.content) return;
+    for (const l of m.content.split('\n')) { const k = /^(!!?)\s*(\S.*)$/.exec(l); if (k) hits.push({ p: k[1].length, i, text: k[2] }); }
+  });
+  // critical first, then order of encounter; the cap drops the newest ordinary lines last
+  return hits.sort((a, b) => b.p - a.p || a.i - b.i).slice(0, max).map(h => h.text);
+}
+
 export function buildRequest(session, model, toolDefs) {
   const messages = [];
-  if (session.system) messages.push({ role: 'system', content: session.system });
+  const system = [session.system, session.keep ? KEEP_NOTE : ''].filter(Boolean).join('\n\n');
+  if (system) messages.push({ role: 'system', content: system });
   const log = session.messages.map(({ x, ...wire }) => wire); // x = local-only metadata, never sent
   messages.push(...(session.wire === 'notes' ? asNotes(log) : log));
   const body = { model, messages, stream: true };
@@ -104,7 +121,7 @@ export function padAttachment(session, pads) {
     const sig = hash(p.label + '\n' + p.text);
     if (session.padSeen[p.id] === sig) continue;
     session.padSeen[p.id] = sig;
-    out.push(`<scratchpad label=${JSON.stringify(p.label)}>\n${p.text}\n</scratchpad>`);
+    out.push(`pad ${p.label}:\n${p.text}`);
   }
   return out.length ? '\n\n' + out.join('\n\n') : '';
 }

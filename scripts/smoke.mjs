@@ -44,14 +44,14 @@ await stage().locator('.wform input[name=name]').fill('Ada');
 await stage().locator('.wform button').click();
 await page.waitForSelector('#app[data-busy]', { state: 'attached' });
 await page.waitForSelector('#app:not([data-busy])', { state: 'attached' });
-check('form: submit arrives as a widget_event turn', /widget_event slot="demo"[^]*"name":"Ada","n":3/.test(await visible().locator('.msg[data-role=user]').last().textContent()) && /Got the event/.test(await visible().locator('.msg[data-role=assistant]').last().textContent()));
+check('form: submit arrives as a widget_event turn', /event demo: \{"name":"Ada","n":3\}/.test(await visible().locator('.msg[data-role=user]').last().textContent()) && /Got the event/.test(await visible().locator('.msg[data-role=assistant]').last().textContent()));
 await say('now a chart');
 check('slot reuse: the chart replaces the form card', await stage().locator('.card').count() === 2 && await stage().locator('.card svg.wchart rect').count() === 4 && await stage().locator('.wform').count() === 0);
 
 await say('make it big');
 const big = await visible().locator('.msg[data-role=tool] pre').last().textContent();
 const handle = /os:[a-z0-9]+/.exec(big)?.[0];
-check('output store: long result is a short view with a handle', !!handle && /filter=ends/.test(big) && big.length < 1800, `${big.length} chars`);
+check('output store: long result is a short view with a handle', !!handle && /L ends\]/.test(big) && big.length < 1800, `${big.length} chars`);
 await say('read ' + handle);
 check('output store: output_read finds a line by handle', /400: line 399/.test(await visible().locator('.msg[data-role=tool] pre').last().textContent()));
 
@@ -64,12 +64,12 @@ await say('long script');
 const logged = await page.evaluate(() => { const m = JSON.parse(localStorage['wh:meta']); return JSON.parse(localStorage['wh:s:' + m.active]).messages.findLast(x => x.tool_calls).tool_calls[0].function.arguments; });
 check('arguments: a long call is logged as {ref, name, want}', /^\{"ref":"os:[a-z0-9]+","name":"sum rows","want":"total"\}$/.test(logged), logged);
 const filtered = await visible().locator('.msg[data-role=tool] pre').last().textContent();
-check('results: want returns the matching line, not the bulk', /filter=keywords want="total"; 1 of 1/.test(filtered) && /total=4950/.test(filtered) && filtered.length < 300, filtered.replace(/\n/g, ' | '));
+check('results: want returns the matching line, not the bulk', /^\[os:[a-z0-9]+ \d+L keywords 1\/1\]\n\d+: total=4950$/.test(filtered), filtered.replace(/\n/g, ' | '));
 await page.click('[data-pane=insp]');
 await page.fill('#helper', 'mock-1'); await page.dispatchEvent('#helper', 'change');
 await say('long script again');
 const helped = await visible().locator('.msg[data-role=tool] pre').last().textContent();
-check('results: with a helper model the extract comes from it, with its own ledger row', /filter=helper want="total"\]\nmock-filtered: total/.test(helped) && await page.locator('#ledger td:text-is("helper")').count() === 1, helped.replace(/\n/g, ' | '));
+check('results: with a helper model the extract comes from it, with its own ledger row', /L helper\]\nmock-filtered: total/.test(helped) && await page.locator('#ledger td:text-is("helper")').count() === 1, helped.replace(/\n/g, ' | '));
 await page.fill('#helper', ''); await page.dispatchEvent('#helper', 'change');
 
 await say('store pattern');
@@ -83,11 +83,11 @@ check('trail: one row per tool call, recipe run attributed to its pattern', trai
 
 await say('fan out please');
 const folds = await visible().locator('.msg[data-role=tool] pre').last().textContent();
-check('fan_out: three branches fold back, the dependent one received two folds', (folds.match(/<fold /g) || []).length === 3 && /concern="c"[^]*folds received: 2/.test(folds) && await page.locator('#sessions [data-parent]').count() === 3, folds.slice(0, 120));
+check('fan_out: three branches fold back, the dependent one received two folds', (folds.match(/^fold \S+ s\w+ 1req:$/gm) || []).length === 3 && /fold c [^]*folds received: 2/.test(folds) && await page.locator('#sessions [data-parent]').count() === 3, folds.slice(0, 120));
 check('fan_out: audit table comes from harness records', await visible().locator('.audit tr').count() === 4);
 await page.click('[data-pane=insp]');
 await visible().locator('.audit [data-goto]').nth(1).click();
-check('branch: thread shows each message once', await visible().locator('.msg[data-role=user]').last().evaluate(n => n.parentElement.querySelectorAll('.msg').length === n.parentElement.querySelectorAll('.msg[data-role=user]').length * 0 + [...n.parentElement.children].length) && await visible().locator('.msg:has-text("<concern")').count() === 1);
+check('branch: thread shows each message once', await visible().locator('.msg[data-role=user]').last().evaluate(n => n.parentElement.querySelectorAll('.msg').length === n.parentElement.querySelectorAll('.msg[data-role=user]').length * 0 + [...n.parentElement.children].length) && await visible().locator('.msg:has-text("concern b:")').count() === 1);
 check('branch: first request keeps the whole source prefix', (await page.locator('#ledger td[data-hit]').first().textContent()) === '100%' && Number(await page.locator('#ledger tbody tr td:nth-child(4)').first().textContent()) > 0);
 await page.locator('#sessions > div:not([data-parent])').first().click();
 
@@ -122,14 +122,22 @@ await page.selectOption('#wire', 'notes');
 await say('long script');
 await say('and then');
 const wire = JSON.parse(await page.locator('#req').textContent());
-check('notes form: calls and results go out as text turns, roles alternate', !JSON.stringify(wire.messages).includes('tool_call') && wire.messages.every((m, i, a) => m.role !== 'tool' && m.role !== a[i - 1]?.role) && /\[called run_js "sum rows" os:[a-z0-9]+ want: total\]/.test(wire.messages[1].content) && /^\[result run_js "sum rows"\]\n\[os:[^]*total=4950/.test(wire.messages[2].content), JSON.stringify(wire.messages.map(m => m.role)));
+check('notes form: calls and results go out as text turns, roles alternate', !JSON.stringify(wire.messages).includes('tool_call') && wire.messages.every((m, i, a) => m.role !== 'tool' && m.role !== a[i - 1]?.role) && /\[called run_js "sum rows" os:[a-z0-9]+ want: total\]/.test(wire.messages[2].content) && /^\[result run_js "sum rows"\]\n\[os:[^]*total=4950/.test(wire.messages[3].content), JSON.stringify(wire.messages.map(m => m.role)));
 check('notes form: prefix stays byte-stable', (await page.locator('#ledger td[data-hit]').allTextContents()).slice(1).every(t => t === '100%'));
 
 await page.click('[data-act=new]');
+await say('decide');
+check('keep marks: the note is in the system prompt of a new session', /Start a line with !/.test(JSON.parse(await page.locator('#req').textContent()).messages[0].content));
+const reqs = await page.locator('#tracen').textContent();
+await page.click('[data-act=epoch]');
+await page.waitForFunction(() => /epoch 2/.test(document.querySelector('#title').value));
+check('keep marks: fold uses the marked lines, critical first, with no request', (await visible().locator('.msg').first().evaluate(n => n._raw)) === 'Pocket:\nuse the flash model\nport is 8787' && (await page.locator('#tracen').textContent()) === reqs);
+
+await page.click('[data-act=new]');
 await say('hello again');
-check('patterns: a new session opens with the index', /<patterns [^]*\[recipe\] multiply two numbers #math \(slots: a, b\)/.test(await visible().locator('.msg[data-role=user]').first().textContent()));
-await page.locator('#sessions > div', { hasText: 'epoch 2' }).click();
-check('fold session: new epoch starts from the pocket, source kept', /<pocket from=[^]*## Settled/.test(await visible().locator('.msg').first().textContent()) && await visible().locator('.msg').count() === 1, await page.inputValue('#title'));
+check('patterns: a new session opens with the index', /patterns \(pattern_get id[^]*\[recipe\] multiply two numbers #math \(slots: a, b\)/.test(await visible().locator('.msg[data-role=user]').first().textContent()));
+await page.locator('#sessions > div', { hasText: 'hello there · epoch 2' }).click();
+check('fold session: new epoch starts from the pocket, source kept', /^Pocket:\n[^]*## Settled/.test(await visible().locator('.msg').first().textContent()) && await visible().locator('.msg').count() === 1, await page.inputValue('#title'));
 
 await page.evaluate(() => { const m = JSON.parse(localStorage['wh:meta']); m.schema = 99; localStorage['wh:meta'] = JSON.stringify(m); });
 await page.reload();

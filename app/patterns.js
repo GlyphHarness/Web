@@ -84,7 +84,7 @@ export function fill(args, slots, values = {}) {
 // Index attached to the first message of a new session, so later bytes never move.
 export function index(max = 20) {
   const top = find().slice(0, max);
-  return top.length ? `\n\n<patterns note="pattern_get(id) gives the detail; pattern_run(id, values) runs a recipe">\n${top.map(line).join('\n')}\n</patterns>` : '';
+  return top.length ? `\n\npatterns (pattern_get id, pattern_run id values):\n${top.map(line).join('\n')}` : '';
 }
 
 export const trail = () => read(TRAIL, []);

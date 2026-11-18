@@ -99,12 +99,13 @@ const mock = {
       yield { choices: [{ delta: {}, finish_reason: 'stop' }], usage: { prompt_tokens: prompt, completion_tokens: 8, prompt_tokens_details: { cached_tokens: 0 }, cost: 0 } };
       return;
     }
-    const concern = last.role === 'user' && /^<concern id="([^"]*)"/.exec(last.content);
-    if (concern) text = `OUTCOME: done\nRESULT: mock result for ${concern[1]}\nEVIDENCE: folds received: ${(last.content.match(/<fold /g) || []).length}\nOPEN: none`;
+    const concern = last.role === 'user' && /^concern (\S+):/.exec(last.content);
+    if (concern) text = `OUTCOME: done\nRESULT: mock result for ${concern[1]}\nEVIDENCE: folds received: ${(last.content.match(/^fold \S+/gm) || []).length}\nOPEN: none`;
     else if (last.role === 'tool') text = 'The tool returned:\n\n```text\n' + last.content + '\n```';
-    else if (/^<widget_event/.test(last.content || '')) text = 'Got the event: ' + last.content.split('\n')[1];
-    else if (/^<pocket_request/.test(last.content || '')) text = '## Goal\nmock goal\n## Settled\n- mock decision\n## Open\n- none';
+    else if (/^event \S+: /.test(last.content || '')) text = 'Got the event: ' + last.content;
+    else if (/^Write the pocket/.test(last.content || '')) text = '## Goal\nmock goal\n## Settled\n- mock decision\n## Open\n- none';
     else if (/^\[result /.test(last.content || '')) text = 'The result was read.';
+    else if (/decide/.test(last.content || '')) text = 'Thinking it over at length.\n! port is 8787\nSome more musing.\n!! use the flash model\nDone musing.';
     else if (/long script/.test(last.content || '')) {
       const code = "const out = []; for (let i = 0; i < 300; i++) { out.push('row ' + i + '   '); if (i === 150) out.push('total=4950'); } out.push('same', 'same', 'same'); return out.join('\\n'); // " + 'padding '.repeat(60);
       yield { choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_' + Date.now(), type: 'function', function: { name: 'run_js', arguments: JSON.stringify({ code, name: 'sum rows', want: 'total' }) } }] } }] };

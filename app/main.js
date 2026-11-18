@@ -10,9 +10,9 @@ import { toolDefs, execTool, SWAPPABLE, ARG_MAX } from './tools.js';
 import { render } from './widgets.js';
 import * as pat from './patterns.js';
 import { put, get, handlesIn } from './outstore.js';
-import { buildRequest, measure, report, padAttachment, inherit, imitatesNote } from './context.js';
+import { buildRequest, measure, report, padAttachment, inherit, imitatesNote, keptLines } from './context.js';
 
-export const VERSION = '0.8.0';
+export const VERSION = '0.9.0';
 const MAX_STEPS = 8; // model <-> tool round trips per user turn
 const MAX_BRANCHES = 6; // concerns per fan_out
 const FOLD_MAX = 2000; // chars of a fold handed back to the source
@@ -80,6 +80,7 @@ const SHELL = `
     <textarea id="system" rows="6"></textarea>
     <label>How past tool calls are sent</label>
     <select id="wire"><option value="calls">calls: structured, as the model made them</option><option value="notes">notes: one text line per call, results as text</option></select>
+    <label><input type="checkbox" id="keep"> Keep marks: the model flags lines to keep with "!" (adds one sentence to the system prompt)</label>
     <p class="note">First bytes of every request. Editing it mid-session breaks the cached prefix; the ledger will show it.</p>
   </details>
   <details><summary>Scratchpads</summary>
@@ -170,7 +171,7 @@ function mountWidget(s, tc, a, chip) {
 // A user interaction with a widget becomes a user message and a turn.
 function widgetEvent(s, slot, value) {
   if (busy || !s || s.id !== state.meta.active) return;
-  push(s, { role: 'user', content: `<widget_event slot=${JSON.stringify(slot)}>\n${(JSON.stringify(value) ?? 'null').slice(0, 4000)}\n</widget_event>` });
+  push(s, { role: 'user', content: `event ${slot}: ${(JSON.stringify(value) ?? 'null').slice(0, 4000)}` });
   run(s);
 }
 
@@ -283,6 +284,7 @@ function activate(id) {
   $('#title').value = s.title;
   $('#system').value = s.system;
   $('#wire').value = s.wire || 'calls';
+  $('#keep').checked = !!s.keep;
   $('#ledger tbody').replaceChildren(...s.ledger.map(ledgerRow));
   s.parent ? app.setAttribute('data-branch', '') : app.removeAttribute('data-branch');
   ledgerSum();
@@ -511,14 +513,10 @@ async function helper(s, want, text) {
 // branch. Only its fold (the final message, in a fixed shape) goes back to the
 // source, appended as a new message: the source's earlier bytes never change.
 
-const FOLD_SHAPE = `When the work is finished, make your final message exactly this shape and nothing else:
-OUTCOME: done | partial | failed
-RESULT: what was found or produced, as tersely as accuracy allows
-EVIDENCE: the specifics needed to act on it (values, names, short excerpts)
-OPEN: what remains, or none
-Do not recount the steps taken or tools used; that record is attached automatically.`;
+// Markers are single lines, never wrappers: every tag pair would be paid for on every later turn.
+const FOLD_SHAPE = 'End with only these four lines: OUTCOME (done, partial or failed), RESULT, EVIDENCE (exact values needed to act), OPEN. No account of steps.';
 
-const foldTag = (id, text, branch, did = '') => `<fold concern=${JSON.stringify(id)}${branch ? ` branch="${branch}"` : ''}${did}>\n${text}\n</fold>`;
+const foldTag = (id, text, branch, did = '') => `fold ${id}${branch ? ' ' + branch : ''}${did}:\n${text}`;
 
 // The harness's own record of a branch: counted from its log and ledger.
 function auditOf(b, concern, status) {
@@ -527,11 +525,11 @@ function auditOf(b, concern, status) {
   const sum = k => b.ledger.reduce((n, e) => n + (Number(e[k]) || 0), 0);
   return { concern, branch: b.id, status, requests: b.ledger.length, tools: Object.entries(names).map(([k, n]) => `${k}:${n}`).join(' '), prompt: sum('prompt'), cached: sum('cached'), cost: sum('cost') };
 }
-const concernMessage = (id, task, deps = '') => `<concern id=${JSON.stringify(id)}>\n${task}\n</concern>\n${deps ? deps + '\n' : ''}\n${FOLD_SHAPE}`;
+const concernMessage = (id, task, deps = '') => `concern ${id}: ${task}\n${deps ? deps + '\n' : ''}${FOLD_SHAPE}`;
 
 function fork(source, id, cut) {
   const b = newSession({
-    title: '↳ ' + id, system: source.system, wire: source.wire, padSeen: { ...source.padSeen },
+    title: '↳ ' + id, system: source.system, wire: source.wire, keep: source.keep, padSeen: { ...source.padSeen },
     parent: { id: source.id, at: cut, concern: id },
     messages: structuredClone(source.messages.slice(0, cut)),
   });
@@ -560,7 +558,7 @@ async function fanOut(source, args, ctx) {
   const folds = new Map(), branches = new Map(), audits = new Map(), pending = new Map(list.map(c => [c.id, c]));
   let warm = null;
   const work = async (c, first) => {
-    const deps = (c.after || []).filter(id => folds.has(id)).map(id => foldTag(id, folds.get(id))).join('\n');
+    const deps = (c.after || []).filter(id => folds.has(id)).map(id => foldTag(id, folds.get(id))).join('\n\n');
     const b = fork(source, c.id, cut);
     branches.set(c.id, b.id);
     push(b, { role: 'user', content: concernMessage(c.id, c.task, deps) });
@@ -585,23 +583,15 @@ async function fanOut(source, args, ctx) {
   // The fold's attributes are harness-recorded facts; its body is the branch's own words.
   return list.map(c => {
     const a = audits.get(c.id);
-    return foldTag(c.id, folds.get(c.id), branches.get(c.id), a ? ` requests="${a.requests}"${a.tools ? ` tool_calls="${a.tools}"` : ''}` : '');
-  }).join('\n');
+    return foldTag(c.id, folds.get(c.id), branches.get(c.id), a ? ` ${a.requests}req${a.tools ? ' ' + a.tools : ''}` : '');
+  }).join('\n\n');
 }
 
 // ---------- fold the session (new epoch) ----------
 // The source is never edited. Its pocket is written by a branch (so the request
 // reads the cached prefix), and a new session starts from the pocket alone.
 
-const POCKET_REQUEST = `<pocket_request>
-Write the pocket that will replace this conversation for whoever continues the work. At most 30 lines, in these sections, omitting empty ones:
-## Goal
-## Settled (decisions, with exact values, ids and handles)
-## Worked
-## Do not retry (what failed, and when a retry would make sense)
-## Open
-Keep what is needed to act. Drop exploration, retries and narration.
-</pocket_request>`;
+const POCKET_REQUEST = 'Write the pocket that replaces this conversation for whoever continues the work: at most 30 lines under the headings Goal, Settled (decisions with exact values, ids, handles), Worked, Do not retry, Open. Omit empty headings. Drop exploration, retries and narration.';
 
 // Rough cost case for folding now, from the last request and the catalogue prices.
 function foldCase(s) {
@@ -634,7 +624,7 @@ const download = (name, obj) => {
 
 const actions = {
   trace() { download('webharness-' + new Date().toISOString().replace(/[:.]/g, '-') + '.trace', { kind: 'webharness.trace', version: 1, build: VERSION, exchanges: trace, trail: pat.trail() }); },
-  new() { const s = newSession(); $('#sessions').prepend(sessionRow(s)); activate(s.id); $('#input').focus(); },
+  new() { const s = newSession({ keep: true }); $('#sessions').prepend(sessionRow(s)); activate(s.id); $('#input').focus(); },
   import() { $('#file').click(); },
   async export() {
     const s = cur(), bundle = exportBundle(s), blobs = {};
@@ -652,15 +642,21 @@ const actions = {
   async epoch() {
     const src = cur();
     if (busy || !src.messages.length) return;
-    if (!confirm('Fold this session into a new one? The original stays as it is.\n\n' + foldCase(src))) return;
-    const b = fork(src, 'pocket', src.messages.length);
-    push(b, { role: 'user', content: POCKET_REQUEST });
-    const status = await run(b), m = b.messages.at(-1);
-    if (status !== 'done' || m?.role !== 'assistant' || !m.content) return notice(src, 'The pocket was not written; nothing was folded.');
+    // Lines the model marked with ! are the pocket: no request, no cost. Otherwise a branch writes one.
+    const kept = keptLines(src);
+    if (!confirm('Fold this session into a new one? The original stays as it is.\n\n' + foldCase(src) + (kept.length ? `\n\n${kept.length} marked lines will be carried over; no model request is needed.` : '\n\nNo marked lines, so the model will be asked to write the pocket.'))) return;
+    let pocket = kept.join('\n');
+    if (!pocket) {
+      const b = fork(src, 'pocket', src.messages.length);
+      push(b, { role: 'user', content: POCKET_REQUEST });
+      const status = await run(b), m = b.messages.at(-1);
+      if (status !== 'done' || m?.role !== 'assistant' || !m.content) return notice(src, 'The pocket was not written; nothing was folded.');
+      pocket = m.content;
+    }
     const epoch = (src.epoch || 1) + 1;
-    const n = newSession({ title: src.title.replace(/ · epoch \d+$/, '') + ' · epoch ' + epoch, system: src.system, wire: src.wire, epoch, from: src.id });
+    const n = newSession({ title: src.title.replace(/ · epoch \d+$/, '') + ' · epoch ' + epoch, system: src.system, wire: src.wire, keep: src.keep, epoch, from: src.id });
     $('#sessions').prepend(sessionRow(n));
-    push(n, { role: 'user', content: `<pocket from="${src.id}">\n${m.content}\n</pocket>` });
+    push(n, { role: 'user', content: 'Pocket:\n' + pocket });
     activate(n.id);
   },
   // Manual branch: the message box text becomes the concern.
@@ -726,6 +722,7 @@ function bind() {
 
   $('#title').addEventListener('change', e => { const s = cur(); s.title = e.target.value || 'Untitled'; saveSession(s); $(`#sessions [data-id="${s.id}"] span`).textContent = s.title; });
   $('#system').addEventListener('change', e => { const s = cur(); s.system = e.target.value; saveSession(s); });
+  $('#keep').addEventListener('change', e => { const s = cur(); s.keep = e.target.checked; saveSession(s); });
   $('#wire').addEventListener('change', e => { const s = cur(); s.wire = e.target.value; saveSession(s); });
   $('#model').addEventListener('change', e => { state.meta.settings.model = e.target.value.trim(); saveMeta(); showPrice(); });
   $('#provider').addEventListener('change', e => { state.meta.settings.provider = e.target.value; saveMeta(); $('#key').value = state.keys[e.target.value] || ''; showBase(); loadModels(); });
