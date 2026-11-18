@@ -139,3 +139,5 @@ details.call pre.full { margin-top: 6px; padding-top: 6px; border-top: 1px dashe
 .msg[data-role=approve] .row { display: flex; gap: 6px; margin-top: 6px; }
 .msg[data-role=approve][data-done]::after { content: attr(data-done); font-size: 11px; color: var(--dim); }
 .sub { border: 0 !important; padding: 2px 0 !important; }
+#machine pre.vmout { max-height: 70vh; min-height: 200px; overflow: auto; background: #0b0c0e; color: #d8dde6; padding: 8px; border-radius: 6px; margin: 6px 0; }
+#machine .vmin { width: 100%; font-family: ui-monospace, monospace; font-size: 12px; }

@@ -2,14 +2,14 @@
 
 A client-side LLM chat harness served straight from this repo with GitHub Pages. No server, no build step: the browser holds the API key, the sessions and the tools.
 
-Status: working skeleton (v0.18.0). The OpenRouter path is written from the OpenAI-compatible conventions and has not yet been run against the live API.
+Status: working skeleton (v0.19.0). The OpenRouter path is written from the OpenAI-compatible conventions and has not yet been run against the live API.
 
 ## Run
 
 - Hosted: enable Pages (Settings > Pages > Source > GitHub Actions); every push to `main` deploys to `https://glyphharness.github.io/web/`.
 - Local: `python3 -m http.server 8787` in the repo root, then open `http://localhost:8787/`.
 - No key needed to try it: choose the provider "Mock (offline)" and model `mock-1`. Say "tool", "big", "widget", "form", "chart" or "fan out" to see a tool round trip.
-- Smoke tests (need Playwright): `node scripts/smoke.mjs` and `node scripts/smoke-git.mjs` (fake GitHub API)
+- Smoke tests (need Playwright): `node scripts/smoke.mjs`, `node scripts/smoke-git.mjs` (fake GitHub API), `node scripts/smoke-vm.mjs` (the Linux machine)
 
 ## How it fits together
 
@@ -155,7 +155,7 @@ The **Sessions** section of the inspector lists every session side by side from 
 
 ### Tools
 
-Tool definitions make no mention of where they run. Current set: `run_js`, `scratchpad_read`, `scratchpad_write`, `show_widget`, `output_read`, `fan_out`, `branch_read`, `pattern_find`, `pattern_get`, `pattern_put`, `pattern_run`, `entry_read`.
+Tool definitions make no mention of where they run. Current set: `run_js`, `shell` (when the machine is on), `scratchpad_read`, `scratchpad_write`, `show_widget`, `output_read`, `fan_out`, `branch_read`, `pattern_find`, `pattern_get`, `pattern_put`, `pattern_run`, `entry_read`.
 
 - `run_js` runs in a network-less sandbox (see Sandbox); killed after 5 s.
 - An `html` widget runs in an iframe with `sandbox="allow-scripts"`, which cannot read the page or its storage. An `embed` is a third-party page and gets its own origin.
@@ -175,6 +175,18 @@ A page can call `api.github.com` (it answers any origin) but not git's own HTTP 
 ### Sandbox
 
 `run_js` runs in a Worker started inside a hidden `sandbox="allow-scripts"` iframe whose CSP is `default-src 'none'`. The code cannot fetch, open sockets, import scripts or reach the page's storage. It is killed on timeout. `html` widgets get the same no-network CSP, so remote media goes only through the click-gated kinds. Verified in Chromium (`scripts/smoke-git.mjs`); Firefox and Safari are untested.
+
+### Linux machine
+
+Settings → "Linux machine" gives new sessions a `shell` tool: an x86_64 Alpine 3.20 machine with bash, coreutils, git, python3, gh, curl and jq, emulated in the page ([container2wasm](https://github.com/ktock/container2wasm), Bochs, WASI). There is also a per-session switch under the system prompt.
+
+- **Cost of use:** about 200 MB, downloaded once in 45 MB parts and kept in the browser's Cache API. In headless Chromium here, boot plus a first command took about 30 s, and a `gh api` call about 20 s. It is slow, but it is a real machine.
+- **Isolation:** the emulator needs SharedArrayBuffer, so the switch registers `coi-serviceworker` (MIT), which adds COOP/COEP headers that Pages cannot send. Switching it off removes the service worker. COEP `credentialless` keeps CDN scripts and third-party media loading; Safari falls back to `require-corp`.
+- **Network:** the guest's HTTP(S) goes through container2wasm's network stack and leaves as the page's own `fetch`. Only hosts that allow cross-origin requests answer. `api.github.com` does, so `gh api ...` works; git's smart HTTP does not, so `git clone`/`push` over HTTPS do not.
+- **Credentials:** the guest's `GH_TOKEN` is the placeholder `wh-placeholder-token`. The page replaces it on requests to `api.github.com` with the configured credential (minted per repository and permission in app mode). No token exists inside the machine, so a model that runs `env` finds nothing.
+- **Visible:** the Machine pane shows everything the guest prints and has a line for typing into it. Guest requests appear in the trace (URL, method, status).
+- **State:** the machine persists for the page load and is shared by the sessions that have the tool. A reload starts a fresh machine.
+- **Image:** built with `c2w` from `Dockerfile` (Alpine + packages), split by `scripts/vm-pack.mjs`, kept on the `vm-image` branch and copied in by the Pages workflow. `node scripts/smoke-vm.mjs` runs it end to end (needs `app/vm/image/`).
 
 ### Debug bridge
 

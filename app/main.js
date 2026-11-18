@@ -9,13 +9,14 @@ import { providers } from './providers.js';
 import { defsFor, execTool, SWAPPABLE, ARG_MAX, runJs } from './tools.js';
 import { client as gitClient } from './git.js';
 import { auth as ghAuth } from './ghauth.js';
+import { machine, vmWanted, vmReady } from './vm.js';
 import * as bridge from './bridge.js';
 import { render } from './widgets.js';
 import * as pat from './patterns.js';
 import { put, get, handlesIn } from './outstore.js';
 import { buildRequest, measure, report, padAttachment, inherit, imitatesNote, keptLines, corePrompt, EDGE_MIN, markedOnly, edgeReplies, turnOf, KINDS } from './context.js';
 
-export const VERSION = '0.18.0';
+export const VERSION = '0.19.0';
 const MAX_STEPS = 8; // model <-> tool round trips per user turn
 const MAX_BRANCHES = 6; // concerns per fan_out
 const FOLD_MAX = 2000; // chars of a fold handed back to the source
@@ -58,8 +59,9 @@ const SHELL = `
   </form>
 </main>
 <aside id="inspect">
-  <nav id="panes"><button data-act="pane" data-pane="stage">Stage</button><button data-act="pane" data-pane="insp">Inspector</button></nav>
+  <nav id="panes"><button data-act="pane" data-pane="stage">Stage</button><button data-act="pane" data-pane="insp">Inspector</button><button data-act="pane" data-pane="machine">Machine</button></nav>
   <div id="stage"></div>
+  <div id="machine"><p class="note" id="vmstat">The machine is off. Switch it on in Settings.</p><div id="vmterm"></div></div>
   <div id="insp">
   <details open><summary>Settings</summary>
     <label>API key (kept in this browser only, never exported)</label>
@@ -74,6 +76,7 @@ const SHELL = `
     <label>Label for this access, told to the model in new sessions (e.g. "glyphharness-web token: web repo, contents + PRs")</label>
     <input id="ghlabel" autocomplete="off">
     <p class="note" id="ghwho"></p>
+    <label><input type="checkbox" id="vmon"> Linux machine: a <code>shell</code> tool for new sessions (bash, git, python3, gh). Downloads the image once; switching this reloads the page to turn cross-origin isolation on or off.</label>
     <label>Pinned code ref (tag, branch or commit; empty = this branch)</label>
     <input id="ref" placeholder="e.g. v0.1.0">
     <label>API base URL (empty = provider default)</label>
@@ -99,6 +102,7 @@ const SHELL = `
     <label>Replies, when first sent back to the model</label>
     <select id="edge"><option value="off">off: sent whole</option><option value="marks">marks: a long reply with "!" lines is sent as those lines</option><option value="helper">helper: marks, else condensed by the helper model</option></select>
     <label><input type="checkbox" id="repotools"> Repository tools (repo_read, repo_commit, repo_pr, repo_create; needs GitHub access in Settings). Turning this on or off changes the tool list, which breaks the cached prefix once.</label>
+    <label><input type="checkbox" id="vmtools"> Linux machine (shell tool). Changes the tool list, which breaks the cached prefix once.</label>
     <label><input type="checkbox" id="keep"> Keep marks: the model flags lines to keep with "!" (adds one sentence to the system prompt)</label>
     <p class="note">First bytes of every request. Editing it mid-session breaks the cached prefix; the ledger will show it.</p>
   </details>
@@ -202,7 +206,8 @@ function widgetEvent(s, slot, value) {
 
 function setPane(p) {
   state.meta.settings.pane = p;
-  rule('pane', `#${p === 'stage' ? 'insp' : 'stage'}{display:none}\n#panes [data-pane="${p}"]{border-color:var(--accent);color:var(--accent)}`);
+  const hide = ['stage', 'insp', 'machine'].filter(x => x !== p).map(x => '#' + x).join(',');
+  rule('pane', `${hide}{display:none}\n#panes [data-pane="${p}"]{border-color:var(--accent);color:var(--accent)}`);
 }
 
 function messageNode(m, s) {
@@ -312,6 +317,7 @@ function activate(id) {
   $('#system').value = s.system;
   $('#wire').value = s.wire || 'calls';
   $('#repotools').checked = !!s.tools?.includes('repo');
+  $('#vmtools').checked = !!s.tools?.includes('vm');
   $('#keep').checked = !!s.keep;
   $('#edge').value = s.edge || 'off';
   showCore();
@@ -594,6 +600,7 @@ async function turns(s, depth, onFirst) {
     knownRef: r => !!state.sessions[r] || s.messages.some(m => typeof m.content === 'string' && m.content.includes(r)),
     onPatterns: renderPatterns,
     helper: set.helper ? (want, text) => helper(s, want, text) : null,
+    vm: s.tools?.includes('vm') ? vm() : null,
     git: s.tools?.includes('repo') ? gitClient({ token: gh.token, trace, get, confirm: what => approve(s, what) }) : null,
   };
   for (let step = 0; step < MAX_STEPS; step++) {
@@ -820,7 +827,7 @@ const download = (name, obj) => {
 
 const actions = {
   trace() { download('webharness-' + new Date().toISOString().replace(/[:.]/g, '-') + '.trace', { kind: 'webharness.trace', version: 1, build: VERSION, exchanges: trace, trail: pat.trail() }); },
-  new() { const s = newSession({ keep: true, core: 2, edge: 'marks', ...(gh.mode() ? { tools: ['repo'] } : {}) }); $('#sessions').prepend(sessionRow(s)); activate(s.id); $('#input').focus(); },
+  new() { const s = newSession({ keep: true, core: 2, edge: 'marks', ...(() => { const t = [...(gh.mode() ? ['repo'] : []), ...(vmWanted() && vmReady() ? ['vm'] : [])]; return t.length ? { tools: t } : {}; })() }); $('#sessions').prepend(sessionRow(s)); activate(s.id); $('#input').focus(); },
   import() { $('#file').click(); },
   async export() {
     const s = cur(), bundle = exportBundle(s), blobs = {};
@@ -933,6 +940,13 @@ function bind() {
     // said once in the log, where it is cacheable from then on, rather than rewriting the first message
     if (e.target.checked && s.messages.length) { const n = ghNote(s).trim(); if (n) push(s, { role: 'user', content: n }); }
   });
+  $('#vmtools').addEventListener('change', e => {
+    const s = cur();
+    s.tools = e.target.checked ? [...new Set([...(s.tools || []), 'vm'])] : (s.tools || []).filter(t => t !== 'vm');
+    saveSession(s);
+  });
+  $('#vmon').checked = vmWanted();
+  $('#vmon').addEventListener('change', e => { try { localStorage.setItem('wh:vm', e.target.checked ? '1' : '0'); } catch {} location.reload(); });
   $('#wire').addEventListener('change', e => { const s = cur(); s.wire = e.target.value; saveSession(s); showCore(); });
   $('#model').addEventListener('change', e => { state.meta.settings.model = e.target.value.trim(); saveMeta(); showPrice(); });
   $('#model').addEventListener('input', showPicker);
@@ -1027,6 +1041,31 @@ export function boot(env) {
   loadModels();
   const pair = bridge.pairing();
   if (pair) startBridge(pair, env).catch(e => console.error('bridge:', e));
+}
+
+// ---------- the Linux machine (vm.js) ----------
+
+// One machine per page load, shared by the sessions that have the shell tool.
+// Its terminal lives in the Machine pane: every byte the guest prints is shown.
+let vmInst = null;
+function vm() {
+  if (vmInst) return vmInst;
+  vmInst = machine({
+    token: gh.token, trace,
+    onStatus: t => { $('#vmstat').textContent = 'Machine: ' + t; link?.emit('notice', { session: 'machine', text: t }); },
+    mount(type) {
+      const box = $('#vmterm');
+      const pre = h('pre', { class: 'vmout' });
+      const line = h('input', { class: 'vmin', placeholder: 'type a command for the machine and press Enter' });
+      line.addEventListener('keydown', e => { if (e.key === 'Enter') { type(line.value + '\r'); line.value = ''; } });
+      box.replaceChildren(pre, line);
+      let pending = '';
+      const flush = () => { pre.textContent = (pre.textContent + pending.replace(/\x1b\[[0-9;?]*[ -/]*[@-~]|\r/g, '')).slice(-200000); pending = ''; pre.scrollTop = pre.scrollHeight; };
+      vmInst.onOutput(s => { if (!pending) requestAnimationFrame(flush); pending += s; });
+      return pre;
+    },
+  });
+  return vmInst;
 }
 
 // ---------- approvals for outward-facing writes ----------

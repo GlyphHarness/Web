@@ -7,6 +7,20 @@
 </head>
 <body>
 <div id="app"></div>
+<script>
+// Cross-origin isolation (needed by the Linux machine, which uses SharedArrayBuffer).
+// Pages cannot send COOP/COEP headers, so a service worker adds them, only while the
+// machine is switched on in Settings. credentialless keeps CDN scripts and
+// third-party media loading; Safari lacks it and gets require-corp.
+window.coi = {
+  shouldRegister: () => localStorage.getItem('wh:vm') === '1',
+  shouldDeregister: () => localStorage.getItem('wh:vm') !== '1',
+  coepCredentialless: () => !/^((?!chrome|android).)*safari/i.test(navigator.userAgent),
+  doReload: () => location.reload(),
+  quiet: true,
+};
+</script>
+<script src="coi-serviceworker.js"></script>
 <script type="module">
 // Shell: the only file that is always served from the Pages branch.
 // Everything else loads from ./app/ (this branch) or from a pinned git ref

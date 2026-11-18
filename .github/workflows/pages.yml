@@ -22,6 +22,19 @@ jobs:
       url: ${{ steps.deploy.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: main
+      # The Linux machine's image lives on its own branch so main's history does not
+      # grow by its size on every rebuild. Missing branch = no machine image.
+      - name: Add the machine image
+        run: |
+          if git ls-remote --exit-code origin refs/heads/vm-image >/dev/null; then
+            git fetch --depth 1 origin vm-image
+            mkdir -p app/vm/image
+            git --work-tree=app/vm/image checkout FETCH_HEAD -- .
+            git reset -q
+            ls -la app/vm/image
+          fi
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

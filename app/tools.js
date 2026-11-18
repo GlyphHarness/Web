@@ -11,7 +11,7 @@ import * as pat from './patterns.js';
 // stored arguments again.
 const REF_NOTE = ' An earlier call may appear as {ref, name}: its arguments are stored under that handle and are implied; calling with {ref} repeats it.';
 const REF_PROPS = { ref: { type: 'string' }, name: { type: 'string', description: 'short name for this call, kept as its label' } };
-export const SWAPPABLE = new Set(['run_js', 'show_widget', 'repo_commit']);
+export const SWAPPABLE = new Set(['run_js', 'show_widget', 'repo_commit', 'shell']);
 export const ARG_MAX = 400; // chars of arguments kept inline in the log
 
 const WORKER = `
@@ -194,12 +194,23 @@ export const repoTools = [
     { name: { type: 'string' }, owner: { type: 'string' }, private: { type: 'boolean' }, description: { type: 'string' }, readme: { type: 'boolean' } }, ['name'],
     (a, ctx) => ctx.git ? ctx.git.create(a) : noRepo),
 ];
-const all = () => [...tools, ...repoTools];
+// The Linux machine (vm.js). Only sessions created with it, or switched on, get it.
+export const vmTools = [
+  fn('shell',
+    'Run a bash script on a Linux machine (Alpine: bash, coreutils, git, python3, gh, curl, jq). State persists between calls until the page is reloaded. Returns the combined output and the exit status. Outbound HTTPS works only for hosts that allow cross-origin requests: the GitHub API does (gh is authenticated), git clone/push over HTTPS does not. If the output may be long, say in `want` what you are looking for.',
+    { cmd: { type: 'string' }, timeout: { type: 'integer', description: 'seconds, default 120, max 600' }, want: { type: 'string' }, ...REF_PROPS }, [],
+    async (a, ctx) => {
+      if (!ctx.vm) return 'No machine is available.';
+      const r = await ctx.vm.run(String(a.cmd ?? ''), Math.min(Math.max(Number(a.timeout) || 120, 5), 600));
+      return (r.out || '(no output)') + (r.timedOut ? `\n[timed out after ${a.timeout || 120}s; interrupted]` : `\n[exit ${r.code}]`);
+    }),
+];
+const all = () => [...tools, ...repoTools, ...vmTools];
 
 const WHOLE = new Set(['entry_read', 'fan_out', 'output_read', 'branch_read', 'pattern_find', 'pattern_get', 'pattern_put', 'pattern_run']);
 
 export const toolDefs = tools.map(t => t.def);
-export const defsFor = s => s.tools?.includes('repo') ? [...toolDefs, ...repoTools.map(t => t.def)] : toolDefs;
+export const defsFor = s => [...toolDefs, ...(s.tools?.includes('repo') ? repoTools.map(t => t.def) : []), ...(s.tools?.includes('vm') ? vmTools.map(t => t.def) : [])];
 
 // Every call leaves a trail row written by the harness: tool, argument shape, outcome, size, time.
 export async function execTool(call, ctx, via) {

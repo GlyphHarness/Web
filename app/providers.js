@@ -124,6 +124,8 @@ const mock = {
     } else if (/long script/.test(last.content || '')) {
       const code = "const out = []; for (let i = 0; i < 300; i++) { out.push('row ' + i + '   '); if (i === 150) out.push('total=4950'); } out.push('same', 'same', 'same'); return out.join('\\n'); // " + 'padding '.repeat(60);
       yield { choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_' + Date.now(), type: 'function', function: { name: 'run_js', arguments: JSON.stringify({ code, name: 'sum rows', want: 'total' }) } }] } }] };
+    } else if (/^shell: /.test(last.content || '')) {
+      yield { choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_' + Date.now(), type: 'function', function: { name: 'shell', arguments: JSON.stringify({ cmd: last.content.slice(7), timeout: 600 }) } }] } }] };
     } else if (/repo (read|commit|pr)/.test(last.content || '')) {
       const op = /repo (read|commit|pr)/.exec(last.content)[1];
       const call = op === 'read' ? ['repo_read', { repo: 'o/r', op: 'file', path: 'a.txt' }]
