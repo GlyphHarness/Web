@@ -27,7 +27,7 @@ import * as pat from './patterns.js';
 import { put, get, handlesIn, setFallback } from './outstore.js';
 import { buildRequest, measure, report, padAttachment, inherit, imitatesNote, keptLines, corePrompt, EDGE_MIN, markedOnly, edgeReplies, turnOf, KINDS } from './context.js';
 
-export const VERSION = '0.41.0';
+export const VERSION = '0.42.0';
 const MAX_STEPS = 8; // model <-> tool round trips per user turn
 const MAX_BRANCHES = 6; // concerns per fan_out
 const FOLD_MAX = 2000; // chars of a fold handed back to the source
@@ -2266,29 +2266,35 @@ function vm() {
     showHarness: () => !!state.meta.settings.vmShowHarness,
     mount(type) {
       const box = $('#vmterm');
-      const pre = h('div', { class: 'vmout', role: 'log' });
+      // Terminal: what went in and what came out, in order. Harness activity: its own list.
+      const term = h('div', { class: 'vmout', role: 'log', 'aria-label': 'terminal' });
+      const acts = h('div', { class: 'vmacts', role: 'log', 'aria-label': 'harness activity', hidden: '' });
+      const tabT = btn('terminal', { class: 'vmtab', 'data-on': '' }), tabH = btn('harness activity', { class: 'vmtab' });
+      const nAct = h('span', { class: 'count slot' });
+      tabH.append(' ', nAct);
+      const pick = which => { term.hidden = which !== 'term'; line.hidden = which !== 'term'; acts.hidden = which !== 'acts'; tabT.toggleAttribute('data-on', which === 'term'); tabH.toggleAttribute('data-on', which === 'acts'); };
+      tabT.onclick = () => pick('term'); tabH.onclick = () => pick('acts');
       const line = h('input', { class: 'vmin', placeholder: 'type a command for the machine and press Enter' });
-      line.addEventListener('keydown', e => { if (e.key === 'Enter') { pre.append(h('div', { class: 'vmline vmtyped', text: '$ ' + line.value })); pre.scrollTop = pre.scrollHeight; type(line.value + '\r'); line.value = ''; } });
+      line.addEventListener('keydown', e => { if (e.key === 'Enter') { vmInst.typed(line.value); type(line.value + '\r'); line.value = ''; } });
       const raw = Object.assign(h('input', { type: 'checkbox', id: 'vmraw' }), { checked: !!state.meta.settings.vmShowHarness });
       raw.addEventListener('change', () => { state.meta.settings.vmShowHarness = raw.checked; saveMeta(); });
-      box.replaceChildren(h('label', { class: 'check vmrawsw' }, raw, ' show harness commands (raw)'), pre, line);
-      let pending = '', carry = '';
-      // whole lines only: end markers are stripped; \u0001 lines are harness notes
-      const flush = () => {
-        const text = carry + pending.replace(/\x1b\[[0-9;?]*[ -/]*[@-~]|\r/g, ''); pending = '';
+      box.replaceChildren(h('div', { class: 'vmtabs' }, tabT, tabH, h('label', { class: 'check vmrawsw', title: 'debug: also draw the harness’s own commands in the terminal' }, raw, ' raw')), term, line, acts);
+      let carry = '', count = 0;
+      const addAct = (label, meta, kind = '') => { count++; slot(nAct, count); acts.append(h('div', { class: 'vmact', 'data-kind': kind }, h('span', { class: 'vmt', text: new Date().toLocaleTimeString() }), h('span', { class: 'vml', text: label }), h('span', { class: 'vmm', text: meta || '' }))); acts.scrollTop = acts.scrollHeight; };
+      vmInst.onEvent(e => addAct(e.label, e.ms != null ? `${e.ms} ms · ${e.bytes} chars${e.timedOut ? ' · timed out' : e.code ? ' · exit ' + e.code : ''}` : '', e.kind));
+      const put = (cls, text) => { term.append(h('div', { class: cls, text })); while (term.childElementCount > 4000) term.firstElementChild.remove(); term.scrollTop = term.scrollHeight; };
+      vmInst.onView(seg => {
+        if (seg.k === 'in') { if (carry) { put('vmline', carry); carry = ''; } const [first, ...more] = String(seg.text).split('\n'); put('vmin-line', '$ ' + first); for (const m of more) put('vmin-line', '> ' + m); return; }
+        const text = carry + seg.text.replace(/\x1b\[[0-9;?]*[ -/]*[@-~]|\r/g, '');
         const parts = text.split('\n'); carry = parts.pop();
         for (const l of parts) {
           const rt = /__WH_RUNTIME_POLICY (\S+) (.*?)__/.exec(l);
-          if (rt && !state.meta.settings.vmShowHarness) { pre.append(h('div', { class: 'vmnote', text: `· harness: policy ${rt[1]}: refused ${rt[2]}` })); continue; }
-          if (!state.meta.settings.vmShowHarness && /__WH_[A-Za-z0-9]+_(\d+|up|down|\$\?)__|__WH_UP_|__WH_NET_/.test(l)) continue;
-          if (l.startsWith('\u0001')) pre.append(h('div', { class: 'vmnote', text: '· harness: ' + l.slice(1) }));
-          else pre.append(h('div', { class: 'vmline', text: l }));
+          if (rt) { addAct(`policy ${rt[1]}: refused ${rt[2]}`, '', 'policy'); if (!raw.checked) continue; }
+          if (!raw.checked && /__WH_[A-Za-z0-9]+_(\d+|up|down|\$\?)__|__WH_UP_|__WH_NET_/.test(l)) continue;
+          put(seg.k === 'raw' ? 'vmline vmraw' : 'vmline', l);
         }
-        while (pre.childElementCount > 4000) pre.firstElementChild.remove();
-        pre.scrollTop = pre.scrollHeight;
-      };
-      vmInst.onView(s => { if (!pending) requestAnimationFrame(flush); pending += s; });
-      return pre;
+      });
+      return term;
     },
   });
   return vmInst;

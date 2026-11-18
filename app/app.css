@@ -363,3 +363,17 @@ ol.xlines li::marker { color: var(--dim); font-size: 10px; }
 #machine .vmnote { color: #8b93a1; font-style: italic; }
 #machine .vmtyped { color: #7fb4ff; }
 .vmrawsw { font-size: 11px; color: var(--dim) !important; }
+/* machine: terminal and harness activity, separate */
+.vmtabs { display: flex; align-items: center; gap: 4px; margin: 4px 0; }
+.vmtab { font-size: 12px; padding: 2px 10px; border-radius: 4px 4px 0 0; border-bottom-width: 2px; background: none; color: var(--dim); }
+.vmtab[data-on] { color: var(--accent); border-bottom-color: var(--accent); }
+.vmtabs .vmrawsw { margin-left: auto !important; }
+#machine .vmin-line { color: #7fb4ff; }
+#machine .vmraw { color: #8b93a1; }
+.vmacts { max-height: 70vh; min-height: 200px; overflow: auto; border: 1px solid var(--line); border-radius: 6px; font: 12px ui-monospace, monospace; }
+.vmacts[hidden], .vmout[hidden], .vmin[hidden] { display: none; }
+.vmact { display: grid; grid-template-columns: 70px minmax(0, 1fr) auto; gap: 8px; padding: 3px 8px; border-top: 1px solid var(--line); }
+.vmact:first-child { border-top: 0; }
+.vmact .vmt, .vmact .vmm { color: var(--dim); font-size: 11px; }
+.vmact .vml { overflow-wrap: anywhere; }
+.vmact[data-kind=policy] .vml { color: #e0a040; }
