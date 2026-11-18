@@ -11,6 +11,7 @@ import { client as gitClient } from './git.js';
 import { auth as ghAuth, appJwt } from './ghauth.js';
 import * as tokencheck from './tokencheck.js';
 import * as cust from './custodial.js';
+import * as fx from './explorer.js';
 import { machine, vmWanted, vmReady } from './vm.js';
 import * as policy from './policy.js';
 import * as smells from './smells.js';
@@ -26,7 +27,7 @@ import * as pat from './patterns.js';
 import { put, get, handlesIn, setFallback } from './outstore.js';
 import { buildRequest, measure, report, padAttachment, inherit, imitatesNote, keptLines, corePrompt, EDGE_MIN, markedOnly, edgeReplies, turnOf, KINDS } from './context.js';
 
-export const VERSION = '0.38.0';
+export const VERSION = '0.39.0';
 const MAX_STEPS = 8; // model <-> tool round trips per user turn
 const MAX_BRANCHES = 6; // concerns per fan_out
 const FOLD_MAX = 2000; // chars of a fold handed back to the source
@@ -1149,6 +1150,7 @@ async function turns(s, depth, onFirst) {
     onPatterns: renderPatterns,
     helper: set.helper ? (want, text) => helper(s, want, text) : null,
     vm: s.tools?.includes('vm') ? vm() : null,
+    fsMark: () => fsMark(s),
     ask: a => askCard(s, a),
     values: valueTools(s, () => ctx.by()),
     runtime: (id, what) => smell(s, { kind: 'policy-runtime', tool: 'shell', policy: id, detail: what.slice(0, 200), rule: policyList().find(p => p.name === id)?.rule }),
@@ -1723,6 +1725,7 @@ const actions = {
     download((s.title.replace(/[^\w\- ]+/g, '').trim() || 'session') + '.session', bundle);
   },
   smellsclear() { smells.clear(); renderSmells(); },
+  explore() { return openExplorer(); },
   async 'q-run'(el) { const it = queue().find(x => x.id === el.closest('[data-q]').dataset.q); if (it) await runItem(it); },
   'q-dismiss'(el) { const it = queue().find(x => x.id === el.closest('[data-q]').dataset.q); if (it) { it.status = 'dismissed'; it.done = Date.now(); saveMeta(); renderQueue(); } },
   async 'q-drain'() {
@@ -2103,6 +2106,128 @@ export function boot(env) {
   if (pair) startBridge(pair, env).catch(e => console.error('bridge:', e));
 }
 
+// ---------- file explorer for the machine (explorer.js) ----------
+
+// per session, for this page load (the machine starts fresh on reload)
+const fsState = new Map(); // sessionId -> {mark: seconds, base: Map(path -> row)}
+const pinsOf = s => s?.pins?.length ? s.pins : ['/root'];
+async function fsMark(s) {
+  if (fsState.has(s.id)) return fsState.get(s.id);
+  const st = { mark: 0, base: new Map() };
+  fsState.set(s.id, st);
+  const r = await vm().run(fx.markCmd(s.id, pinsOf(s)), 120);
+  const [first, ...rest] = String(r.out || '').split('\n');
+  st.mark = Number(first) || Date.now() / 1000;
+  for (const row of fx.parse(rest.join('\n'))) st.base.set(row.path, row);
+  return st;
+}
+
+function fileIcon(row) { return row.type === 'dir' ? '▸' : row.type === 'link' ? '↪' : fx.IMAGE.test(row.path) ? '▣' : '▤'; }
+const humanSize = n => n < 1024 ? n + ' B' : n < 1048576 ? (n / 1024).toFixed(1) + ' KB' : (n / 1048576).toFixed(1) + ' MB';
+
+async function openExplorer() {
+  const s = cur();
+  if (!s) return;
+  if (!vmInst || !/ready/.test(vmInst.status())) {
+    const go = await modal({ title: 'The machine is not running', body: 'The explorer reads the machine’s files. Start it now?', actions: [{ text: 'Cancel', value: false, cancel: true }, { text: 'Start the machine', value: true, primary: true }] });
+    if (!go || !(vmWanted() && vmReady())) { if (go) machineDiag(); setPane('machine'); return; }
+    await vm().run('true', 120);
+  }
+  const st = await fsMark(s);
+  $('#explorer')?.remove();
+  const tree = h('div', { class: 'xtree', role: 'tree' }), tabs = h('div', { class: 'xtabs' }), view = h('div', { class: 'xview' }, h('p', { class: 'note', text: 'Open a file from the tree.' }));
+  const filter = h('select', { class: 'xfilter' }, h('option', { value: 'all', text: 'all files' }), h('option', { value: 'changed', text: 'changed since this session started' }));
+  const pinIn = h('input', { class: 'mono', placeholder: '/path to pin' });
+  const pinBox = h('div', { class: 'xpins' });
+  const close = btn('✕', { class: 'xclose', title: 'close (Escape)' });
+  const panel = h('div', { id: 'explorer', role: 'dialog', 'aria-label': 'Files' },
+    h('header', {}, h('b', { text: 'Files' }), h('span', { class: 'note', text: s.title }), filter, btn('refresh', { 'data-x': 'refresh' }), btn('find deleted', { 'data-x': 'deleted' }), close),
+    h('div', { class: 'xbody' }, h('aside', {}, pinBox, h('div', { class: 'xpinadd' }, pinIn, btn('pin', { 'data-x': 'pin' })), tree), h('section', {}, tabs, view)));
+  document.body.append(panel);
+  const shut = () => { panel.remove(); removeEventListener('keydown', esc, true); };
+  const esc = e => { if (e.key === 'Escape' && !document.querySelector('.modal')) { e.stopPropagation(); shut(); } };
+  addEventListener('keydown', esc, true);
+  close.onclick = shut;
+
+  const badge = row => { const k = fx.status(row, st.mark, st.base); return k === 'existing' ? '' : h('span', { class: 'xst', 'data-st': k, title: k === 'new' ? 'made since this session started' : 'changed since this session started', text: k === 'new' ? 'N' : 'M' }); };
+  const nodeOf = (row, depth) => {
+    const name = row.path.split('/').pop() || row.path;
+    const line = h('div', { class: 'xnode', role: 'treeitem', tabindex: '0', 'data-path': row.path, 'data-type': row.type, style: `--d:${depth}` },
+      h('span', { class: 'xicon', text: fileIcon(row) }), h('span', { class: 'xname', 'data-full': row.path, text: name }), badge(row), row.type === 'file' ? h('span', { class: 'xsize', text: humanSize(row.size) }) : '');
+    const kids = h('div', { class: 'xkids', hidden: '' });
+    const wrap = h('div', {}, line, kids);
+    const toggle = async () => {
+      if (row.type !== 'dir') return openFile(row);
+      if (!kids.hidden) { kids.hidden = true; line.querySelector('.xicon').textContent = '▸'; return; }
+      line.querySelector('.xicon').textContent = '▾'; kids.hidden = false;
+      if (!kids.dataset.loaded) {
+        kids.replaceChildren(h('div', { class: 'xnode note', style: `--d:${depth + 1}`, text: 'loading…' }));
+        const r = await vm().run(fx.listCmd(row.path), 60);
+        const rows = fx.parse(r.out).sort((a, b) => (a.type === 'dir') === (b.type === 'dir') ? a.path.localeCompare(b.path) : a.type === 'dir' ? -1 : 1);
+        kids.replaceChildren(...(rows.length ? rows.map(x => nodeOf(x, depth + 1)) : [h('div', { class: 'xnode note', style: `--d:${depth + 1}`, text: '(empty)' })]));
+        kids.dataset.loaded = '1';
+      }
+    };
+    line.addEventListener('click', toggle);
+    line.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } });
+    return wrap;
+  };
+  const drawPins = () => pinBox.replaceChildren(...pinsOf(s).map(p => h('span', { class: 'hkind', text: p }, h('button', { type: 'button', class: 'xunpin', 'data-pin': p, title: 'unpin', text: '×' }))));
+  async function draw() {
+    drawPins();
+    if (filter.value === 'all') { tree.replaceChildren(...pinsOf(s).map(p => nodeOf({ type: 'dir', path: p, size: 0, mtime: 0 }, 0))); for (const n of tree.querySelectorAll(':scope > div > .xnode')) n.click(); return; }
+    // changed only: the paths newer than the mark, with their folders, all open
+    tree.replaceChildren(h('p', { class: 'note', text: 'looking…' }));
+    const rows = fx.parse((await vm().run(fx.changedCmd(s.id, pinsOf(s)), 120)).out).filter(r => r.type !== 'dir' || fx.status(r, st.mark, st.base) === 'new');
+    if (!rows.length) { tree.replaceChildren(h('p', { class: 'note', text: 'Nothing changed in the pinned folders since this session started.' })); return; }
+    tree.replaceChildren(...rows.sort((a, b) => a.path.localeCompare(b.path)).map(r => nodeOf(r, (r.path.match(/\//g) || []).length - 1)));
+  }
+  async function openFile(row) {
+    let tab = tabs.querySelector(`[data-tab="${CSS.escape(row.path)}"]`);
+    if (!tab) {
+      tab = h('div', { class: 'xtab', 'data-tab': row.path }, h('span', { 'data-full': row.path, text: row.path.split('/').pop() }), h('button', { type: 'button', class: 'xtabx', title: 'close', text: '×' }));
+      tab.addEventListener('click', e => { if (e.target.classList.contains('xtabx')) { tab.remove(); const next = tabs.lastElementChild; next ? next.click() : view.replaceChildren(h('p', { class: 'note', text: 'Open a file from the tree.' })); return; } show(row, tab); });
+      tabs.append(tab);
+    }
+    show(row, tab);
+  }
+  async function show(row, tab) {
+    for (const t of tabs.children) t.toggleAttribute('data-on', t === tab);
+    view.replaceChildren(h('p', { class: 'note', text: 'reading ' + row.path + '…' }));
+    const f = fx.decode((await vm().run(fx.readCmd(row.path), 120)).out);
+    if (!f || f.size < 0) { view.replaceChildren(h('p', { class: 'note bad', text: 'Could not read ' + row.path })); return; }
+    const k = fx.status(row, st.mark, st.base);
+    const bar = h('div', { class: 'xbar' }, h('code', { text: row.path }), h('span', { class: 'note', text: `${humanSize(f.size)}${k !== 'existing' ? ' · ' + k + ' since this session started' : ''}${f.truncated ? ' · first ' + humanSize(f.bytes.length) + ' shown' : ''}` }));
+    const copyPath = btn('copy path'); copyPath.onclick = () => navigator.clipboard.writeText(row.path);
+    const dl = btn('download'); dl.onclick = () => { const a = h('a', { href: URL.createObjectURL(new Blob([f.bytes])), download: row.path.split('/').pop() }); a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000); };
+    const acts = h('div', { class: 'acts' }, copyPath, dl);
+    let body;
+    if (fx.IMAGE.test(row.path)) body = h('img', { class: 'ximg', alt: row.path, src: URL.createObjectURL(new Blob([f.bytes], { type: fx.mimeOf(row.path) })) });
+    else if (f.binary) body = h('pre', { class: 'xcode', text: `binary file, ${humanSize(f.size)}\n\n` + [...f.bytes.subarray(0, 256)].map(b => b.toString(16).padStart(2, '0')).join(' ').replace(/(.{48})/g, '$1\n') });
+    else {
+      const text = new TextDecoder().decode(f.bytes);
+      const copyText = btn('copy text'); copyText.onclick = () => navigator.clipboard.writeText(text); acts.prepend(copyText);
+      body = h('ol', { class: 'xcode xlines' }, ...text.split('\n').map(l => h('li', { text: l })));
+    }
+    bar.append(acts);
+    view.replaceChildren(bar, body);
+  }
+  panel.addEventListener('click', async e => {
+    const x = e.target.dataset?.x, un = e.target.dataset?.pin;
+    if (un) { s.pins = pinsOf(s).filter(p => p !== un); if (!s.pins.length) s.pins = ['/root']; saveSession(s); draw(); }
+    if (x === 'pin') { const p = pinIn.value.trim(); if (p.startsWith('/') && !pinsOf(s).includes(p)) { s.pins = [...pinsOf(s), p]; saveSession(s); pinIn.value = ''; draw(); } }
+    if (x === 'refresh') draw();
+    if (x === 'deleted') {
+      const now = new Set(fx.parse((await vm().run(fx.allCmd(pinsOf(s)), 120)).out).map(r => r.path));
+      const gone = [...st.base.keys()].filter(p => !now.has(p));
+      view.replaceChildren(h('div', { class: 'xbar' }, h('b', { text: `Deleted since this session started (${gone.length})` })), gone.length ? h('ol', { class: 'xcode' }, ...gone.map(p => h('li', { text: p }))) : h('p', { class: 'note', text: 'Nothing from the baseline is missing.' }));
+    }
+  });
+  filter.addEventListener('change', draw);
+  pinIn.addEventListener('keydown', e => { if (e.key === 'Enter') panel.querySelector('[data-x=pin]').click(); });
+  draw();
+}
+
 // ---------- machine status: what is on, what is missing, and why ----------
 
 // Each condition the machine needs, checked as it stands now, for the current session.
@@ -2124,7 +2249,7 @@ async function machineDiag() {
   const recheck = btn('check again'); recheck.onclick = () => machineDiag();
   box.replaceChildren(h('div', { class: 'sgroup' }, h('div', { class: 'shead' }, h('span', { text: 'Machine' }), h('span', { class: 'note', text: rows.every(r => r[1]) ? 'ready' : 'what it needs, for this session' })),
     ...rows.map(([label, ok, detail]) => h('div', { class: 'vrow', 'data-ok': String(!!ok) }, h('span', { class: 'vmark', text: ok ? '✓' : '·' }), h('span', { class: 'slabel', text: label }), h('span', { class: 'vdetail', text: detail })))),
-    h('div', { class: 'cfgbar' }, start, recheck));
+    h('div', { class: 'cfgbar' }, start, recheck, btn('explore files', { 'data-act': 'explore' })));
   return rows;
 }
 

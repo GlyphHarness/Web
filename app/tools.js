@@ -201,6 +201,7 @@ export const vmTools = [
     { cmd: { type: 'string' }, timeout: { type: 'integer', description: 'seconds, default 120, max 600' }, want: { type: 'string' }, ...REF_PROPS }, [],
     async (a, ctx) => {
       if (!ctx.vm) return 'No machine is available.';
+      await ctx.fsMark?.(); // first use in this session: mark and baseline for the file explorer
       const r = await ctx.vm.run(String(a.cmd ?? ''), Math.min(Math.max(Number(a.timeout) || 120, 5), 600));
       // runtime policy markers (vm.js shims) are recorded by the harness and taken out of the text
       r.out = String(r.out || '').replace(/__WH_RUNTIME_POLICY (\S+) ([^\n]*?)__\n?/g, (_, id, what) => { ctx.runtime?.(id, what); return ''; }).trimEnd();
