@@ -119,7 +119,9 @@ const mock = {
     else if (/^\[result /.test(last.content || '')) text = 'The result was read.';
     else if (/decide/.test(last.content || '')) text = 'Thinking it over at length.\n! port is 8787\nSome more musing.\n!! use the flash model\nDone musing. ' + 'filler '.repeat(120);
     else if (/ramble/.test(last.content || '')) text = 'word '.repeat(200);
-    else if (/long script/.test(last.content || '')) {
+    else if (/open (os:\w+)/.test(last.content || '')) {
+      yield { choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_' + Date.now(), type: 'function', function: { name: 'entry_read', arguments: JSON.stringify({ handle: /open (os:\w+)/.exec(last.content)[1], part: 'transcript', why: 'need the exact wording of the musing' }) } }] } }] };
+    } else if (/long script/.test(last.content || '')) {
       const code = "const out = []; for (let i = 0; i < 300; i++) { out.push('row ' + i + '   '); if (i === 150) out.push('total=4950'); } out.push('same', 'same', 'same'); return out.join('\\n'); // " + 'padding '.repeat(60);
       yield { choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_' + Date.now(), type: 'function', function: { name: 'run_js', arguments: JSON.stringify({ code, name: 'sum rows', want: 'total' }) } }] } }] };
     } else if (/run pattern (pt:\w+)/.test(last.content || '')) {

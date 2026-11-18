@@ -2,7 +2,7 @@
 
 A client-side LLM chat harness served straight from this repo with GitHub Pages. No server, no build step: the browser holds the API key, the sessions and the tools.
 
-Status: working skeleton (v0.13.0). The OpenRouter path is written from the OpenAI-compatible conventions and has not yet been run against the live API.
+Status: working skeleton (v0.14.0). The OpenRouter path is written from the OpenAI-compatible conventions and has not yet been run against the live API.
 
 ## Run
 
@@ -130,6 +130,17 @@ A reply the model has just written has not been sent back to it yet, so it is no
 
 The full reply stays in the log and on screen; a condensed one has a coloured edge and a "sent back as" line showing what the model will see. Once a reply has been sent, its form never changes again.
 
+A condensed reply goes back as a reference: one line such as `[os:1k2j3h4g5f troubleshot]`, then the kept lines. The word after the handle says what that turn did (searched, verified, troubleshot, built, decided or answered). The model can open the record with `entry_read`, one part at a time:
+
+| Part | What it returns | Source |
+|---|---|---|
+| `gotchas` | the calls that failed, with their first line | the log |
+| `steps` | the calls made, in order, with outcome and output handle | the log |
+| `transcript` | the full reply | the log |
+| `summary` | at most 6 lines on what was done and concluded | the helper model (the kept lines if none is set) |
+
+`entry_read` refuses without a `why`, and the reason is written to the trail, so you can see how often records are opened and for what.
+
 The **steward** is a single helper-model request that serves all sessions at once, about a second after the app goes idle. It receives numbered items (a reply to condense, a session to title), not conversations, and the harness applies its answers. If it fails, nothing is changed. It needs a helper model in Settings.
 
 The **Sessions** section of the inspector lists every session side by side from the ledgers alone: branches, requests, context size, cached share, condensed and pending replies, cost, plus the steward's own totals.
@@ -140,7 +151,7 @@ The **Sessions** section of the inspector lists every session side by side from 
 
 ### Tools
 
-Tool definitions make no mention of where they run. Current set: `run_js`, `scratchpad_read`, `scratchpad_write`, `show_widget`, `output_read`, `fan_out`, `branch_read`, `pattern_find`, `pattern_get`, `pattern_put`, `pattern_run`.
+Tool definitions make no mention of where they run. Current set: `run_js`, `scratchpad_read`, `scratchpad_write`, `show_widget`, `output_read`, `fan_out`, `branch_read`, `pattern_find`, `pattern_get`, `pattern_put`, `pattern_run`, `entry_read`.
 
 - `run_js` runs in a dedicated Worker: no DOM, no localStorage (so no API key), killed after 5 s. It is not a network sandbox; code can still call `fetch`.
 - An `html` widget runs in an iframe with `sandbox="allow-scripts"`, which cannot read the page or its storage. An `embed` is a third-party page and gets its own origin.

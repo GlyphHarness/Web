@@ -60,6 +60,9 @@ export function corePrompt(session) {
     '- To use a tool, make a real tool call with complete arguments, every time.',
     `- ${past} These are records the system writes after the fact. Never write one yourself: it runs nothing.`,
     '- When a tool\'s output may be long, state in `want` what you are looking for. A result that starts with a tag like [os:1k2j3h 305L keywords 1/1] was reduced to that; the rest is available from output_read with the handle.',
+    session.core >= 2 && session.edge && session.edge !== 'off'
+      ? '- An earlier reply of yours may appear as a condensed record: a line like [os:1k2j3h troubleshot] (handle, then what that turn did) followed by the lines that were kept. entry_read opens its gotchas, steps, transcript or summary. Open one only for a specific reason the kept lines cannot meet.'
+      : '',
     session.keep ? '- ' + KEEP_NOTE : '',
   ].filter(Boolean).join('\n');
 }
@@ -71,6 +74,28 @@ export const EDGE_MIN = 600; // chars; shorter replies are not worth condensing
 export const markedOnly = text => text.split('\n').filter(l => /^!!?\s*\S/.test(l)).join('\n');
 export const edgeReplies = s => s.messages.map((m, i) => ({ m, i }))
   .filter(({ m, i }) => i >= (s.sent || 0) && m.role === 'assistant' && !m.tool_calls && (m.content || '').length > EDGE_MIN && m.x?.wire == null);
+
+// What a turn did, read off its log: the messages after the last user message up
+// to the reply at index i. Used to label a condensed record and to fill its parts.
+const FAILED = /^(Error:|Tool error|Unknown tool|Invalid JSON|No stored|Timed out)/;
+export function turnOf(s, i) {
+  let from = i;
+  while (from > 0 && s.messages[from - 1].role !== 'user') from--;
+  const results = Object.fromEntries(s.messages.slice(from, i).filter(m => m.role === 'tool').map(m => [m.tool_call_id, m.content]));
+  const steps = s.messages.slice(from, i).flatMap(m => m.tool_calls || []).map(tc => {
+    let a = {};
+    try { a = JSON.parse(tc.function.arguments); } catch {}
+    const out = String(results[tc.id] ?? '');
+    return { tool: tc.function.name, name: a.name, want: a.want, ref: a.ref, ok: !FAILED.test(out), out: (/os:[a-z0-9]{6,12}/.exec(out) || [])[0], first: out.split('\n')[0].slice(0, 200) };
+  });
+  const looked = new Set(['output_read', 'pattern_find', 'pattern_get', 'branch_read', 'entry_read']);
+  const kind = steps.some(x => !x.ok) ? 'troubleshot'
+    : steps.length && steps.every(x => looked.has(x.tool)) ? 'searched'
+    : steps.length ? 'built'
+    : /^!!?\s*\S/m.test(s.messages[i].content || '') ? 'decided' : 'answered';
+  return { kind, steps, gotchas: steps.filter(x => !x.ok).map(x => `${x.tool}${x.name ? ` "${x.name}"` : ''}: ${x.first}`) };
+}
+export const KINDS = ['searched', 'verified', 'troubleshot', 'built', 'decided', 'answered'];
 
 export function keptLines(session, max = 30) {
   const hits = [];

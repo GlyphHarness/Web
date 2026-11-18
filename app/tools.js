@@ -118,9 +118,23 @@ export const tools = [
       ctx.onPatterns?.();
       return execTool({ function: { name: p.recipe.tool, arguments: JSON.stringify(f.args) } }, ctx, id);
     }),
+  fn('entry_read',
+    'Open a condensed record of an earlier reply, by the handle in its [os:... kind] line. part: gotchas (what failed), steps (the calls made), transcript (the full reply), summary. State the specific reason in `why`.',
+    { handle: { type: 'string' }, part: { type: 'string', enum: ['gotchas', 'steps', 'transcript', 'summary'] }, why: { type: 'string' } }, ['handle', 'part', 'why'],
+    async ({ handle, part, why }, ctx) => {
+      if (!String(why || '').trim()) return 'Not opened: give the specific reason in `why`.';
+      let e;
+      try { e = JSON.parse(await get(String(handle))); } catch {}
+      if (!e || e.v !== 1 || typeof e.text !== 'string') return `No condensed record "${handle}".`;
+      if (part === 'gotchas') return e.gotchas.length ? e.gotchas.join('\n') : 'None recorded: no call in that turn failed.';
+      if (part === 'steps') return e.steps.length ? e.steps.map((x, n) => `${n + 1}. ${x.tool}${x.name ? ` "${x.name}"` : ''}${x.ref ? ' ' + x.ref : ''}${x.want ? ` want: ${x.want}` : ''} -> ${x.ok ? 'ok' : 'failed'}${x.out ? ' ' + x.out : ''}`).join('\n') : 'No calls were made in that turn.';
+      if (part === 'transcript') return e.text.length > 4000 ? e.text.slice(0, 4000) + `\n[${e.text.length - 4000} chars more]` : e.text;
+      const made = ctx.helper && await ctx.helper('what was done and what was concluded, in at most 6 lines', e.text).catch(() => null);
+      return made || e.kept; // no helper: the kept lines are the summary
+    }),
 ];
 
-const WHOLE = new Set(['fan_out', 'output_read', 'branch_read', 'pattern_find', 'pattern_get', 'pattern_put', 'pattern_run']);
+const WHOLE = new Set(['entry_read', 'fan_out', 'output_read', 'branch_read', 'pattern_find', 'pattern_get', 'pattern_put', 'pattern_run']);
 
 export const toolDefs = tools.map(t => t.def);
 
@@ -130,7 +144,7 @@ export async function execTool(call, ctx, via) {
   const out = await exec(call, ctx);
   let args = {};
   try { args = JSON.parse(call.function.arguments || '{}'); } catch {}
-  pat.trailAdd({ t: Date.now(), ...ctx.by?.(), tool: call.function.name, shape: pat.shape(call.function.name, args), via: via || undefined, ok: !/^(Tool error|Error:|Unknown tool|Invalid JSON|Not stored|No )/.test(out), chars: out.length, ref: typeof args.ref === 'string' ? args.ref : undefined, out: handlesIn(out)[0], ms: Math.round(performance.now() - t0) });
+  pat.trailAdd({ t: Date.now(), ...ctx.by?.(), tool: call.function.name, shape: pat.shape(call.function.name, args), via: via || undefined, ok: !/^(Tool error|Error:|Unknown tool|Invalid JSON|Not stored|No )/.test(out), chars: out.length, why: typeof args.why === 'string' ? args.why.slice(0, 200) : undefined, ref: typeof args.ref === 'string' ? args.ref : undefined, out: handlesIn(out)[0], ms: Math.round(performance.now() - t0) });
   return out;
 }
 

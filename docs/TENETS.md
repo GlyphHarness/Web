@@ -43,6 +43,9 @@ Origins: `L` = glyphcore/lodestar (`CLAUDE.md`, `docs/design/`), `S` = glyphcore
 | 34 | **Marks before models.** A marked reply is condensed by its marks, with no request. The helper is used only for an unmarked long reply, and a failed pass applies nothing. | `edgeFold`, `steward` | L `output-store.md` |
 | 35 | **The steward works on items, not conversations.** One request serves every session: replies to condense and sessions to title, each a numbered item; the harness applies the answers. Its cost has its own ledger. | `steward`, `STEWARD_SYSTEM`, `state.meta.steward`; smoke test "steward" | W |
 | 36 | **Sessions are compared by numbers.** The overview is built from ledgers only: requests, context, cached share, condensed and pending replies, cost. | `overview` | L6 |
+| 37 | **A condensed reply is a reference.** It goes back as `[handle kind]` plus its kept lines. The handle holds the full reply and what the harness read off the turn; `kind` (searched, verified, troubleshot, built, decided, answered) says what the turn did. | `setWire`, `context.js` `turnOf`; smoke test "edge fold" | W, L7 |
+| 38 | **Drilling in needs a stated reason.** `entry_read` serves one part (gotchas, steps, transcript, summary) and refuses without `why`; the reason is written to the trail. | `tools.js` `entry_read`, trail `why`; smoke test "entry_read" | W, L5 |
+| 39 | **Steps and gotchas are read off the log.** They come from the turn's calls and results, not from the model's account; only `summary` uses the helper model. | `turnOf`, `entry_read` | W |
 | 12 | **Secrets stay out of records.** The API key is never in a session file or trace. | `store.js` key separation, `providers.js` trace record | L9 |
 
 ## Concerns (no enforcer yet)
@@ -51,7 +54,8 @@ Origins: `L` = glyphcore/lodestar (`CLAUDE.md`, `docs/design/`), `S` = glyphcore
 |---|---|---|
 | Fold break-even is advisory | The estimate is shown, not enforced, and assumes 600 pocket tokens and full cache hits. Calibrate from real traces. | L `shim.md` |
 | Steward sees reply text | It gets the reply to condense, not just flags; a flags-only pass (decide keep or drop from size, kind, marks, reference counts) is not built. | W |
-| Condensing can lose what the model needs | A reply sent back short may omit something the model later relies on; the full text is not retrievable by the model. Candidate: give condensed replies a handle. | W |
+| Kind labels are coarse | Without the helper, `kind` is a heuristic (a failed call = troubleshot, only lookups = searched, other calls = built, marks = decided). `verified` is only ever set by the helper. No custodial vs implementation split yet. | W |
+| Drill-in rate | A good condensed record is rarely opened. Count `entry_read` per record from the trail; a high rate means the kept lines are too thin. | L `output-store.md` |
 | Steward break-even | A helper pass costs about the reply's size at the helper's input price; it saves the difference at the main model's input price once and its cached price each later turn. Not computed or gated yet. | L `shim.md` |
 | One run at a time | Sessions cannot run concurrently, so the steward mostly batches titles with one session's edge. | W |
 | Ephemeral edge | The wire is derived from the log, but there is still no unpersisted tail; scratchpads are baked into the user message. | L12 |

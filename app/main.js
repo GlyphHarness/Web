@@ -10,9 +10,9 @@ import { toolDefs, execTool, SWAPPABLE, ARG_MAX } from './tools.js';
 import { render } from './widgets.js';
 import * as pat from './patterns.js';
 import { put, get, handlesIn } from './outstore.js';
-import { buildRequest, measure, report, padAttachment, inherit, imitatesNote, keptLines, corePrompt, EDGE_MIN, markedOnly, edgeReplies } from './context.js';
+import { buildRequest, measure, report, padAttachment, inherit, imitatesNote, keptLines, corePrompt, EDGE_MIN, markedOnly, edgeReplies, turnOf, KINDS } from './context.js';
 
-export const VERSION = '0.13.0';
+export const VERSION = '0.14.0';
 const MAX_STEPS = 8; // model <-> tool round trips per user turn
 const MAX_BRANCHES = 6; // concerns per fan_out
 const FOLD_MAX = 2000; // chars of a fold handed back to the source
@@ -478,9 +478,17 @@ async function run(s) {
 // is given items (a reply to condense, a session to title), not conversations,
 // and its answer is applied by the harness. It runs when the app goes idle.
 
-function setWire(s, i, text) {
+// A condensed reply goes back as a reference: one line "[handle kind]" and the
+// kept lines. The handle is a stored record holding the full reply plus what the
+// harness read off the turn (steps, failures), which entry_read serves by part.
+async function setWire(s, i, kept, kind) {
   const m = s.messages[i];
-  if (i < (s.sent || 0) || !text || text.length >= m.content.length) return false; // never rewrite sent bytes; never grow
+  if (i < (s.sent || 0) || !kept) return false; // never rewrite sent bytes
+  const turn = turnOf(s, i);
+  const k = KINDS.includes(kind) ? kind : turn.kind;
+  const handle = await put(JSON.stringify({ v: 1, kind: k, session: s.id, reply: i, text: m.content, kept, steps: turn.steps, gotchas: turn.gotchas }));
+  const text = `[${handle} ${k}]\n${kept}`;
+  if (text.length >= m.content.length || i < (s.sent || 0)) return false; // never grow
   (m.x ??= {}).wire = text;
   saveSession(s);
   const node = $$(`.thread[data-session="${s.id}"] > .msg`).find(n => n._m === m);
@@ -496,11 +504,11 @@ function wireNote(el, m) {
 // Deterministic part, run right before a send. Anything left for the helper is done here too if the idle pass has not got to it.
 async function edgeFold(s) {
   if (!s.edge || s.edge === 'off') return;
-  for (const { m, i } of edgeReplies(s)) { const kept = markedOnly(m.content); if (kept) setWire(s, i, kept); }
+  for (const { m, i } of edgeReplies(s)) { const kept = markedOnly(m.content); if (kept) await setWire(s, i, kept); }
   if (s.edge === 'helper' && edgeReplies(s).length) await steward(s);
 }
 
-const STEWARD_SYSTEM = 'You condense records for other programs. The input is a list of items, each starting with a line "#n title" or "#n reply". For a title item, answer with a title of at most 6 words. For a reply item, answer with only the lines a later reader needs to continue the work: decisions, exact values, names, open questions; at most 8 short lines, no narration. Output one block per item, each starting with its "#n" line, and nothing else.';
+const STEWARD_SYSTEM = 'You condense records for other programs. The input is a list of items, each starting with a line "#n title" or "#n reply". For a title item, answer with a title of at most 6 words. For a reply item, answer with only the lines a later reader needs to continue the work: decisions, exact values, names, open questions; at most 8 short lines, no narration. You may put one word after the "#n" of a reply to say what it did: searched, verified, troubleshot, built, decided or answered. Output one block per item, each starting with its "#n" line, and nothing else.';
 
 let stewarding = null, stewardTimer = 0;
 const queueSteward = () => { clearTimeout(stewardTimer); stewardTimer = setTimeout(() => { if (!busy) steward(); }, 800); };
@@ -524,7 +532,7 @@ function steward(only) {
       const n = parseInt(block), it = items[n - 1], text = block.replace(/^\d+[^\n]*\n?/, '').trim();
       if (!it || !text) continue;
       if (it.kind === 'title') { it.s.autoTitle = false; retitle(it.s, text.split('\n')[0].slice(0, 60)); applied++; }
-      else if (setWire(it.s, it.i, text.slice(0, 1200))) applied++;
+      else if (await setWire(it.s, it.i, text.slice(0, 1200), (/^\d+\s+(\w+)/.exec(block) || [])[1])) applied++;
     }
     (state.meta.steward ??= []).push(report({ t: Date.now(), model: set.helper, items: items.length, applied, sessions: new Set(items.map(it => it.s.id)).size }, usage));
     saveMeta();
@@ -780,12 +788,12 @@ const download = (name, obj) => {
 
 const actions = {
   trace() { download('webharness-' + new Date().toISOString().replace(/[:.]/g, '-') + '.trace', { kind: 'webharness.trace', version: 1, build: VERSION, exchanges: trace, trail: pat.trail() }); },
-  new() { const s = newSession({ keep: true, core: 1, edge: 'marks' }); $('#sessions').prepend(sessionRow(s)); activate(s.id); $('#input').focus(); },
+  new() { const s = newSession({ keep: true, core: 2, edge: 'marks' }); $('#sessions').prepend(sessionRow(s)); activate(s.id); $('#input').focus(); },
   import() { $('#file').click(); },
   async export() {
     const s = cur(), bundle = exportBundle(s), blobs = {};
     // carry the stored outputs these sessions cite, so handles still resolve after import
-    for (const hd of new Set(bundle.sessions.flatMap(x => x.messages.flatMap(m => [...handlesIn(m.content), ...(m.tool_calls || []).flatMap(t => handlesIn(t.function.arguments))])))) { const t = await get(hd).catch(() => null); if (t != null) blobs[hd] = t; }
+    for (const hd of new Set(bundle.sessions.flatMap(x => x.messages.flatMap(m => [...handlesIn(m.content), ...handlesIn(m.x?.wire), ...(m.tool_calls || []).flatMap(t => handlesIn(t.function.arguments))])))) { const t = await get(hd).catch(() => null); if (t != null) blobs[hd] = t; }
     if (Object.keys(blobs).length) bundle.blobs = blobs;
     if (pat.all().length) bundle.patterns = pat.all();
     download((s.title.replace(/[^\w\- ]+/g, '').trim() || 'session') + '.session', bundle);
@@ -878,7 +886,7 @@ function bind() {
 
   $('#title').addEventListener('change', e => { const s = cur(); s.title = e.target.value || 'Untitled'; s.autoTitle = false; saveSession(s); $(`#sessions [data-id="${s.id}"] span`).textContent = s.title; });
   $('#system').addEventListener('change', e => { const s = cur(); s.system = e.target.value; saveSession(s); });
-  $('#edge').addEventListener('change', e => { const s = cur(); s.edge = e.target.value; saveSession(s); });
+  $('#edge').addEventListener('change', e => { const s = cur(); s.edge = e.target.value; saveSession(s); showCore(); });
   $('#keep').addEventListener('change', e => { const s = cur(); s.keep = e.target.checked; saveSession(s); showCore(); });
   $('#wire').addEventListener('change', e => { const s = cur(); s.wire = e.target.value; saveSession(s); showCore(); });
   $('#model').addEventListener('change', e => { state.meta.settings.model = e.target.value.trim(); saveMeta(); showPrice(); });
