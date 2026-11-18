@@ -36,9 +36,15 @@ Gates sit before each model request and each tool call. The request gate is the 
 
 What is lost on a machine restart: processes and anything outside the homes, `/root` and the account files. Homes over 4 MB are not carried (the pane says so).
 
+## Verified
+
+- Live deploy (2026-11-18): `version.json` names the deployed commit and `b/<commit>/main.js` is served.
+- Console input is paced (128-byte slices) and the tty settings line runs before anything else is sent: input bursts and input queued across that change were lost for good (the console stopped reading). Found with the raw console tail (`whDebug.vm().raw()`).
+
 ## Not verified yet
 
-- A real deploy on GitHub Pages (the `b/<commit>/` path and `version.json` are produced by the workflow; tested locally with a routed `version.json`).
+- The update flow on the live site with two real tabs (tested locally with a routed `version.json`).
+
 - Chrome's tab discarding with a long-running machine tab.
 - Save/restore time for homes near the 4 MB limit (the console carries them as base64).
 
