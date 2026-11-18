@@ -46,6 +46,13 @@ const script = src => new Promise((ok, no) => { const s = document.createElement
 export function machine(env) {
   let booted = null, term = null, input = null, out = '', status = 'off', queue = Promise.resolve();
   const listeners = new Set();
+  // What the person sees is separate from what the harness reads. Harness commands
+  // (start-up, the sleep shim, the network wait, explorer listings and reads) run
+  // quiet: captured for the harness, shown as one note line unless showHarness().
+  const viewers = new Set();
+  let quiet = 0;
+  const view = t => { for (const v of viewers) v(t); };
+  const note = t => view(`\u0001${t}\n`); // \u0001 marks a harness note line for the pane
   const say = t => { status = t; env.onStatus?.(t); };
 
   // GitHub credential for the guest's API requests; nothing for other hosts.
@@ -76,7 +83,7 @@ export function machine(env) {
     const dec = new TextDecoder();
     // a stand-in terminal: what the guest writes is kept for run() and copied to the card
     master.activate({
-      write(d, cb) { const s = typeof d === 'string' ? d : dec.decode(d, { stream: true }); out += s; for (const f of listeners) f(s); cb?.(); },
+      write(d, cb) { const s = typeof d === 'string' ? d : dec.decode(d, { stream: true }); out += s; for (const f of listeners) f(s); if (!quiet || env.showHarness?.()) view(s); cb?.(); },
       onData(f) { input = f; return { dispose() {} }; },
       onBinary() { return { dispose() {} }; },
       onResize() { return { dispose() {} }; },
@@ -87,6 +94,8 @@ export function machine(env) {
     const stack = globalThis.newStack(worker, IMAGE, new Worker(ROOT + 'stack-worker.js?net=browser'), NET);
     new TtyServer(slave).start(worker, stack);
     say('booting');
+    quiet++; // the start-up handshake and setup are the harness's business
+    note('starting the machine');
     // the guest is up when a marker echoed through its shell comes back
     const t0 = Date.now();
     for (;;) {
@@ -108,6 +117,8 @@ export function machine(env) {
     const net = waitFor(/__WH_NET_(up|down)__/, 75e3);
     input(`n=0; until timeout 1 bash -c '</dev/tcp/192.168.127.253/80' 2>/dev/null; do n=$((n+1)); [ $n -gt 60 ] && break; sleep 1; done; [ $n -gt 60 ] && echo __WH_NET_down__ || echo __WH_NET_up__\r`);
     const r = await net.catch(() => null);
+    quiet--;
+    note(r?.m[1] === 'up' ? 'machine ready' : 'machine ready (no network)');
     say(r?.m[1] === 'up' ? 'ready' : 'ready (no network)');
   }
 
@@ -122,8 +133,13 @@ export function machine(env) {
 
   // Run a bash script; returns { out, code }. The script goes in as base64 lines
   // (well under the tty's line limit), so quoting and newlines survive.
-  async function exec(cmd, timeoutS = 120) {
+  async function exec(cmd, timeoutS = 120, opt = {}) {
     if (!booted) booted = boot().catch(e => { booted = null; say('failed: ' + e.message); throw e; });
+    await booted;
+    if (opt.quiet) { quiet++; note(opt.label || 'harness command'); }
+    try { return await execInner(cmd, timeoutS); } finally { if (opt.quiet) quiet--; }
+  }
+  async function execInner(cmd, timeoutS) {
     await booted;
     const id = Math.random().toString(36).slice(2, 10);
     const b64 = btoa(String.fromCharCode(...new TextEncoder().encode(cmd)));
@@ -145,7 +161,8 @@ export function machine(env) {
 
   return {
     status: () => status,
-    run: (cmd, timeoutS) => (queue = queue.then(() => exec(cmd, timeoutS), () => exec(cmd, timeoutS))),
+    run: (cmd, timeoutS, opt) => (queue = queue.then(() => exec(cmd, timeoutS, opt), () => exec(cmd, timeoutS, opt))),
     onOutput: f => { listeners.add(f); return () => listeners.delete(f); },
+    onView: f => { viewers.add(f); return () => viewers.delete(f); },
   };
 }

@@ -134,7 +134,7 @@ details.call pre.full { margin-top: 6px; padding-top: 6px; border-top: 1px dashe
 .msg[data-role=approve] .row { display: flex; gap: 6px; margin-top: 6px; }
 .msg[data-role=approve][data-done]::after { content: attr(data-done); font-size: 11px; color: var(--dim); }
 .sub { border: 0 !important; padding: 2px 0 !important; }
-#machine pre.vmout { max-height: 70vh; min-height: 200px; overflow: auto; background: #0b0c0e; color: #d8dde6; padding: 8px; border-radius: 6px; margin: 6px 0; }
+#machine .vmout { font: 12px/1.45 ui-monospace, monospace; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 70vh; min-height: 200px; overflow: auto; background: #0b0c0e; color: #d8dde6; padding: 8px; border-radius: 6px; margin: 6px 0; }
 #machine .vmin { width: 100%; font-family: ui-monospace, monospace; font-size: 12px; }
 .smell { border-left: 3px solid #e0a040; padding: 2px 6px; margin-top: 4px; font-size: 12px; }
 .smell[data-kind=addressed] { border-color: var(--ok); }
@@ -359,3 +359,7 @@ ol.xlines li { white-space: pre; padding-left: 8px; }
 ol.xlines li::marker { color: var(--dim); font-size: 10px; }
 .ximg { max-width: 100%; display: block; margin: 10px; background: #fff; }
 @media (max-width: 700px) { #explorer { inset: 0; border-radius: 0; } .xbody { grid-template-columns: 1fr; grid-template-rows: 40% 60%; } .xbody > aside { border-right: 0; border-bottom: 1px solid var(--line); } }
+
+#machine .vmnote { color: #8b93a1; font-style: italic; }
+#machine .vmtyped { color: #7fb4ff; }
+.vmrawsw { font-size: 11px; color: var(--dim) !important; }

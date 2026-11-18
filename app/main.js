@@ -27,7 +27,7 @@ import * as pat from './patterns.js';
 import { put, get, handlesIn, setFallback } from './outstore.js';
 import { buildRequest, measure, report, padAttachment, inherit, imitatesNote, keptLines, corePrompt, EDGE_MIN, markedOnly, edgeReplies, turnOf, KINDS } from './context.js';
 
-export const VERSION = '0.39.0';
+export const VERSION = '0.40.0';
 const MAX_STEPS = 8; // model <-> tool round trips per user turn
 const MAX_BRANCHES = 6; // concerns per fan_out
 const FOLD_MAX = 2000; // chars of a fold handed back to the source
@@ -2115,7 +2115,7 @@ async function fsMark(s) {
   if (fsState.has(s.id)) return fsState.get(s.id);
   const st = { mark: 0, base: new Map() };
   fsState.set(s.id, st);
-  const r = await vm().run(fx.markCmd(s.id, pinsOf(s)), 120);
+  const r = await vm().run(fx.markCmd(s.id, pinsOf(s)), 120, { quiet: true, label: `mark the session start and list ${pinsOf(s).join(', ')}` });
   const [first, ...rest] = String(r.out || '').split('\n');
   st.mark = Number(first) || Date.now() / 1000;
   for (const row of fx.parse(rest.join('\n'))) st.base.set(row.path, row);
@@ -2131,7 +2131,7 @@ async function openExplorer() {
   if (!vmInst || !/ready/.test(vmInst.status())) {
     const go = await modal({ title: 'The machine is not running', body: 'The explorer reads the machine’s files. Start it now?', actions: [{ text: 'Cancel', value: false, cancel: true }, { text: 'Start the machine', value: true, primary: true }] });
     if (!go || !(vmWanted() && vmReady())) { if (go) machineDiag(); setPane('machine'); return; }
-    await vm().run('true', 120);
+    await vm().run('true', 120, { quiet: true, label: 'start' });
   }
   const st = await fsMark(s);
   $('#explorer')?.remove();
@@ -2162,7 +2162,7 @@ async function openExplorer() {
       line.querySelector('.xicon').textContent = '▾'; kids.hidden = false;
       if (!kids.dataset.loaded) {
         kids.replaceChildren(h('div', { class: 'xnode note', style: `--d:${depth + 1}`, text: 'loading…' }));
-        const r = await vm().run(fx.listCmd(row.path), 60);
+        const r = await vm().run(fx.listCmd(row.path), 60, { quiet: true, label: 'list ' + row.path });
         const rows = fx.parse(r.out).sort((a, b) => (a.type === 'dir') === (b.type === 'dir') ? a.path.localeCompare(b.path) : a.type === 'dir' ? -1 : 1);
         kids.replaceChildren(...(rows.length ? rows.map(x => nodeOf(x, depth + 1)) : [h('div', { class: 'xnode note', style: `--d:${depth + 1}`, text: '(empty)' })]));
         kids.dataset.loaded = '1';
@@ -2178,7 +2178,7 @@ async function openExplorer() {
     if (filter.value === 'all') { tree.replaceChildren(...pinsOf(s).map(p => nodeOf({ type: 'dir', path: p, size: 0, mtime: 0 }, 0))); for (const n of tree.querySelectorAll(':scope > div > .xnode')) n.click(); return; }
     // changed only: the paths newer than the mark, with their folders, all open
     tree.replaceChildren(h('p', { class: 'note', text: 'looking…' }));
-    const rows = fx.parse((await vm().run(fx.changedCmd(s.id, pinsOf(s)), 120)).out).filter(r => r.type !== 'dir' || fx.status(r, st.mark, st.base) === 'new');
+    const rows = fx.parse((await vm().run(fx.changedCmd(s.id, pinsOf(s)), 120, { quiet: true, label: 'find what changed since the session started' })).out).filter(r => r.type !== 'dir' || fx.status(r, st.mark, st.base) === 'new');
     if (!rows.length) { tree.replaceChildren(h('p', { class: 'note', text: 'Nothing changed in the pinned folders since this session started.' })); return; }
     tree.replaceChildren(...rows.sort((a, b) => a.path.localeCompare(b.path)).map(r => nodeOf(r, (r.path.match(/\//g) || []).length - 1)));
   }
@@ -2194,7 +2194,7 @@ async function openExplorer() {
   async function show(row, tab) {
     for (const t of tabs.children) t.toggleAttribute('data-on', t === tab);
     view.replaceChildren(h('p', { class: 'note', text: 'reading ' + row.path + '…' }));
-    const f = fx.decode((await vm().run(fx.readCmd(row.path), 120)).out);
+    const f = fx.decode((await vm().run(fx.readCmd(row.path), 120, { quiet: true, label: 'read ' + row.path })).out);
     if (!f || f.size < 0) { view.replaceChildren(h('p', { class: 'note bad', text: 'Could not read ' + row.path })); return; }
     const k = fx.status(row, st.mark, st.base);
     const bar = h('div', { class: 'xbar' }, h('code', { text: row.path }), h('span', { class: 'note', text: `${humanSize(f.size)}${k !== 'existing' ? ' · ' + k + ' since this session started' : ''}${f.truncated ? ' · first ' + humanSize(f.bytes.length) + ' shown' : ''}` }));
@@ -2218,7 +2218,7 @@ async function openExplorer() {
     if (x === 'pin') { const p = pinIn.value.trim(); if (p.startsWith('/') && !pinsOf(s).includes(p)) { s.pins = [...pinsOf(s), p]; saveSession(s); pinIn.value = ''; draw(); } }
     if (x === 'refresh') draw();
     if (x === 'deleted') {
-      const now = new Set(fx.parse((await vm().run(fx.allCmd(pinsOf(s)), 120)).out).map(r => r.path));
+      const now = new Set(fx.parse((await vm().run(fx.allCmd(pinsOf(s)), 120, { quiet: true, label: 'list everything pinned, to find deletions' })).out).map(r => r.path));
       const gone = [...st.base.keys()].filter(p => !now.has(p));
       view.replaceChildren(h('div', { class: 'xbar' }, h('b', { text: `Deleted since this session started (${gone.length})` })), gone.length ? h('ol', { class: 'xcode' }, ...gone.map(p => h('li', { text: p }))) : h('p', { class: 'note', text: 'Nothing from the baseline is missing.' }));
     }
@@ -2245,7 +2245,7 @@ async function machineDiag() {
   const box = $('#vmdiag');
   const start = btn('start now', { class: 'primary' });
   start.disabled = !(vmWanted() && vmReady()) || (vmInst && /ready|booting|loading|downloading|waiting/.test(vmInst.status()));
-  start.onclick = async () => { start.disabled = true; try { await vm().run('true', 60); } catch {} machineDiag(); };
+  start.onclick = async () => { start.disabled = true; try { await vm().run('true', 60, { quiet: true, label: 'start' }); } catch {} machineDiag(); };
   const recheck = btn('check again'); recheck.onclick = () => machineDiag();
   box.replaceChildren(h('div', { class: 'sgroup' }, h('div', { class: 'shead' }, h('span', { text: 'Machine' }), h('span', { class: 'note', text: rows.every(r => r[1]) ? 'ready' : 'what it needs, for this session' })),
     ...rows.map(([label, ok, detail]) => h('div', { class: 'vrow', 'data-ok': String(!!ok) }, h('span', { class: 'vmark', text: ok ? '✓' : '·' }), h('span', { class: 'slabel', text: label }), h('span', { class: 'vdetail', text: detail })))),
@@ -2263,15 +2263,31 @@ function vm() {
   vmInst = machine({
     token: gh.token, trace,
     onStatus: t => { slot($('#vmstat'), 'Machine: ' + t); link?.emit('notice', { session: 'machine', text: t }); machineDiag(); },
+    showHarness: () => !!state.meta.settings.vmShowHarness,
     mount(type) {
       const box = $('#vmterm');
-      const pre = h('pre', { class: 'vmout' });
+      const pre = h('div', { class: 'vmout', role: 'log' });
       const line = h('input', { class: 'vmin', placeholder: 'type a command for the machine and press Enter' });
-      line.addEventListener('keydown', e => { if (e.key === 'Enter') { type(line.value + '\r'); line.value = ''; } });
-      box.replaceChildren(pre, line);
-      let pending = '';
-      const flush = () => { pre.textContent = (pre.textContent + pending.replace(/\x1b\[[0-9;?]*[ -/]*[@-~]|\r/g, '')).slice(-200000); pending = ''; pre.scrollTop = pre.scrollHeight; };
-      vmInst.onOutput(s => { if (!pending) requestAnimationFrame(flush); pending += s; });
+      line.addEventListener('keydown', e => { if (e.key === 'Enter') { pre.append(h('div', { class: 'vmline vmtyped', text: '$ ' + line.value })); pre.scrollTop = pre.scrollHeight; type(line.value + '\r'); line.value = ''; } });
+      const raw = Object.assign(h('input', { type: 'checkbox', id: 'vmraw' }), { checked: !!state.meta.settings.vmShowHarness });
+      raw.addEventListener('change', () => { state.meta.settings.vmShowHarness = raw.checked; saveMeta(); });
+      box.replaceChildren(h('label', { class: 'check vmrawsw' }, raw, ' show harness commands (raw)'), pre, line);
+      let pending = '', carry = '';
+      // whole lines only: end markers are stripped; \u0001 lines are harness notes
+      const flush = () => {
+        const text = carry + pending.replace(/\x1b\[[0-9;?]*[ -/]*[@-~]|\r/g, ''); pending = '';
+        const parts = text.split('\n'); carry = parts.pop();
+        for (const l of parts) {
+          const rt = /__WH_RUNTIME_POLICY (\S+) (.*?)__/.exec(l);
+          if (rt && !state.meta.settings.vmShowHarness) { pre.append(h('div', { class: 'vmnote', text: `· harness: policy ${rt[1]}: refused ${rt[2]}` })); continue; }
+          if (!state.meta.settings.vmShowHarness && /__WH_[A-Za-z0-9]+_(\d+|up|down|\$\?)__|__WH_UP_|__WH_NET_/.test(l)) continue;
+          if (l.startsWith('\u0001')) pre.append(h('div', { class: 'vmnote', text: '· harness: ' + l.slice(1) }));
+          else pre.append(h('div', { class: 'vmline', text: l }));
+        }
+        while (pre.childElementCount > 4000) pre.firstElementChild.remove();
+        pre.scrollTop = pre.scrollHeight;
+      };
+      vmInst.onView(s => { if (!pending) requestAnimationFrame(flush); pending += s; });
       return pre;
     },
   });
