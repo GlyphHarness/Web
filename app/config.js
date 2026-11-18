@@ -83,10 +83,10 @@ export function plan(text, current) {
         if ('mutable' in p && typeof p.mutable === 'boolean' && (t.mutable !== false) !== p.mutable) { changes.push({ path: `profile ${p.name}.mutable`, from: t.mutable !== false, to: p.mutable }); t.mutable = p.mutable ? undefined : false; }
         if (t.mutable === false) { if (Object.keys(p).some(k => !['name', 'mutable'].includes(k))) refused.push({ path: `profile ${p.name}`, why: 'frozen: set "mutable": true first' }); continue; }
         if ('parent' in p) { const par = p.parent ? byName(p.parent) : null; if (p.parent && !par) refused.push({ path: `profile ${p.name}.parent`, why: 'no profile named ' + p.parent }); else if (par && par.id === t.id) refused.push({ path: `profile ${p.name}.parent`, why: 'cannot be its own parent' }); else if ((t.parent || null) !== (par?.id || null)) { changes.push({ path: `profile ${p.name}.parent`, from: profiles.find(x => x.id === t.parent)?.name || '', to: p.parent || '' }); t.parent = par?.id; } }
-        for (const [k, v] of Object.entries(p.settings || {})) { if (SECRET.test(k) || !['model', 'helper', 'policyModel', 'pace', 'branchBudget'].includes(k)) { refused.push({ path: `profile ${p.name}.settings.${k}`, why: 'not a profile setting' }); continue; } if (t.settings[k] !== v) { changes.push({ path: `profile ${p.name}.settings.${k}`, from: t.settings[k] ?? '', to: v }); t.settings[k] = v; } }
+        for (const [k, v] of Object.entries(p.settings || {})) { if (SECRET.test(k) || !['model', 'helper', 'policyModel', 'pace', 'branchBudget', 'logRepo', 'logTranscripts'].includes(k)) { refused.push({ path: `profile ${p.name}.settings.${k}`, why: 'not a profile setting' }); continue; } if (t.settings[k] !== v) { changes.push({ path: `profile ${p.name}.settings.${k}`, from: t.settings[k] ?? '', to: v }); t.settings[k] = v; } }
         for (const [k, v] of Object.entries(p.caps || {})) { const ok = k === 'repo' ? ['none', 'read', 'write'].includes(v) : ['run_js', 'fanout', 'ask', 'vm'].includes(k) && typeof v === 'boolean'; if (!ok) { refused.push({ path: `profile ${p.name}.caps.${k}`, why: 'invalid capability' }); continue; } if (t.caps[k] !== v) { changes.push({ path: `profile ${p.name}.caps.${k}`, from: t.caps[k] ?? 'inherit', to: v }); t.caps[k] = v; } }
         if (Array.isArray(p.repos)) { const bad = p.repos.filter(r => !/^[\w.-]+\/[\w.*-]+$/.test(r)); if (bad.length) refused.push({ path: `profile ${p.name}.repos`, why: 'bad entries: ' + bad.join(', ') }); else { changes.push({ path: `profile ${p.name}.repos`, from: (t.repos || []).join(', '), to: p.repos.join(', ') }); t.repos = p.repos; } }
-        if (Array.isArray(p.locks)) { changes.push({ path: `profile ${p.name}.locks`, from: (t.locks || []).join(', '), to: p.locks.join(', ') }); t.locks = p.locks.filter(k => ['model', 'helper', 'policyModel', 'pace', 'branchBudget'].includes(k)); }
+        if (Array.isArray(p.locks)) { changes.push({ path: `profile ${p.name}.locks`, from: (t.locks || []).join(', '), to: p.locks.join(', ') }); t.locks = p.locks.filter(k => ['model', 'helper', 'policyModel', 'pace', 'branchBudget', 'logRepo', 'logTranscripts'].includes(k)); }
         if (S(p.color) && p.color !== t.color) t.color = p.color;
       }
     }
@@ -123,7 +123,7 @@ export const ALIASES = {
   provider: ['provider'],
 };
 // settings a session's scope can hold; the others exist only as defaults
-export const SCOPED = ['model', 'helper', 'policyModel', 'pace', 'branchBudget'];
+export const SCOPED = ['model', 'helper', 'policyModel', 'pace', 'branchBudget', 'logRepo'];
 const LOOKS_SECRET = /^(ghp_|gho_|ghs_|github_pat_|sk-|xox[abp]-|AKIA)[\w-]{8,}|-----BEGIN [A-Z ]*PRIVATE KEY/;
 const norm = t => String(t).toLowerCase().replace(/[`*_]/g, '').replace(/\(.*?\)/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
 

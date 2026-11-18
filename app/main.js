@@ -24,7 +24,7 @@ import * as pat from './patterns.js';
 import { put, get, handlesIn, setFallback } from './outstore.js';
 import { buildRequest, measure, report, padAttachment, inherit, imitatesNote, keptLines, corePrompt, EDGE_MIN, markedOnly, edgeReplies, turnOf, KINDS } from './context.js';
 
-export const VERSION = '0.31.0';
+export const VERSION = '0.32.0';
 const MAX_STEPS = 8; // model <-> tool round trips per user turn
 const MAX_BRANCHES = 6; // concerns per fan_out
 const FOLD_MAX = 2000; // chars of a fold handed back to the source
@@ -527,7 +527,7 @@ async function importLines() {
   for (const r of picked) {
     if (r.target.kind === 'setting') {
       if (r.target.level === 'default') { state.meta.settings[r.target.key] = r.value; if (r.target.key === 'logRepo') state.meta.settings.logReady = false; saveMeta(); done.push(r.target.key); }
-      else { const err = setAt(s, level, r.target.key, r.value); if (!err) done.push(r.target.key); }
+      else { const err = setAt(s, level, r.target.key, r.value); if (!err) { done.push(r.target.key); if (r.target.key === 'logRepo' && level === 'default') { state.meta.settings.logReady = false; saveMeta(); } } }
     } else if (r.target.id) { const v = allValues().find(x => x.id === r.target.id); vals.revise(v, { value: r.value, why: 'imported' }, valueBy(s, 'you')); done.push(v.id); }
     else { const v = vals.create(state.meta, scope, { label: r.label.slice(0, 60), role: 'imported', value: r.value, purpose: '' }, valueBy(s, 'you')); done.push(v.id); }
   }
@@ -581,7 +581,7 @@ function policyList() {
 // ---------- this session's scope, attribute by attribute ----------
 
 const SCOPE_ROWS = [...prof.SETTING_KEYS.map(k => ({ k, kind: 'set' })), ...prof.CAP_KEYS.map(k => ({ k, kind: 'cap' }))];
-const SCOPE_LABEL = { model: 'model', helper: 'helper model', policyModel: 'policy model', pace: 'pace', branchBudget: 'branch budget', run_js: 'run code', fanout: 'fan out', ask: 'ask and values', vm: 'machine', repo: 'repositories' };
+const SCOPE_LABEL = { logRepo: 'log repo', logTranscripts: 'transcripts', model: 'model', helper: 'helper model', policyModel: 'policy model', pace: 'pace', branchBudget: 'branch budget', run_js: 'run code', fanout: 'fan out', ask: 'ask and values', vm: 'machine', repo: 'repositories' };
 // levels from this session up: session, each profile leaf to root, defaults
 function scopeLevels(s) {
   const ch = eff(s).chain;
@@ -600,7 +600,8 @@ function renderScope() {
     // a lock held by profile P allows P and the levels above it; nothing below
     const lockIdx = lockBy ? levels.findIndex(l => l.name === lockBy) : -1;
     const lv = h('select', { 'data-sl': k }, ...levels.map((l, i) => opt(l.id, l.name + (levelFrozen(s, l.id) ? ' (frozen)' : ''), i === 0 && lockIdx < 0 || i === lockIdx, (lockIdx >= 0 && i < lockIdx) || (row.kind === 'cap' && l.id === 'default') || levelFrozen(s, l.id))));
-    const input = row.kind === 'set'
+    const input = k === 'logTranscripts' ? h('select', { 'data-sv': k }, opt('', 'inherit', true), opt('true', 'on'), opt('false', 'off'))
+      : row.kind === 'set'
       ? h('input', { 'data-sv': k, value: s.over?.[k] ?? '', placeholder: 'blank = inherit', list: /model|helper/i.test(k) ? 'models' : '', class: 'mono' })
       : k === 'repo' ? h('select', { 'data-sv': k }, opt('', 'inherit', true), ...['none', 'read', 'write'].map(x => opt(x, x)))
       : h('select', { 'data-sv': k }, opt('', 'inherit', true), opt('1', 'allow'), opt('0', 'deny'));
@@ -608,7 +609,7 @@ function renderScope() {
     const toggle = btn('edit', { class: 'scope-toggle' });
     toggle.onclick = () => { edit.hidden = !edit.hidden; toggle.textContent = edit.hidden ? 'edit' : 'close'; };
     return [h('tr', { 'data-attr': k, ...(lockBy ? { 'data-locked': '' } : {}) },
-      h('th', { text: SCOPE_LABEL[k] || k }), h('td', { class: 'mono', title: show(row, val), text: show(row, val) }),
+      h('th', {}, SCOPE_LABEL[k] || k, h('span', { class: 'aud', 'data-aud': prof.AUDIENCE[k], title: prof.AUDIENCE[k] === 'harness' ? 'configuration the harness uses on the session\'s behalf; the model never sees it' : 'shapes the model\'s tools', text: prof.AUDIENCE[k] })), h('td', { class: 'mono', title: show(row, val), text: show(row, val) }),
       h('td', {}, h('span', { class: 'from', 'data-from': from === 'this session' ? 'session' : from === 'defaults' ? 'default' : 'profile', text: from }), lockBy ? h('span', { class: 'lock', title: 'locked by ' + lockBy, text: ' 🔒' }) : ''),
       h('td', {}, toggle)), edit];
   }));
@@ -633,7 +634,8 @@ function setAt(s, level, k, v, kind = 'set') {
 function scopeSet(el) {
   const s = cur(), tr = el.closest('[data-row]'), k = tr.dataset.row, row = SCOPE_ROWS.find(r => r.k === k);
   const level = tr.querySelector('[data-sl]').value, raw = tr.querySelector('[data-sv]').value.trim();
-  const v = row.kind === 'cap' ? (raw === '' ? null : k === 'repo' ? raw : raw === '1') : raw === '' ? null : k === 'branchBudget' ? Number(raw) || null : raw;
+  const v = row.kind === 'cap' ? (raw === '' ? null : k === 'repo' ? raw : raw === '1') : raw === '' ? null : k === 'branchBudget' ? Number(raw) || null : k === 'logTranscripts' ? raw === 'true' : raw;
+  if (k === 'logRepo' && v && !/^[\w.-]+\/[\w.-]+$/.test(v)) return modal({ title: 'Not changed', body: 'log repo is owner/name.' });
   const err = setAt(s, level, k, v, row.kind);
   if (err) return modal({ title: 'Not changed', body: `${SCOPE_LABEL[k]}: ${err}.` });
   if (level === 'default') showSettings();
@@ -1020,7 +1022,7 @@ async function turns(s, depth, onFirst) {
     ask: a => askCard(s, a),
     values: valueTools(s, () => ctx.by()),
     runtime: (id, what) => smell(s, { kind: 'policy-runtime', tool: 'shell', policy: id, detail: what.slice(0, 200), rule: policyList().find(p => p.name === id)?.rule }),
-    git: s.tools?.includes('repo') ? gitClient({ token: gh.token, trace, get, confirm: what => approve(s, what), readOnly: () => [state.meta.settings.logRepo].filter(Boolean), scope: repo => eff(s).repoAllowed(repo) ? null : `${repo} is outside this session's scope (${eff(s).path}).` }) : null,
+    git: s.tools?.includes('repo') ? gitClient({ token: gh.token, trace, get, confirm: what => approve(s, what), readOnly: () => [state.meta.settings.logRepo].filter(Boolean), scope: repo => eff(s).repoAllowed(repo) ? null : `${repo} is not available in this session.` }) : null,
   };
   for (let step = 0; step < MAX_STEPS; step++) {
     const body = buildRequest(s, set.model, toolsFor(s));
@@ -1106,7 +1108,7 @@ async function turns(s, depth, onFirst) {
       let content;
       // pacing: the call waits as it will run (after any policy repair)
       const go = scopeNo || pol?.refused ? 'release' : await hold(s, 'tool', `${tc.function.name} ${pol ? pol.to : await fullArgs(tc)}`);
-      if (scopeNo) { content = `Not run: ${tc.function.name} is not available in this session's scope (${eff(s).path || 'no profile'}).`; smell(s, { kind: 'scope-refused', tool: tc.function.name, detail: eff(s).path }); }
+      if (scopeNo) { content = `Not run: ${tc.function.name} is not available in this session.`; smell(s, { kind: 'scope-refused', tool: tc.function.name, detail: eff(s).path }); }
       else if (go === 'skip') content = 'Not run: skipped by the user.';
       else if (pol?.refused) {
         content = `Not run: policy ${pol.id} (${pol.rule}): ${pol.refused}`;
@@ -1759,7 +1761,8 @@ function bind() {
   $('#logtx').checked = state.meta.settings.logTranscripts !== false;
   $('#logtx').addEventListener('change', e => { state.meta.settings.logTranscripts = e.target.checked; saveMeta(); });
   // outputs the browser no longer has come back from the log repo
-  setFallback(async hd => { const l = logs(); return l && state.meta.settings.logReady ? l.artifact(hd) : null; });
+  // try the ready log repos in turn: the defaults' first, then those profiles use
+  setFallback(async hd => { for (const repo of [state.meta.settings.logRepo, ...Object.keys(state.meta.logRepos || {})].filter(repoReady)) { const t = await logs(repo).artifact(hd).catch(() => null); if (t != null) return t; } return null; });
   $('#vmtools').addEventListener('change', e => {
     const s = cur();
     s.tools = e.target.checked ? [...new Set([...(s.tools || []), 'vm'])] : (s.tools || []).filter(t => t !== 'vm');
@@ -1786,7 +1789,7 @@ function bind() {
     else if (f === 'parent') p.parent = v || undefined;
     else if (f === 'color') p.color = v;
     else if (f === 'repos') p.repos = v ? v.split(/[\s,]+/).filter(Boolean) : undefined;
-    else if (f.startsWith('set.')) { const k = f.slice(4); p.settings ??= {}; if (v === '') delete p.settings[k]; else p.settings[k] = k === 'branchBudget' ? Number(v) || undefined : v; }
+    else if (f.startsWith('set.')) { const k = f.slice(4); p.settings ??= {}; if (v === '') delete p.settings[k]; else p.settings[k] = k === 'branchBudget' ? Number(v) || undefined : k === 'logTranscripts' ? !/^(false|off|no|0)$/i.test(v) : v; }
     else if (f.startsWith('lock.')) { const k = f.slice(5); p.locks = (p.locks || []).filter(x => x !== k); if (v) p.locks.push(k); }
     else if (f.startsWith('cap.')) { const k = f.slice(4); p.caps ??= {}; if (v === '') delete p.caps[k]; else p.caps[k] = k === 'repo' ? v : v === '1'; }
     saveMeta();
@@ -1963,29 +1966,56 @@ function vm() {
 
 // Tracking over time in a private repo of the user's: written by the harness
 // alone (system writes, no approval card), synced at session start and on demand.
-function logs() {
-  const repo = state.meta.settings.logRepo;
+// A session's log repo is a harness property resolved down its chain; sessions
+// are synced to the repo they resolve to. The defaults' repo is set up by hand
+// ("set up"); another repo met first through a profile is checked: an empty one
+// gets the layout, a missing one is never created silently (a smell, skipped).
+const logRepoOf = s => cfg(s).logRepo || '';
+const repoReady = repo => repo && (repo === state.meta.settings.logRepo ? !!state.meta.settings.logReady : state.meta.logRepos?.[repo] === 'ready');
+async function ensureLogRepo(repo) {
+  if (repoReady(repo)) return true;
+  if (repo === state.meta.settings.logRepo) return false; // the defaults' repo waits for "set up"
+  const l = logs(repo);
+  const st = await l.status().catch(() => ({ state: 'error' }));
+  if (st.state === 'empty') { await l.init(); }
+  else if (st.state !== 'ready') { smells.add({ kind: 'log-repo-unavailable', detail: `${repo}: ${st.state}` }); (state.meta.logRepos ??= {})[repo] = st.state; saveMeta(); return false; }
+  (state.meta.logRepos ??= {})[repo] = 'ready'; saveMeta();
+  return true;
+}
+function logs(repoArg) {
+  const repo = repoArg || state.meta.settings.logRepo;
   if (!repo) return null;
   const redact = t => [...Object.values(state.keys).filter(v => typeof v === 'string' && v.length > 8), ...gh.secrets()].reduce((x, k) => x.split(k).join('[key]'), t);
   return logRepo({ git: gitClient({ token: gh.token, trace, get, confirm: async () => true }), repo, redact });
 }
-function logPayload(since) {
-  const list = state.meta.order.map(id => state.sessions[id]).filter(Boolean);
-  const sm = smells.all();
+function logPayload(since, repo = state.meta.settings.logRepo) {
+  const list = state.meta.order.map(id => state.sessions[id]).filter(s => s && logRepoOf(s) === repo);
+  const ids = new Set(list.map(s => s.id)), isDefault = repo === state.meta.settings.logRepo;
+  const sm = smells.all().filter(r => r.session ? ids.has(r.session) : isDefault);
   const steering = [...new Map(list.map(x => [steerOf(x), x])).entries()].map(([fp, x]) => ({ fp, core: corePrompt(x), system: x.system || '', policies: policiesFor(x), profile: eff(x).path, tools: toolsFor(x).map(d => d.function.name) }));
   const sessions = list.filter(x => (x.ledger.at(-1)?.t || x.created) > since).map(x => {
     const sum = k => x.ledger.reduce((n, e) => n + (Number(e[k]) || 0), 0);
     return { session: x.id, parent: x.parent?.id || null, profile: eff(x).path || null, created: x.created, model: x.ledger.at(-1)?.model || null, steer: steerOf(x), tools: x.tools || [], requests: x.ledger.filter(e => !e.helper).length, side: x.ledger.filter(e => e.helper).length, prompt: sum('prompt'), cached: sum('cached'), completion: sum('completion'), cost: +sum('cost').toFixed(6), smells: sm.filter(r => r.session === x.id).length };
   });
-  return { smells: sm, sessions, steering, proposals: smells.proposals() };
+  return { smells: sm, sessions, steering, proposals: isDefault ? smells.proposals() : [] };
 }
 let logBusy = null;
 async function logSync(why) {
-  const l = logs();
-  if (!l || !state.meta.settings.logReady || logBusy) return logBusy;
-  const since = (() => { try { return JSON.parse(localStorage.getItem('wh:logsync') || '{}')[l.repo]?.t || 0; } catch { return 0; } })();
+  if (logBusy) return logBusy;
+  const repos = [...new Set([state.meta.settings.logRepo, ...state.meta.order.map(id => state.sessions[id]).filter(Boolean).map(logRepoOf)].filter(Boolean))];
+  if (!repos.length) return null;
   slot($('#logstat'), 'syncing (' + why + ')…');
-  logBusy = l.sync(logPayload(since)).then(async r => { const t = await transcriptSync(l).catch(e => 'transcripts failed: ' + e.message); slot($('#logstat'), `${l.repo}: ${r}; ${t}`); }, e => { slot($('#logstat'), `${l.repo}: sync failed: ${e.message}`); smells.add({ kind: 'log-sync-failed', detail: e.message.slice(0, 200) }); }).finally(() => { logBusy = null; });
+  logBusy = (async () => {
+    const notes = [];
+    for (const repo of repos) {
+      if (!(await ensureLogRepo(repo).catch(() => false))) continue;
+      const l = logs(repo);
+      const since = (() => { try { return JSON.parse(localStorage.getItem('wh:logsync') || '{}')[repo]?.t || 0; } catch { return 0; } })();
+      try { const r = await l.sync(logPayload(since, repo)); const t = await transcriptSync(l).catch(e => 'transcripts failed: ' + e.message); notes.push(`${repo}: ${r}; ${t}`); }
+      catch (e) { notes.push(`${repo}: sync failed: ${e.message}`); smells.add({ kind: 'log-sync-failed', detail: `${repo}: ${e.message}`.slice(0, 200) }); }
+    }
+    slot($('#logstat'), notes.join(' | ') || 'no log repo ready');
+  })().finally(() => { logBusy = null; });
   return logBusy;
 }
 
@@ -2013,7 +2043,7 @@ async function transcriptItems(l) {
   const sent = st.sent || {};
   const items = [], artifacts = [];
   for (const s of state.meta.order.map(id => state.sessions[id]).filter(Boolean)) {
-    if (s.private) continue;
+    if (s.private || logRepoOf(s) !== l.repo || cfg(s).logTranscripts === false) continue;
     const skipped = [];
     const from = sent[s.id] || 0;
     const mask = maskFor(s);
@@ -2039,7 +2069,6 @@ async function transcriptItems(l) {
   return { items, artifacts };
 }
 async function transcriptSync(l) {
-  if (state.meta.settings.logTranscripts === false) return 'transcripts off';
   const { items, artifacts } = await transcriptItems(l);
   const r = await l.transcripts(items, artifacts);
   let all = {}; try { all = JSON.parse(localStorage.getItem('wh:logsync') || '{}'); } catch {}
@@ -2051,7 +2080,7 @@ async function transcriptSync(l) {
 // after a turn: at most one transcript sync a minute
 let transcriptTimer = null, transcriptLast = 0;
 function transcriptSoon() {
-  if (!state.meta.settings.logReady || state.meta.settings.logTranscripts === false || transcriptTimer) return;
+  if (transcriptTimer || !state.meta.order.some(id => state.sessions[id] && repoReady(logRepoOf(state.sessions[id])) && cfg(state.sessions[id]).logTranscripts !== false)) return;
   transcriptTimer = setTimeout(() => { transcriptTimer = null; transcriptLast = Date.now(); logSync('turn'); }, Math.max(0, 60e3 - (Date.now() - transcriptLast)));
 }
 

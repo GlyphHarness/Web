@@ -274,3 +274,4 @@ figure.handoff iframe { width: 100%; height: 260px; border: 0; background: #fff;
 #sessioncard[data-frozen], .item[data-frozen] { border-style: dashed; }
 #sessioncard > summary .name { font-weight: 600; }
 .item .actions .check { margin-right: auto !important; }
+.aud { margin-left: 4px; font: 9px ui-monospace, monospace; border-radius: 6px; padding: 0 4px; border: 1px solid var(--line); color: var(--dim); } .aud[data-aud=tools] { color: var(--accent); }

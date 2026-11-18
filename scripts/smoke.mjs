@@ -296,7 +296,7 @@ check('import: credentials and invalid values are refused, the token is not show
 await page.selectOption('.modal select', 'session');
 await page.click('.modal .primary');
 const after = await page.evaluate(() => { const m = JSON.parse(localStorage['wh:meta']); const s = JSON.parse(localStorage['wh:s:' + m.active]); return { over: s.over || {}, logRepo: m.settings.logRepo, vals: (m.values || []).filter(v => v.revs.at(-1).label === 'deploy region').map(v => ({ scope: v.scope.kind, value: v.revs.at(-1).value, role: v.revs.at(-1).role })) }; });
-check('import: scoped settings land at the chosen level, defaults-only ones in defaults, unknown labels become values', after.over.model === 'mock-pro' && after.over.helper === 'mock-1' && after.logRepo === 'someone/logs2' && after.vals.length === 1 && after.vals[0].scope === 'session' && after.vals[0].value === 'eu-west-1', JSON.stringify(after));
+check('import: settings land at the chosen level (log repo too: a harness property), unknown labels become values', after.over.model === 'mock-pro' && after.over.helper === 'mock-1' && after.over.logRepo === 'someone/logs2' && after.vals.length === 1 && after.vals[0].scope === 'session' && after.vals[0].value === 'eu-west-1', JSON.stringify(after));
 await page.evaluate(() => document.querySelector('[data-act=cfgimport]').click());
 await page.fill('.modal textarea', 'deploy region: us-east-1');
 check('import: an existing label is matched (a new revision, not a duplicate)', /value v\d+/.test(await page.textContent('.modal .cfgplan')));
@@ -377,7 +377,9 @@ await say('please use a tool');
 const req = JSON.parse(await page.textContent('#req'));
 const names = (req.tools || []).map(t => t.function.name);
 check('profiles: capabilities narrow the tool list (no run_js; machine stays denied by the parent)', req.model === 'mock-pro' && !names.includes('run_js') && !names.includes('shell') && names.includes('ask'), names.join(','));
-check('profiles: a tool outside the scope is refused even when the model names it', /^Not run: run_js is not available in this session's scope \(org \/ research\)/.test(await visible().locator('.msg[data-role=tool] > details:not(.policy) pre').last().textContent()));
+check('profiles: a tool outside the scope is refused even when the model names it (without naming the scope)', /^Not run: run_js is not available in this session\.$/.test(await visible().locator('.msg[data-role=tool] > details:not(.policy) pre').last().textContent()));
+check('harness properties: the model\'s request names no profile, scope or log repo', await page.evaluate(() => { const t = document.querySelector('#req').textContent; return !/org \/ research|"research"|someone\/logs/.test(t); }));
+check('scope: each attribute says who it is for (harness or tools)', await page.evaluate(() => document.querySelector('#scope tr[data-attr=logRepo] .aud')?.textContent === 'harness' && document.querySelector('#scope tr[data-attr=vm] .aud')?.textContent === 'tools'));
 check('profiles: the refusal is a smell with the scope', await page.evaluate(() => JSON.parse(localStorage['wh:smells']).some(r => r.kind === 'scope-refused' && r.profile === 'org / research')));
 check('profiles: the session can only move within its scope', await page.evaluate(() => [...document.querySelectorAll('#sprofile option')].map(o => o.textContent).join()) === 'org / research');
 // the per-session scope panel: value, source level, lock, set at a level

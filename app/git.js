@@ -23,7 +23,7 @@ export function client(env) {
     const level = method === 'GET' ? 'read' : /\/pulls$/.test(path) ? 'pr' : 'write';
     const out = repo && env.scope?.(repo);
     if (out) throw new Error(out);
-    if (level !== 'read' && repo && env.readOnly?.().some(r => r.toLowerCase() === repo.toLowerCase())) throw new Error(`${repo} is read-only here: it is the log repo, written only by the harness. Propose changes through a review instead.`);
+    if (level !== 'read' && repo && env.readOnly?.().some(r => r.toLowerCase() === repo.toLowerCase())) throw new Error(`${repo} is read-only for this session.`);
     const tok = await env.token(repo, level);
     if (!tok) throw new Error('No GitHub token is set.');
     const t0 = performance.now();

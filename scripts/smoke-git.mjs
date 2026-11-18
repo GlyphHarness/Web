@@ -246,7 +246,7 @@ const tools2 = await page.evaluate(async () => {
   const write = await c.commit({ repo: 'o/logs', branch: 'main', message: 'x', changes: [{ path: 'evil.txt', content: 'x' }] }).then(() => 'WROTE', e => e.message);
   return { read, write };
 });
-check('log repo: agents can read it but not write to it', /^# o\/logs/.test(tools2.read) && /read-only here/.test(tools2.write) && !repos['o/logs'].main.files['evil.txt'], JSON.stringify(tools2));
+check('log repo: agents can read it but not write to it', /^# o\/logs/.test(tools2.read) && /read-only for this session/.test(tools2.write) && !/log repo/.test(tools2.write) && !repos['o/logs'].main.files['evil.txt'], JSON.stringify(tools2));
 
 // ---- transcripts and artifacts on the wh-sessions branch ----
 await page.click('[data-act=new]');
@@ -288,12 +288,35 @@ await page.evaluate(() => document.querySelector('[data-act=logsync]').click());
 await until(async () => !/syncing/.test(await slotOf('#logstat')), 20000);
 check('transcripts: a session kept out of the log repo is not written', !Object.values(repos['o/logs']['wh-sessions'].files).some(t => typeof t === 'string' && t.includes('a private thought')));
 
+// ---- log repo as a harness property of a profile ----
+repos['o/logs-b'] = { main: { sha: sha(), files: {} } };
+await page.evaluate(() => document.querySelector('[data-act=cfgpaste]').click());
+await page.fill('.modal textarea', JSON.stringify({ profiles: [{ name: 'team-b', settings: { logRepo: 'o/logs-b' } }, { name: 'team-c', settings: { logRepo: 'o/nowhere' } }] }));
+await page.click('.modal .primary');
+const pickProfile = name => page.evaluate(name => { const sel = document.querySelector('#newprofile'); sel.value = [...sel.options].find(o => o.textContent === name).value; sel.dispatchEvent(new Event('change')); }, name);
+await pickProfile('team-b');
+await page.click('[data-act=new]');
+await say('hello from team b'); await idle();
+const sidB = await page.evaluate(() => JSON.parse(localStorage['wh:meta']).active);
+await pickProfile('team-c');
+await page.click('[data-act=new]');
+await say('hello from team c'); await idle();
+await page.evaluate(() => document.querySelector('[data-act=logsync]').click());
+await until(async () => !/syncing/.test(await slotOf('#logstat')), 20000);
+const LB = repos['o/logs-b'].main.files, TB = repos['o/logs-b']['wh-sessions']?.files || {};
+check('log repo per profile: an empty repo gets the layout on first use', JSON.parse(LB['.harness/manifest.json'] || '{}').schema === 1);
+check('log repo per profile: the profile\'s sessions go there, not to the defaults\' repo', !!TB[`sessions/${sidB}/meta.json`] && !Object.keys(repos['o/logs']['wh-sessions'].files).some(f => f.startsWith(`sessions/${sidB}/`)));
+check('log repo per profile: a missing repo is not created silently (a smell, skipped)', !repos['o/nowhere'] && await page.evaluate(() => JSON.parse(localStorage['wh:smells']).some(r => r.kind === 'log-repo-unavailable' && /o\/nowhere/.test(r.detail))));
+await pickProfile('(no profile)');
+
 // ---- GitHub App mode: no pasted token, tokens minted per repository and permission ----
 await page.evaluate(pem => { localStorage.setItem('wh:keys', JSON.stringify({ ghapp: { appId: '123', pem } })); }, PEM);
 await page.reload();
 await page.selectOption('#provider', 'mock');
 await page.fill('#model', 'mock-1');
 await page.dispatchEvent('#model', 'change');
+await page.click('[data-pane=insp]');
+await page.evaluate(() => { document.querySelector('[data-act=ghcheck]').closest('details').open = true; });
 await page.click('[data-act=ghcheck]');
 check('app: check signs a JWT from the PKCS#1 key', await until(async () => /app wh-test/.test(await slotOf('#ghwho'))));
 await page.click('[data-act=new]');
