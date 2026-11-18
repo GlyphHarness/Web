@@ -2,7 +2,7 @@
 
 A client-side LLM chat harness served straight from this repo with GitHub Pages. No server, no build step: the browser holds the API key, the sessions and the tools.
 
-Status: working skeleton (v0.23.0). The OpenRouter path is written from the OpenAI-compatible conventions and has not yet been run against the live API.
+Status: working skeleton (v0.24.0). The OpenRouter path is written from the OpenAI-compatible conventions and has not yet been run against the live API.
 
 ## Run
 
@@ -175,6 +175,13 @@ A page can call `api.github.com` (it answers any origin) but not git's own HTTP 
 ### Sandbox
 
 `run_js` runs in a Worker started inside a hidden `sandbox="allow-scripts"` iframe whose CSP is `default-src 'none'`. The code cannot fetch, open sockets, import scripts or reach the page's storage. It is killed on timeout. `html` widgets get the same no-network CSP, so remote media goes only through the click-gated kinds. Verified in Chromium (`scripts/smoke-git.mjs`); Firefox and Safari are untested.
+
+### Paste config
+
+Settings → "paste config" takes a JSON block (for example one an agent writes in a reply) and merges it into the settings after showing every change as `field: old → new`. Only the fields named change. Accepted: `provider`, `model`, `helper`, `policyModel`, `base` (`{provider: url}`), `ghlabel`, `logRepo`, `branchBudget`, `pace`, `machine` (reloads), and `policies`, merged by name (a known name takes the fields given, a new one needs `pattern` and `rule`, `"remove": true` drops it). Anything that looks like a credential is refused and listed, never applied; tokens and keys are only ever typed into their own fields. "copy config" gives the current non-secret configuration in the same shape.
+
+    {"settings": {"model": "deepseek/deepseek-v4.1-flash-1017", "helper": "tencent/hy4-flash", "logRepo": "owner/name"},
+     "policies": [{"name": "bounded-waits", "on": true}]}
 
 ### Pacing, questions and card metrics
 

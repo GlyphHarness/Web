@@ -265,6 +265,25 @@ await page.evaluate(() => document.querySelector('#smells [data-act=propose][dat
 check('policies: the card shows how often it fired', /fired 2/.test(await page.evaluate(() => document.querySelector('#policies .item:last-child .meta').textContent)));
 check('review: dismissing records the decision', await page.evaluate(() => JSON.parse(localStorage['wh:proposals'])[0].status) === 'dismissed');
 
+// ---- paste-to-configure: merge non-secret fields, preview first, refuse credentials ----
+await page.evaluate(() => { const k = JSON.parse(localStorage['wh:keys'] || '{}'); k.github = 'github_pat_SECRET_' + 'z'.repeat(20); localStorage['wh:keys'] = JSON.stringify(k); });
+await page.evaluate(() => document.querySelector('[data-act=cfgpaste]').click());
+await page.waitForSelector('.modal textarea');
+await page.fill('.modal textarea', JSON.stringify({ settings: { helper: 'mock-free:free', ghlabel: 'test label', logRepo: 'someone/logs', githubToken: 'nope', colour: 'red' }, policies: [{ name: 'bounded-waits', on: false }, { name: 'no-rm-root', tool: 'shell', pattern: 'rm\\s+-rf\\s+/(\\s|$)', rule: 'Never delete the root filesystem.' }, { name: 'broken', pattern: '(', rule: 'x' }] }));
+const planText = await page.textContent('.modal .cfgplan');
+check('config: preview lists the changes before anything is applied', /helper[^]*"mock-free:free"/.test(planText) && /policy bounded-waits\.on[^]*false/.test(planText) && /policy no-rm-root[^]*added/.test(planText) && await page.evaluate(() => !JSON.parse(localStorage['wh:meta']).settings.ghlabel));
+check('config: credentials, unknown fields and bad patterns are refused', /githubToken[^]*refused: looks like a credential/.test(planText) && /colour[^]*not a configurable field/.test(planText) && /policy broken[^]*bad pattern/.test(planText));
+await page.click('.modal .primary');
+check('config: applied as a merge (inputs, policies, untouched fields kept)', await page.inputValue('#helper') === 'mock-free:free' && await page.inputValue('#logrepo') === 'someone/logs' && await page.inputValue('#model') === 'mock-1'
+  && await page.evaluate(() => { const n = [...document.querySelectorAll('#policies .item .name')].map(e => e.textContent); return n.includes('bounded-waits') && n.includes('no-rm-root') && n.includes('bounded-loops') && !n.includes('broken'); })
+  && await page.evaluate(() => JSON.parse(localStorage['wh:meta']).settings.policyList.find(p => p.name === 'bounded-waits').on === false));
+check('config: no credential was written anywhere', await page.evaluate(() => !localStorage['wh:meta'].includes('nope') && JSON.parse(localStorage['wh:keys']).github.startsWith('github_pat_SECRET_')));
+await page.evaluate(() => document.querySelector('[data-act=cfgcopy]').click());
+await page.waitForSelector('.modal .cfgshow');
+const snap = JSON.parse(await page.textContent('.modal .cfgshow'));
+check('config: copy gives the same shape back, without credentials', snap.settings.helper === 'mock-free:free' && snap.policies.some(p => p.name === 'no-rm-root') && !JSON.stringify(snap).includes('SECRET'));
+await page.click('.modal button');
+
 await page.evaluate(() => { const m = JSON.parse(localStorage['wh:meta']); m.schema = 99; localStorage['wh:meta'] = JSON.stringify(m); });
 await page.reload();
 check('newer-schema data: build refuses to start', /schema 99/.test(await page.locator('#app pre').textContent()));

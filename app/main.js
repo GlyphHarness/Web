@@ -14,13 +14,14 @@ import * as policy from './policy.js';
 import * as smells from './smells.js';
 import { logRepo } from './logrepo.js';
 import * as asks from './ask.js';
+import * as config from './config.js';
 import * as bridge from './bridge.js';
 import { render } from './widgets.js';
 import * as pat from './patterns.js';
 import { put, get, handlesIn } from './outstore.js';
 import { buildRequest, measure, report, padAttachment, inherit, imitatesNote, keptLines, corePrompt, EDGE_MIN, markedOnly, edgeReplies, turnOf, KINDS } from './context.js';
 
-export const VERSION = '0.23.0';
+export const VERSION = '0.24.0';
 const MAX_STEPS = 8; // model <-> tool round trips per user turn
 const MAX_BRANCHES = 6; // concerns per fan_out
 const FOLD_MAX = 2000; // chars of a fold handed back to the source
@@ -69,6 +70,7 @@ const SHELL = `
   <div id="machine"><p class="note" id="vmstat">The machine is off. Switch it on in Settings.</p><div id="vmterm"></div></div>
   <div id="insp">
   <details open><summary>Settings</summary>
+    <div class="cfgbar"><button data-act="cfgpaste">paste config</button><button data-act="cfgcopy">copy config</button></div>
     <label>API key (kept in this browser only, never exported)</label>
     <input id="key" type="password" autocomplete="off">
     <label>GitHub token (fine-grained, limited to the repos it may touch; kept in this browser only). New sessions get repository tools while one is set.</label>
@@ -350,6 +352,49 @@ function modal({ title, body, actions = [{ text: 'OK', value: true }] }) {
   });
 }
 const ask2 = (title, text, yes = 'OK', no = 'Cancel') => modal({ title, body: text, actions: [{ text: no, value: false, cancel: true }, { text: yes, value: true, primary: true }] });
+
+// ---------- paste-to-configure (config.js) ----------
+
+const cfgCurrent = () => ({ settings: state.meta.settings, policies: policyList(), providers: Object.keys(providers), machine: vmWanted() });
+// Inputs re-read from state after a merge.
+function showSettings() {
+  const set = state.meta.settings;
+  $('#provider').value = set.provider; $('#model').value = set.model || ''; $('#helper').value = set.helper || '';
+  $('#polmodel').value = set.policyModel || ''; $('#ghlabel').value = set.ghlabel || ''; $('#logrepo').value = set.logRepo || '';
+  $('#budget').value = set.branchBudget || BRANCH_BUDGET; $('#pace').value = pace();
+  showBase(); renderPolicies(); showPrice();
+}
+async function pasteConfig() {
+  const ta = h('textarea', { rows: '10', class: 'mono', spellcheck: 'false', placeholder: '{"settings": {"model": "...", "helper": "..."}, "policies": [{"name": "...", "rule": "..."}]}' });
+  const out = h('div', { class: 'cfgplan' });
+  let last = null;
+  const show = () => {
+    const text = ta.value.trim();
+    if (!text) { last = null; out.replaceChildren(h('p', { class: 'note', text: 'Paste a JSON block. Only the fields it names change; credentials are refused.' })); return; }
+    last = config.plan(text, cfgCurrent());
+    if (last.error) { out.replaceChildren(h('p', { class: 'note bad', text: last.error })); return; }
+    out.replaceChildren(
+      h('p', { class: 'note', text: last.changes.length ? `${last.changes.length} change${last.changes.length > 1 ? 's' : ''}:` : 'Nothing would change.' }),
+      ...last.changes.map(c => h('div', { class: 'cfgrow' }, h('code', { text: c.path }), h('span', { class: 'from', text: JSON.stringify(c.from) }), h('span', { text: '→' }), h('span', { class: 'to', text: JSON.stringify(c.to) }))),
+      ...last.refused.map(r => h('div', { class: 'cfgrow bad' }, h('code', { text: r.path }), h('span', { text: 'refused: ' + r.why }))),
+      last.next.machine != null ? h('p', { class: 'note', text: 'The machine switch changes: the page reloads after applying.' }) : '');
+  };
+  ta.addEventListener('input', show);
+  show();
+  setTimeout(() => ta.focus());
+  const go = await modal({ title: 'Paste config', body: [ta, out], actions: [{ text: 'Cancel', value: false, cancel: true }, { text: 'Apply', value: true, primary: true }] });
+  if (!go || !last || last.error || !last.changes.length) return;
+  const { settings, policies, machine } = last.next;
+  Object.assign(state.meta.settings, settings);
+  if ('logRepo' in settings) state.meta.settings.logReady = false;
+  if (policies) state.meta.settings.policyList = policies;
+  saveMeta();
+  smells.add({ kind: 'config-applied', detail: last.changes.map(c => c.path).join(', ').slice(0, 300) });
+  if (machine != null) { try { localStorage.setItem('wh:vm', machine ? '1' : '0'); } catch {} location.reload(); return; }
+  if ('provider' in settings) loadModels();
+  showSettings();
+  renderSmells();
+}
 
 // One card for every list in the inspector (policies, patterns, scratchpads,
 // smells, proposals): a kind chip and a name in the header, a short meta line,
@@ -1126,6 +1171,13 @@ const actions = {
     download((s.title.replace(/[^\w\- ]+/g, '').trim() || 'session') + '.session', bundle);
   },
   smellsclear() { smells.clear(); renderSmells(); },
+  cfgpaste() { return pasteConfig(); },
+  async cfgcopy() {
+    const text = JSON.stringify(config.snapshot(cfgCurrent()), null, 2);
+    let copied = false;
+    try { await navigator.clipboard.writeText(text); copied = true; } catch {}
+    modal({ title: copied ? 'Config copied' : 'Config', body: [copied ? 'Copied to the clipboard (no credentials):' : 'Copy it from here (no credentials):', h('pre', { class: 'cfgshow', text })] });
+  },
   'pol-add'() { const list = policyList(); let n = list.length + 1; while (list.some(p => p.name === 'policy-' + n)) n++; list.push({ name: 'policy-' + n, tool: '*', pattern: '', flags: '', rule: '', on: true }); saveMeta(); renderPolicies(); const c = $(`#policies [data-pol="${list.length - 1}"]`); c.open = true; c.querySelector('[data-pf=name]').focus(); },
   'pol-drop'(el) { const i = Number(el.closest('[data-pol]').dataset.pol); policyList().splice(i, 1); saveMeta(); renderPolicies(); },
   async logsetup() {

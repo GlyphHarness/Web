@@ -202,3 +202,12 @@ button.primary { border-color: var(--accent); background: var(--accent); color: 
 
 /* live values drawn from data-v (styles.js slot) */
 .slot::after { content: attr(data-v); }
+.cfgbar { display: flex; gap: 6px; margin: 4px 0 8px; }
+.cfgplan { margin-top: 8px; display: flex; flex-direction: column; gap: 3px; font-size: 12px; max-height: 40vh; overflow: auto; }
+.cfgrow { display: flex; gap: 6px; align-items: baseline; flex-wrap: wrap; }
+.cfgrow code { font-size: 11px; color: var(--accent); }
+.cfgrow .from { color: var(--dim); text-decoration: line-through; overflow-wrap: anywhere; }
+.cfgrow .to { overflow-wrap: anywhere; }
+.cfgrow.bad, .cfgrow.bad code { color: var(--bad); }
+.modal textarea { width: 100%; }
+.cfgshow { max-height: 50vh; overflow: auto; }
