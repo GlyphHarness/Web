@@ -2,7 +2,7 @@
 
 A client-side LLM chat harness served straight from this repo with GitHub Pages. No server, no build step: the browser holds the API key, the sessions and the tools.
 
-Status: working skeleton (v0.2.0). The OpenRouter path is written from the OpenAI-compatible conventions and has not yet been run against the live API.
+Status: working skeleton (v0.3.0). The OpenRouter path is written from the OpenAI-compatible conventions and has not yet been run against the live API.
 
 ## Run
 
@@ -48,6 +48,10 @@ Every request made during a page load is recorded in memory: the body sent, the 
 `node scripts/replay.mjs FILE.trace [port] [--fast]` serves the app and answers `/api/v1/chat/completions` from that file with the recorded chunks and timing. Set "API base URL" to `http://localhost:PORT/api/v1` and the real provider code runs with no upstream access. The server prints whether each incoming body matches the recorded one, so a change to request assembly can be checked against a real session. `scripts/sample.trace` is a hand-made example.
 
 The same "API base URL" setting points the OpenRouter provider at any other OpenAI-compatible host.
+
+### Model catalogue and prices
+
+The model list and prices come from the provider's `/models` endpoint at run time and are cached per provider for a day (`wh:models:<provider>`, "refresh list" refetches). Nothing is hardcoded. The inspector shows the chosen model's price per 1M input, cached input, cache write, output and reasoning tokens, plus per-search and per-request charges. Price keys this build has no label for are shown raw. The ledger's cost column is what the provider reports per request.
 
 ### Tools
 

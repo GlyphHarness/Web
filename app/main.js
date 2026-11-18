@@ -9,7 +9,7 @@ import { providers } from './providers.js';
 import { toolDefs, execTool } from './tools.js';
 import { buildRequest, measure, report, padAttachment } from './context.js';
 
-export const VERSION = '0.2.0';
+export const VERSION = '0.3.0';
 const MAX_STEPS = 8; // model <-> tool round trips per user turn
 
 const $ = (s, r = document) => r.querySelector(s);
@@ -53,6 +53,11 @@ const SHELL = `
     <label>API base URL (empty = provider default)</label>
     <input id="base" placeholder="">
     <p class="note" id="build"></p>
+  </details>
+  <details open><summary>Model</summary>
+    <p class="note" id="pricenote"></p>
+    <table id="price"></table>
+    <button data-act="models">refresh list</button> <span class="note" id="modelsn"></span>
   </details>
   <details open><summary>System prompt</summary>
     <textarea id="system" rows="6"></textarea>
@@ -192,11 +197,51 @@ function applyInspector() {
   rule('inspector', state.meta.settings.inspector ? '' : '#inspect{display:none}\n#app{grid-template-columns:var(--side) minmax(0,1fr)}');
 }
 
-async function loadModels() {
-  try {
-    const list = await provider().models(state.keys[state.meta.settings.provider], opt());
-    $('#models').replaceChildren(...list.map(m => h('option', { value: m.id, label: m.name })));
-  } catch (e) { $('#models').replaceChildren(); console.warn('model list failed:', e); }
+// Model catalogue: fetched from the provider, cached per provider and base URL
+// for a day under wh:models:<provider>. Prices are shown, never hardcoded.
+const MODELS_TTL = 24 * 3600e3;
+let catalogue = [];
+
+async function loadModels(force) {
+  const id = state.meta.settings.provider, o = opt(), k = 'wh:models:' + id;
+  let c = null;
+  try { c = JSON.parse(localStorage.getItem(k)); } catch {}
+  if (!force && c && c.base === o.base && Date.now() - c.t < MODELS_TTL) catalogue = c.list;
+  else {
+    try {
+      catalogue = await provider().models(state.keys[id], o);
+      try { localStorage.setItem(k, JSON.stringify({ t: Date.now(), base: o.base, list: catalogue })); } catch {}
+      c = { t: Date.now() };
+    } catch (e) { catalogue = c?.base === o.base ? c.list : []; console.warn('model list failed:', e); }
+  }
+  $('#models').replaceChildren(...catalogue.map(m => h('option', { value: m.id, label: m.name })));
+  $('#modelsn').textContent = `${catalogue.length} models` + (c?.t ? `, fetched ${new Date(c.t).toLocaleString()}` : '');
+  showPrice();
+}
+
+// [pricing key, label, multiplier, unit]. Token prices arrive as USD per token.
+const PRICE_ROWS = [
+  ['prompt', 'input', 1e6, '/ 1M tok'], ['input_cache_read', 'cached input', 1e6, '/ 1M tok'],
+  ['input_cache_write', 'cache write', 1e6, '/ 1M tok'], ['completion', 'output', 1e6, '/ 1M tok'],
+  ['internal_reasoning', 'reasoning', 1e6, '/ 1M tok'], ['web_search', 'web search', 1, '/ search'],
+  ['request', 'request', 1, '/ request'], ['image', 'image', 1, '/ image'],
+];
+
+function showPrice() {
+  const m = catalogue.find(m => m.id === state.meta.settings.model);
+  const rows = [];
+  if (m) {
+    const known = new Set(PRICE_ROWS.map(r => r[0]));
+    for (const [k, label, mul, unit] of PRICE_ROWS) {
+      const v = Number(m.pricing[k]);
+      if (m.pricing[k] != null && v > 0) rows.push(h('tr', {}, h('td', { text: label }), h('td', { text: '$' + +(v * mul).toPrecision(4) + ' ' + unit })));
+    }
+    // anything the provider sends that this build has no label for is shown raw
+    for (const [k, v] of Object.entries(m.pricing)) if (!known.has(k) && Number(v) > 0) rows.push(h('tr', {}, h('td', { text: k }), h('td', { text: String(v) + ' (raw)' })));
+    if (m.ctx) rows.push(h('tr', {}, h('td', { text: 'context' }), h('td', { text: m.ctx.toLocaleString() + ' tok' })));
+  }
+  $('#price').replaceChildren(...rows);
+  $('#pricenote').textContent = m ? m.id : state.meta.settings.model ? 'Not in the fetched list; no price data.' : 'No model chosen.';
 }
 
 // ---------- the turn loop ----------
@@ -292,6 +337,7 @@ const actions = {
   },
   inspector() { state.meta.settings.inspector = !state.meta.settings.inspector; saveMeta(); applyInspector(); },
   stop() { ctl?.abort(); },
+  models() { loadModels(true); },
   drop(el) {
     const id = el.closest('[data-id]').dataset.id;
     if (busy || !confirm(`Delete "${state.sessions[id].title}"? This cannot be undone.`)) return;
@@ -323,7 +369,7 @@ function bind() {
 
   $('#title').addEventListener('change', e => { const s = cur(); s.title = e.target.value || 'Untitled'; saveSession(s); $(`#sessions [data-id="${s.id}"] span`).textContent = s.title; });
   $('#system').addEventListener('change', e => { const s = cur(); s.system = e.target.value; saveSession(s); });
-  $('#model').addEventListener('change', e => { state.meta.settings.model = e.target.value.trim(); saveMeta(); });
+  $('#model').addEventListener('change', e => { state.meta.settings.model = e.target.value.trim(); saveMeta(); showPrice(); });
   $('#provider').addEventListener('change', e => { state.meta.settings.provider = e.target.value; saveMeta(); $('#key').value = state.keys[e.target.value] || ''; showBase(); loadModels(); });
   $('#base').addEventListener('change', e => { (state.meta.settings.base ??= {})[state.meta.settings.provider] = e.target.value.trim(); saveMeta(); loadModels(); });
   $('#key').addEventListener('change', e => { state.keys[state.meta.settings.provider] = e.target.value.trim(); saveKeys(); });

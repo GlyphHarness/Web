@@ -78,3 +78,6 @@ figure { margin: 0; }
   #side, #inspect { max-height: 30vh; border: 0; border-bottom: 1px solid var(--line); }
   #inspect { border-top: 1px solid var(--line); }
 }
+#price { width: 100%; border-collapse: collapse; font: 11px ui-monospace, monospace; margin-bottom: 6px; }
+#price td { padding: 2px 4px; border-bottom: 1px solid var(--line); }
+#price td:last-child { text-align: right; }

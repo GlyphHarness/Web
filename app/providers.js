@@ -36,7 +36,8 @@ function openaiCompatible({ label, base }) {
       const r = await fetch(root(opt) + '/models');
       if (!r.ok) throw new Error(`models: HTTP ${r.status}`);
       const j = await r.json();
-      return (j.data || []).map(m => ({ id: m.id, name: m.name || m.id }));
+      // pricing is kept as the provider sent it (USD strings, per token unless noted)
+      return (j.data || []).map(m => ({ id: m.id, name: m.name || m.id, ctx: m.context_length ?? null, pricing: m.pricing || {} }));
     },
     async *stream(body, key, signal, opt = {}) {
       const url = root(opt) + '/chat/completions';
@@ -73,7 +74,7 @@ function openaiCompatible({ label, base }) {
 let mockPrev = '';
 const mock = {
   label: 'Mock (offline)', needsKey: false,
-  async models() { return [{ id: 'mock-1', name: 'Mock 1' }]; },
+  async models() { return [{ id: 'mock-1', name: 'Mock 1', ctx: 32000, pricing: { prompt: '0.00000015', completion: '0.0000006', input_cache_read: '0.000000003' } }]; },
   async *stream(body, _key, signal) {
     const flat = JSON.stringify(body.tools || []) + '\n' + body.messages.map(m => JSON.stringify(m)).join('\n');
     let kept = 0;
