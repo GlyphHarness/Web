@@ -25,7 +25,7 @@ import * as pat from './patterns.js';
 import { put, get, handlesIn, setFallback } from './outstore.js';
 import { buildRequest, measure, report, padAttachment, inherit, imitatesNote, keptLines, corePrompt, EDGE_MIN, markedOnly, edgeReplies, turnOf, KINDS } from './context.js';
 
-export const VERSION = '0.34.0';
+export const VERSION = '0.35.0';
 const MAX_STEPS = 8; // model <-> tool round trips per user turn
 const MAX_BRANCHES = 6; // concerns per fan_out
 const FOLD_MAX = 2000; // chars of a fold handed back to the source
@@ -80,7 +80,7 @@ const SHELL = `
       <div class="body">
         <div class="row2"><label class="field"><span title="Only this profile or one below it. Changing it can change the tools, which breaks the cached prefix once.">profile (this one or below)</span><select id="sprofile"></select></label></div>
         <p class="note" id="sscope"></p>
-        <table class="scope" id="scope"></table>
+        <div class="scope" id="scope"></div>
       </div>
       <div class="actions"><label class="check" title="Frozen: read-only; nothing can change this session's own settings"><input type="checkbox" id="smutable"> mutable</label><button data-act="cfgimport">import labels and values…</button></div>
     </details>
@@ -675,14 +675,17 @@ function scopeLevels(s) {
   const ch = eff(s).chain;
   return [{ id: 'session', name: 'this session' }, ...ch.slice().reverse().map(p => ({ id: 'p:' + p.id, name: p.name, p })), { id: 'default', name: 'defaults' }];
 }
+// The scope as a grid of rows that always fits its container: label, value and
+// source shrink and truncate (uptext shows them whole); the edit icon has a fixed
+// column; the edit panel stacks under its row. Grouped by audience.
 function renderScope() {
   const s = cur(), box = $('#scope');
   if (!s || !box) return;
   const e = eff(s), levels = scopeLevels(s);
   const opt = (v, t, sel, dis) => Object.assign(h('option', { value: v, text: t }), { selected: !!sel, disabled: !!dis });
   const show = (row, v) => row.kind === 'cap' ? (v === true ? 'yes' : v === false ? 'no' : v) : (v === '' || v == null ? '—' : String(v));
-  box.replaceChildren(h('tr', {}, ...['', 'value', 'from', ''].map(t => h('th', { text: t }))), ...SCOPE_ROWS.flatMap(row => {
-    const k = row.k, val = row.kind === 'set' ? e.settings[k] : e.caps[k];
+  const rowOf = row => {
+    const k = row.k, label = SCOPE_LABEL[k] || k, val = row.kind === 'set' ? e.settings[k] : e.caps[k];
     const from = row.kind === 'set' ? (e.from[k] || 'defaults') : (e.capFrom[k] || 'defaults');
     const lockBy = row.kind === 'set' ? e.locked.get(k) : null;
     // a lock held by profile P allows P and the levels above it; nothing below
@@ -694,15 +697,27 @@ function renderScope() {
       : k === 'repo' ? h('select', { 'data-sv': k }, opt('', 'inherit'), ...['none', 'read', 'write'].map(x => opt(x, x, x === val)))
       : h('select', { 'data-sv': k }, opt('', 'inherit'), opt('1', 'allow', val === true), opt('0', 'deny', val === false));
     if (k === 'logTranscripts') input.value = val === false ? 'false' : 'true';
-    const edit = h('tr', { class: 'scope-edit', 'data-row': k, hidden: '' }, h('td', { colspan: '4' }, h('div', { class: 'setat' }, field('set at', lv), field(row.kind === 'set' ? 'value (blank = inherit)' : 'value', input), btn('save', { 'data-act': 'scope-set', class: 'primary' }))));
-    const toggle = btn('✎', { class: 'scope-toggle', title: 'edit ' + (SCOPE_LABEL[k] || k), 'aria-label': 'edit ' + (SCOPE_LABEL[k] || k) });
-    const head = h('tr', { 'data-attr': k, tabindex: '0', ...(lockBy ? { 'data-locked': '' } : {}) },
-      h('th', {}, SCOPE_LABEL[k] || k, h('span', { class: 'aud', 'data-aud': prof.AUDIENCE[k], title: prof.AUDIENCE[k] === 'harness' ? 'configuration the harness uses on the session\'s behalf; the model never sees it' : 'shapes the model\'s tools', text: prof.AUDIENCE[k] })), h('td', { class: 'mono', title: show(row, val), text: show(row, val) }),
-      h('td', {}, h('span', { class: 'from', 'data-from': from === 'this session' ? 'session' : from === 'defaults' ? 'default' : 'profile', text: from }), lockBy ? h('span', { class: 'lock', title: 'locked by ' + lockBy, text: ' 🔒' }) : ''),
-      h('td', {}, toggle));
-    inlineEdit(head, edit, input, { label: SCOPE_LABEL[k] || k, show: v => row.kind === 'cap' ? ({ '': 'inherit', '1': 'allow', '0': 'deny' }[v] ?? v) : (v === '' ? '(inherit)' : v), save: () => edit.querySelector('[data-act="scope-set"]').click() });
+    const cancel = btn('cancel');
+    const edit = h('div', { class: 'scope-edit', 'data-row': k, hidden: '' },
+      field('set at', lv), field(row.kind === 'set' ? 'value (blank = inherit)' : 'value', input),
+      lockBy ? h('p', { class: 'note', text: `Locked by ${lockBy}: only ${lockBy} or a level above it can change this.` }) : '',
+      h('div', { class: 'actions' }, cancel, btn('save', { 'data-act': 'scope-set', class: 'primary' })));
+    const toggle = h('button', { type: 'button', class: 'scope-toggle', title: 'edit ' + label, 'aria-label': 'edit ' + label, 'aria-expanded': 'false', text: '✎' });
+    const fromKind = from === 'this session' ? 'session' : from === 'defaults' ? 'default' : 'profile';
+    const head = h('div', { class: 'srow', 'data-attr': k, role: 'button', tabindex: '0', 'aria-label': `${label}: ${show(row, val)}, from ${from}`, ...(lockBy ? { 'data-locked': '' } : {}) },
+      h('span', { class: 'slabel', text: label }),
+      h('span', { class: 'sval mono', text: show(row, val) }),
+      h('span', { class: 'from', 'data-from': fromKind, ...(lockBy ? { 'data-full': `${from} · locked by ${lockBy}` } : {}), text: (lockBy ? '🔒 ' : '') + from }),
+      toggle);
+    inlineEdit(head, edit, input, { label, show: v => row.kind === 'cap' ? ({ '': 'inherit', '1': 'allow', '0': 'deny' }[v] ?? v) : (v === '' ? '(inherit)' : v), save: () => edit.querySelector('[data-act="scope-set"]').click() });
+    cancel.onclick = () => head.click();
+    new MutationObserver(() => toggle.setAttribute('aria-expanded', String(!edit.hidden))).observe(edit, { attributes: true, attributeFilter: ['hidden'] });
     return [head, edit];
-  }));
+  };
+  const group = (title, note, rows) => h('div', { class: 'sgroup' }, h('div', { class: 'shead', 'data-full': note }, h('span', { text: title }), h('span', { class: 'note', text: note })), ...rows.flatMap(rowOf));
+  box.replaceChildren(
+    group('Harness settings', 'used on the session’s behalf; never shown to the model', SCOPE_ROWS.filter(r => prof.AUDIENCE[r.k] === 'harness')),
+    group('Tools', 'what the model gets to use', SCOPE_ROWS.filter(r => prof.AUDIENCE[r.k] !== 'harness')));
   slot($('#scopecount'), (s.frozen ? 'frozen · ' : '') + (e.path || 'no profile'));
   slot($('#sessname'), s.title);
   $('#smutable').checked = !s.frozen;

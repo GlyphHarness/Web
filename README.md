@@ -2,7 +2,7 @@
 
 A client-side LLM chat harness served straight from this repo with GitHub Pages. No server, no build step: the browser holds the API key, the sessions and the tools.
 
-Status: working skeleton (v0.34.0). The OpenRouter path is written from the OpenAI-compatible conventions and has not yet been run against the live API.
+Status: working skeleton (v0.35.0). The OpenRouter path is written from the OpenAI-compatible conventions and has not yet been run against the live API.
 
 ## Run
 
@@ -290,7 +290,8 @@ Values that change while you work (section counts, the trace count, the ledger s
 
 ### Inline edit and uptext
 
-- **Inline edit:** in the scope table each attribute row has an edit icon (✎); clicking or tapping the row, or Enter/Space on it, shows or hides its controls, prefilled with the current value. Enter saves, Escape closes. Closing with a change (the row, the icon, or opening another row) asks first, showing the change from → to: Discard, Keep editing, or Save.
+- **Scope grid:** the session's attributes are a grid of rows grouped by audience (*Harness settings*, *Tools*), not a table: label, value and source shrink and truncate (uptext shows them whole), the edit icon has its own fixed column, so a row never runs past its container, at any width.
+- **Inline edit:** each attribute row has an edit icon (✎); clicking or tapping the row, or Enter/Space on it, shows or hides its controls, prefilled with the current value. The edit panel stacks under its row at full width (level, value, Cancel and Save). Enter saves, Escape closes. Closing with a change (the row, the icon, or opening another row) asks first, showing the change from → to: Discard, Keep editing, or Save.
 - **Uptext:** hover (mouse, about 0.4 s) or press and hold (touch, about 0.45 s) on any text that is cut short shows its full value in a bubble above it. Truncation is detected, so session names, card names, chips, badges and scope values need no wiring; labels shortened on purpose carry their full value (`data-full`, e.g. the model id in a card header), and slot values are read too. It goes on leave, release, scroll or Escape.
 
 ### Cosmetic state
