@@ -20,7 +20,7 @@ export function client(env) {
   async function call(method, path, body) {
     // the repository and the least permission this request needs decide which token is used
     const repo = /^\/repos\/([^/]+\/[^/]+)/.exec(path)?.[1] || body?.variables?.i?.branch?.repositoryNameWithOwner;
-    const level = method === 'GET' ? 'read' : /\/pulls$/.test(path) ? 'pr' : 'write';
+    const level = method === 'GET' ? 'read' : /\/pulls$/.test(path) ? 'pr' : /\/issues(\/\d+\/comments)?$/.test(path) ? 'issues' : 'write';
     const out = repo && env.scope?.(repo);
     if (out) throw new Error(out);
     if (level !== 'read' && repo && env.readOnly?.().some(r => r.toLowerCase() === repo.toLowerCase())) throw new Error(`${repo} is read-only for this session.`);
@@ -186,5 +186,14 @@ export function client(env) {
     const r = await call('POST', a.owner ? `/orgs/${a.owner}/repos` : '/user/repos', body);
     return `${r.full_name} (${r.private ? 'private' : 'public'}, default branch ${r.default_branch})\n${r.html_url}`;
   }
-  return { read, commit, pr, create, call };
+  // A concern as an issue in the harness repo (label "concern" plus its kind).
+  async function issue(a) {
+    const repo = repoOf(a);
+    if (!a.title || !a.body) throw new Error('an issue needs a title and a body');
+    const labels = ['concern', ...(a.kind ? ['kind:' + String(a.kind).split(/\s/)[0]] : [])];
+    if (!a.approved && !(await env.confirm({ what: 'issue', repo, title: a.title, body: a.body, head: '', base: '' }))) return 'Not filed: the user declined.';
+    const r = await call('POST', `/repos/${repo}/issues`, { title: a.title, body: a.body, labels });
+    return `#${r.number} ${r.title}\n${r.html_url}`;
+  }
+  return { read, commit, pr, create, issue, call };
 }

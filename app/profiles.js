@@ -68,7 +68,9 @@ export function effective(profiles, id, global, over = {}) {
     if (caps[k] !== before) capFrom[k] = 'this session';
   }
   const repoAllowed = repo => repoLists.every(r => r.list.some(pat => globMatch(pat, repo)));
-  return { chain: c, settings, from, locked, caps, capFrom, repoLists, repoAllowed, policies, path: c.map(p => p.name).join(' / ') };
+  // sealed: the session's directives stay inside its execution (not exported, synced or bridged)
+  const sealed = c.some(p => p.sealed);
+  return { chain: c, settings, from, locked, caps, capFrom, repoLists, repoAllowed, policies, sealed, path: c.map(p => p.name).join(' / ') };
 }
 
 // Tools a session may have, from its tool groups and the resolved capabilities.

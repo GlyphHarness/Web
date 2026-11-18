@@ -81,6 +81,7 @@ export function plan(text, current) {
         let t = byName(p.name);
         if (p.remove === true) { if (t) { profiles.splice(profiles.indexOf(t), 1); for (const x of profiles) if (x.parent === t.id) x.parent = t.parent; changes.push({ path: `profile ${p.name}`, from: 'present', to: 'removed' }); } continue; }
         if (!t) { t = { id: 'p' + Math.random().toString(36).slice(2, 10), name: p.name, color: S(p.color) ? p.color : '#7fb4ff', settings: {}, caps: {}, locks: [], policies: [] }; profiles.push(t); changes.push({ path: `profile ${p.name}`, from: '(none)', to: 'added' }); }
+        if ('sealed' in p && typeof p.sealed === 'boolean' && !!t.sealed !== p.sealed && t.mutable !== false) { changes.push({ path: `profile ${p.name}.sealed`, from: !!t.sealed, to: p.sealed }); t.sealed = p.sealed || undefined; }
         if ('mutable' in p && typeof p.mutable === 'boolean' && (t.mutable !== false) !== p.mutable) { changes.push({ path: `profile ${p.name}.mutable`, from: t.mutable !== false, to: p.mutable }); t.mutable = p.mutable ? undefined : false; }
         if (t.mutable === false) { if (Object.keys(p).some(k => !['name', 'mutable'].includes(k))) refused.push({ path: `profile ${p.name}`, why: 'frozen: set "mutable": true first' }); continue; }
         if ('parent' in p) { const par = p.parent ? byName(p.parent) : null; if (p.parent && !par) refused.push({ path: `profile ${p.name}.parent`, why: 'no profile named ' + p.parent }); else if (par && par.id === t.id) refused.push({ path: `profile ${p.name}.parent`, why: 'cannot be its own parent' }); else if ((t.parent || null) !== (par?.id || null)) { changes.push({ path: `profile ${p.name}.parent`, from: profiles.find(x => x.id === t.parent)?.name || '', to: p.parent || '' }); t.parent = par?.id; } }
@@ -131,7 +132,7 @@ export function snapshot(current) {
   const name = id => (current.profiles || []).find(p => p.id === id)?.name;
   return { webharness: 'config', v: 1, settings, policies: current.policies.map(p => Object.fromEntries(POLICY_FIELDS.filter(f => p[f] != null).map(f => [f, p[f]]))),
     values: (current.values || []).map(v => ({ label: v.label, value: v.value, scope: v.scope, ...(v.purpose ? { purpose: v.purpose } : {}) })),
-    profiles: (current.profiles || []).map(p => ({ name: p.name, ...(p.mutable === false ? { mutable: false } : {}), ...(p.parent ? { parent: name(p.parent) } : {}), color: p.color, settings: p.settings, caps: p.caps, ...(p.repos ? { repos: p.repos } : {}), locks: p.locks })) };
+    profiles: (current.profiles || []).map(p => p.sealed ? { name: p.name, sealed: true } : ({ name: p.name, ...(p.mutable === false ? { mutable: false } : {}), ...(p.parent ? { parent: name(p.parent) } : {}), color: p.color, settings: p.settings, caps: p.caps, ...(p.repos ? { repos: p.repos } : {}), locks: p.locks })) };
 }
 
 // ---- import: loose "label: value" lines matched to what exists ----

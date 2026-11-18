@@ -9,7 +9,7 @@
 // a page, so this runs client-side.
 
 const API = 'https://api.github.com';
-export const PERMS = { read: { contents: 'read' }, write: { contents: 'write' }, pr: { contents: 'read', pull_requests: 'write' } };
+export const PERMS = { read: { contents: 'read' }, write: { contents: 'write' }, pr: { contents: 'read', pull_requests: 'write' }, issues: { issues: 'write' } };
 
 // ---- RS256 JWT from the PEM GitHub hands out (PKCS#1 "RSA PRIVATE KEY", or PKCS#8) ----
 const derLen = n => { if (n < 128) return [n]; const b = []; while (n) { b.unshift(n & 255); n >>>= 8; } return [0x80 | b.length, ...b]; };

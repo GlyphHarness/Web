@@ -1,7 +1,8 @@
 // Smoke test against the offline mock provider.
 // Usage: python3 -m http.server 8787 (repo root), then: node scripts/smoke.mjs [url] [screenshot.png]
 import { createRequire } from 'node:module';
-const { chromium } = createRequire(import.meta.url)('playwright');
+const require = createRequire(import.meta.url);
+const { chromium } = require('playwright');
 import fs from 'node:fs';
 
 const url = process.argv[2] || 'http://localhost:8787/';
@@ -483,6 +484,20 @@ check('mutable: a frozen session refuses its own changes, and says why', /this s
 await page.click('.modal button');
 await page.evaluate(() => { const t = document.querySelector('#smutable'); t.checked = true; t.dispatchEvent(new Event('change')); });
 
+// sealed: the profile's sessions keep their directives inside their execution
+await page.evaluate(() => { const c = [...document.querySelectorAll('#profiles [data-prof]')].find(x => x.querySelector('.name').textContent.endsWith('research')); const t = c.querySelector('[data-pf=sealed]'); t.checked = true; t.dispatchEvent(new Event('change', { bubbles: true })); });
+await page.fill('#system', 'SECRET DIRECTIVE: be terse'); await page.dispatchEvent('#system', 'change');
+const [sdl] = await Promise.all([page.waitForEvent('download'), page.click('[data-act=export]')]);
+const sealedExport = JSON.parse(require('fs').readFileSync(await sdl.path(), 'utf8'));
+check('sealed: an export carries "[sealed]" instead of the directives', sealedExport.sessions.every(x => x.system === '[sealed]') && !JSON.stringify(sealedExport).includes('SECRET DIRECTIVE'));
+await page.evaluate(() => document.querySelector('[data-act=cfgcopy]').click());
+await page.waitForSelector('.modal .cfgshow');
+const sealedCfg = JSON.parse(await page.textContent('.modal .cfgshow'));
+check('sealed: copied config names a sealed profile and nothing else about it', JSON.stringify(sealedCfg.profiles.find(p => p.name === 'research')) === JSON.stringify({ name: 'research', sealed: true }));
+await page.click('.modal button');
+await page.evaluate(() => { const c = [...document.querySelectorAll('#profiles [data-prof]')].find(x => x.querySelector('.name').textContent.endsWith('research')); const t = c.querySelector('[data-pf=sealed]'); t.checked = false; t.dispatchEvent(new Event('change', { bubbles: true })); });
+await page.fill('#system', ''); await page.dispatchEvent('#system', 'change');
+
 await page.fill('#input', 'a concern for a branch');
 await page.click('[data-act=branch]');
 await page.waitForSelector('#app:not([data-busy])', { state: 'attached', timeout: 20000 });
@@ -506,6 +521,13 @@ await page.evaluate(() => document.querySelector('[data-act=cfgpaste]').click())
 await page.fill('.modal textarea', JSON.stringify({ settings: { provider: 'mock', model: 'mock-1' } }));
 await page.click('.modal .primary');
 await page.evaluate(() => { const m = document.querySelector('#newprofile'); m.value = ''; m.dispatchEvent(new Event('change')); });
+
+// ---- targets per steering version ----
+await page.evaluate(() => { for (const d of document.querySelectorAll('#insp > details')) if (/Smells/.test(d.querySelector('summary').textContent)) d.open = true; });
+const tg = await page.evaluate(() => [...document.querySelectorAll('#smells .targets-t tr')].slice(1).map(tr => [...tr.querySelectorAll('td[data-met]')].map(td => td.dataset.met)));
+check('targets: each steering version is checked against cache, smells and cost targets', tg.length > 0 && tg.every(r => r.length === 3));
+await page.evaluate(() => { const i = document.querySelector('#smells [data-target=smells]'); i.value = '100'; i.dispatchEvent(new Event('change', { bubbles: true })); });
+check('targets: editing a target re-checks every version', await page.evaluate(() => [...document.querySelectorAll('#smells .targets-t tr')].slice(1).every(tr => tr.querySelectorAll('td[data-met]')[1].dataset.met === 'true')));
 
 // ---- zero sessions is a valid state ----
 const dropAll = async () => { for (;;) { const id = await page.evaluate(() => document.querySelector('#sessions [data-id]')?.dataset.id); if (!id) break; await page.evaluate(id => document.querySelector(`#sessions [data-id="${id}"] [data-act=drop]`).click(), id); await page.waitForSelector('.modal .primary'); await page.click('.modal .primary'); await page.waitForTimeout(50); } };

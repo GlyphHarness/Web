@@ -381,3 +381,9 @@ ol.xlines li::marker { color: var(--dim); font-size: 10px; }
 #machine .vmpty[hidden], .vmptybar[hidden] { display: none; }
 .vmptybar { display: flex; align-items: center; gap: 8px; font-size: 12px; }
 .vmptybar button { margin-left: auto; font-size: 11px; padding: 1px 8px; }
+.targets { display: flex; flex-wrap: wrap; gap: 6px; align-items: flex-end; margin: 6px 0; }
+.targets > b { font-size: 10px; text-transform: uppercase; letter-spacing: .05em; color: var(--dim); width: 100%; }
+.targets .field { flex: 1 1 90px; }
+.targets input { width: 100%; font-size: 12px; }
+.targets-t td[data-met=true] { color: var(--ok); }
+.targets-t td[data-met=false] { color: var(--bad); font-weight: 600; }

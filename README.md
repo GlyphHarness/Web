@@ -2,7 +2,7 @@
 
 A client-side LLM chat harness served straight from this repo with GitHub Pages. No server, no build step: the browser holds the API key, the sessions and the tools.
 
-Status: working skeleton (v0.43.0). The OpenRouter path is written from the OpenAI-compatible conventions and has not yet been run against the live API.
+Status: working skeleton (v0.44.0). The OpenRouter path is written from the OpenAI-compatible conventions and has not yet been run against the live API.
 
 ## Run
 
@@ -214,6 +214,13 @@ Settings → "paste config" takes a JSON block (for example one an agent writes 
 ### Zero sessions
 
 Having no sessions is a valid state: a first visit, or deleting the last one, shows "No sessions." with a way to start one, and controls that only make sense for a session are hidden. Typing a message and sending it creates a session. Nothing is created behind your back.
+
+### Concerns, targets and sealed sessions
+
+- **Concerns as issues:** Settings → "file a concern…" files an issue in the concerns repository (Settings; empty = the repo this page is served from), labelled `concern` and `kind:<kind>` (pattern, interop, protocol, policy, cost, ui, other), with what happened (the evidence), what should happen, the intent, and where it came from (session, steering fingerprint, profile, model). Sessions with repository tools have `concern_file`, so agents can file them too; each waits for your approval on a card. The repository also has a matching issue form (`.github/ISSUE_TEMPLATE/concern.yml`).
+- **Targets:** the Smells section holds targets (cache hit rate ≥ 50%, smells per request ≤ 0.05, cost per request ≤ $0.002 by default, all editable) and checks every steering version against them from the ledgers; the steering review is told which are missed.
+- **Sealed profiles:** a sealed profile's sessions keep their directives inside their execution: exports carry `[sealed]` instead of the system prompt and the session's own settings; no transcripts or artifacts go to the log repo, and metrics and steering rows say `[sealed]`; the bridge's `session` directive refuses them; copied config names a sealed profile and nothing else about it; concerns and smells name it `[sealed]`.
+- **Machine autostart:** with the machine switched on, it starts when the page loads (Defaults → "start the Linux machine when the page loads").
 
 ### Handoff blocks
 

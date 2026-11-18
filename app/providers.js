@@ -143,6 +143,8 @@ const mock = {
         : /use value/.test(c) ? ['run_js', { code: `return "deploying to {{${id}}}"` }]
         : ['value_get', { id, history: true }];
       yield { choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_' + Date.now(), type: 'function', function: { name: call[0], arguments: JSON.stringify(call[1]) } }] } }] };
+    } else if (/file a concern/.test(last.content || '')) {
+      yield { choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_' + Date.now(), type: 'function', function: { name: 'concern_file', arguments: JSON.stringify({ kind: 'interop', title: 'gh api pagination input', what: 'gh api /user/repos returned 30 of 120 repos: --paginate was not passed', expected: 'pass --paginate for list endpoints', intent: 'complete lists for scope checks' }) } }] } }] };
     } else if (/ask me/.test(last.content || '')) {
       yield { choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_' + Date.now(), type: 'function', function: { name: 'ask', arguments: JSON.stringify({ questions: [
         { id: 'name', prompt: 'Repo name?', type: 'text' },

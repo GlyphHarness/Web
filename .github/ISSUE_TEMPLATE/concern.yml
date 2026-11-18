@@ -1,0 +1,45 @@
+name: Concern
+description: Something to look at in the harness (a pattern, an interop input, a protocol, a policy, the UI). Filed by people or by agents from inside the harness.
+title: "[concern] "
+labels: ["concern"]
+body:
+  - type: dropdown
+    id: kind
+    attributes:
+      label: Kind
+      options:
+        - pattern (a recurring way of working, good or bad)
+        - interop (input formed for a tool, an API or another program)
+        - protocol (how sessions, agents or the browser are driven)
+        - policy or steering (conventions, policies, prompts)
+        - cost (tokens, caching, requests)
+        - ui
+        - other
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: The evidence, not a claim. Paste the call, the output, the smell row or the trace excerpt.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What should happen instead
+  - type: textarea
+    id: intent
+    attributes:
+      label: Intent
+      description: What the change is for, in one or two lines.
+  - type: input
+    id: where
+    attributes:
+      label: Where
+      description: Session id, profile, tool, file or page area.
+  - type: input
+    id: cost
+    attributes:
+      label: Cost estimate
+      description: Tokens or dollars at stake, if known.

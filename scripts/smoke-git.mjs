@@ -15,7 +15,7 @@ const TOKEN = 'github_pat_TESTTOKEN_' + 'x'.repeat(20);
 const sha = () => randomBytes(20).toString('hex');
 const repos = { 'o/r': { main: { sha: sha(), files: { 'a.txt': 'hello world\n', 'src/x.js': 'x' } } } };
 const branches = repos['o/r'];
-const trees = {}, commits = {}, blobsMade = [];
+const trees = {}, commits = {}, blobsMade = [], issuesMade = [];
 const seen = []; // [method, path, body]
 const b64 = s => Buffer.from(s).toString('base64');
 const etagOf = v => '"' + createHash('sha1').update(JSON.stringify(v)).digest('hex') + '"';
@@ -93,6 +93,7 @@ function api(method, path, q, body, headers) {
     repos[full] = { main: { sha: sha(), files: body.auto_init ? { 'README.md': '# ' + body.name } : {} } };
     return [201, { full_name: full, private: body.private, default_branch: 'main', html_url: 'https://github.com/' + full }];
   }
+  if (path === '/repos/o/r/issues' && method === 'POST') { issuesMade.push({ repo: repoName, ...body }); return [201, { number: 100 + issuesMade.length, title: body.title, html_url: `https://github.com/${repoName}/issues/${100 + issuesMade.length}` }]; }
   if (path === '/repos/o/r/pulls' && method === 'POST') return [201, { number: 7, head: { ref: body.head }, base: { ref: body.base }, html_url: 'https://github.com/o/r/pull/7' }];
   return [404, { message: 'no fake for ' + method + ' ' + path }];
 }
@@ -323,6 +324,23 @@ await page.click('.modal .actions button');
 check('queue: running it performs the check and marks it done', await until(async () => await page.evaluate(id => JSON.parse(localStorage['wh:meta']).queue.find(x => x.id === id).status, sq.id) === 'done', 5000));
 await page.selectOption('#provider', 'mock');
 await page.fill('#model', 'mock-1'); await page.dispatchEvent('#model', 'change');
+
+// ---- concerns: issues in the harness repo, from the form and from an agent ----
+await page.click('[data-pane=insp]');
+await page.evaluate(() => { const i = document.querySelector('#concernrepo'); i.value = 'o/r'; i.dispatchEvent(new Event('change')); document.querySelector('[data-act=concern]').click(); });
+await page.waitForSelector('.modal textarea');
+await page.evaluate(() => { const m = document.querySelector('.modal'); m.querySelector('select').value = 'protocol'; m.querySelector('input').value = 'bridge directive for screenshots'; m.querySelector('textarea').value = 'the paired agent cannot capture the page'; });
+await page.click('.modal .primary');
+await page.waitForSelector('.modal .actions button');
+check('concerns: the form files an issue labelled concern and its kind, with where it came from', issuesMade.length === 1 && issuesMade[0].labels.join() === 'concern,kind:protocol' && /\[concern\] bridge directive for screenshots/.test(issuesMade[0].title) && /### What happened\nthe paired agent cannot capture the page/.test(issuesMade[0].body) && /Filed by you from WebHarness/.test(issuesMade[0].body), JSON.stringify(issuesMade[0]).slice(0, 300));
+await page.click('.modal .actions button');
+await page.click('[data-act=new]');
+await say('file a concern please');
+await page.waitForSelector('.thread:visible .msg[data-role=approve]:not([data-done]) button');
+check('concerns: an agent\'s concern waits for your approval', /File this concern as an issue\?/.test(await thread().locator('.msg[data-role=approve]').last().textContent()) && issuesMade.length === 1);
+await thread().locator('.msg[data-role=approve]:not([data-done]) button', { hasText: 'allow' }).click();
+await idle();
+check('concerns: approved, it is filed by the model with the evidence', issuesMade.length === 2 && issuesMade[1].labels.join() === 'concern,kind:interop' && /Filed by model/.test(issuesMade[1].body) && /--paginate was not passed/.test(issuesMade[1].body));
 
 // ---- credential scope check: intended use vs what the token can do (no model) ----
 await page.click('[data-pane=insp]');

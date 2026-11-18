@@ -27,7 +27,7 @@ import * as pat from './patterns.js';
 import { put, get, handlesIn, setFallback } from './outstore.js';
 import { buildRequest, measure, report, padAttachment, inherit, imitatesNote, keptLines, corePrompt, EDGE_MIN, markedOnly, edgeReplies, turnOf, KINDS } from './context.js';
 
-export const VERSION = '0.43.0';
+export const VERSION = '0.44.0';
 const MAX_STEPS = 8; // model <-> tool round trips per user turn
 const MAX_BRANCHES = 6; // concerns per fan_out
 const FOLD_MAX = 2000; // chars of a fold handed back to the source
@@ -119,10 +119,13 @@ const SHELL = `
       <label class="check"><input type="checkbox" id="ghprobe"> probe write access (creates an unreferenced blob in each repo that needs write; no commit, no branch change)</label>
       <div class="cfgbar"><button data-act="ghderive">fill from configuration</button><button data-act="ghscopes" class="primary">check scopes</button></div>
     </details>
+    <label><input type="checkbox" id="vmauto"> start the Linux machine when the page loads</label>
     <label><input type="checkbox" id="vmon"> Linux machine: a <code>shell</code> tool for new sessions (bash, git, python3, gh). Downloads the image once; switching this reloads the page to turn cross-origin isolation on or off.</label>
     <label>Log repo: a private repo of yours where the harness keeps tracking over time (owner/name). Only the harness writes to it; agents can read it.</label>
     <div style="display:flex;gap:6px"><input id="logrepo" placeholder="owner/name" autocomplete="off"><button data-act="logsetup">set up</button><button data-act="logsync">sync</button></div>
     <p class="note" id="logstat"></p>
+    <label>Concerns repository (issues labelled "concern"; empty = the repo this page is served from)</label>
+    <div style="display:flex;gap:6px"><input id="concernrepo" placeholder="owner/name" autocomplete="off"><button data-act="concern">file a concern…</button></div>
     <label><input type="checkbox" id="logtx"> Keep session transcripts and the outputs and media they cite in the log repo (branch wh-sessions; masked; read progressively)</label>
     <button data-act="logbrowse">browse transcripts</button>
     <label>Pinned code ref (tag, branch or commit; empty = this branch)</label>
@@ -790,7 +793,8 @@ function renderProfiles() {
         field('allowed repositories (owner/name or owner/*, comma separated; blank = inherit)', h('input', { 'data-pf': 'repos', value: (p.repos || []).join(', '), class: 'mono' })),
         h('p', { class: 'note', text: `resolved: ${Object.entries(e.caps).map(([k, v]) => `${CAP_LABEL[k] || k} ${v === true ? 'yes' : v === false ? 'no' : v}`).join(' · ')}${e.repoLists.length ? ' · repos ' + e.repoLists.map(r => r.list.join('|')).join(' ∩ ') : ''}${(p.policies || []).length ? ' · own policies: ' + p.policies.map(x => x.name).join(', ') : ''}` }),
       ],
-      actions: [h('label', { class: 'check', title: 'Frozen: read-only until switched back' }, Object.assign(h('input', { type: 'checkbox', 'data-pf': 'mutable' }), { checked: !frozen }), ' mutable'), btn('delete', { 'data-act': 'prof-drop', ...(frozen ? { disabled: '' } : {}) })] });
+      actions: [h('label', { class: 'check', title: 'Frozen: read-only until switched back' }, Object.assign(h('input', { type: 'checkbox', 'data-pf': 'mutable' }), { checked: !frozen }), ' mutable'),
+ h('label', { class: 'check', title: 'Sealed: its sessions\u2019 directives stay inside their execution (not exported, synced or bridged)' }, Object.assign(h('input', { type: 'checkbox', 'data-pf': 'sealed', ...(frozen ? { disabled: '' } : {}) }), { checked: !!p.sealed }), ' sealed'), btn('delete', { 'data-act': 'prof-drop', ...(frozen ? { disabled: '' } : {}) })] });
     if (frozen) for (const el of card.querySelectorAll('.body input, .body select, .body textarea')) el.disabled = true;
     return card;
   }));
@@ -1152,6 +1156,7 @@ async function turns(s, depth, onFirst) {
     vm: s.tools?.includes('vm') ? shellRunner() : null,
     fsMark: () => fsMark(s),
     ask: a => askCard(s, a),
+    concern: (a, who) => fileConcern(s, a, who),
     values: valueTools(s, () => ctx.by()),
     runtime: (id, what) => smell(s, { kind: 'policy-runtime', tool: 'shell', policy: id, detail: what.slice(0, 200), rule: policyList().find(p => p.name === id)?.rule }),
     git: s.tools?.includes('repo') ? gitClient({ token: gh.token, trace, get, confirm: what => approve(s, what), readOnly: () => [state.meta.settings.logRepo].filter(Boolean), scope: repo => eff(s).repoAllowed(repo) ? null : `${repo} is not available in this session.` }) : null,
@@ -1528,12 +1533,28 @@ function steerOf(s) {
   return smells.fp([s.core || 0, s.keep ? 1 : 0, s.edge || '', s.system || '', eff(s).path, JSON.stringify(policiesFor(s)), JSON.stringify(toolsFor(s).map(d => d.function.name + d.function.description))].join('\u0000'));
 }
 function smell(s, row) {
-  const r = smells.add({ session: s.id, model: cfg(s).model, profile: eff(s).path || undefined, steer: steerOf(s), ...row });
+  const r = smells.add({ session: s.id, model: cfg(s).model, profile: pathOut(s) || undefined, steer: steerOf(s), ...row });
   link?.emit('smell', r);
   renderSmells();
   considerReview(r);
   if (r.policy) renderPolicies();
 }
+
+// Targets: what the harness should achieve, checked per steering version from the
+// ledgers (cache hit rate, smells per request, cost per request).
+const TARGETS = { cache: { label: 'cache hit rate', def: 0.5, better: 'higher', fmt: v => Math.round(v * 100) + '%' }, smells: { label: 'smells per request', def: 0.05, better: 'lower', fmt: v => v.toFixed(3) }, cost: { label: 'cost per request', def: 0.002, better: 'lower', fmt: v => '$' + v.toFixed(4) } };
+const targetOf = k => Number(state.meta.settings.targets?.[k] ?? TARGETS[k].def);
+function steerStats() {
+  const by = {};
+  for (const x of state.meta.order.map(id => state.sessions[id]).filter(Boolean)) {
+    const o = by[steerOf(x)] ||= { steer: steerOf(x), requests: 0, prompt: 0, cached: 0, cost: 0, smells: 0 };
+    for (const e of x.ledger.filter(e => !e.helper)) { o.requests++; o.prompt += e.prompt || 0; o.cached += e.cached || 0; o.cost += Number(e.cost) || 0; }
+  }
+  for (const r of smells.all()) if (r.steer && by[r.steer]) by[r.steer].smells++;
+  return Object.values(by).filter(o => o.requests).map(o => ({ ...o, cache: o.prompt ? o.cached / o.prompt : null, smellRate: o.smells / o.requests, costRate: o.cost / o.requests }));
+}
+const meets = (k, v) => v == null ? null : TARGETS[k].better === 'higher' ? v >= targetOf(k) : v <= targetOf(k);
+const missedTargets = () => steerStats().flatMap(o => [['cache', o.cache], ['smells', o.smellRate], ['cost', o.costRate]].filter(([k, v]) => meets(k, v) === false).map(([k, v]) => `${o.steer}: ${TARGETS[k].label} ${TARGETS[k].fmt(v)} (target ${TARGETS[k].better === 'higher' ? '≥' : '≤'} ${TARGETS[k].fmt(targetOf(k))})`));
 
 function renderSmells() {
   const box = $('#smells');
@@ -1543,8 +1564,10 @@ function renderSmells() {
   const props = smells.proposals();
   box.replaceChildren(
     h('div', { class: 'chips' }, ...(list.length ? smells.summary(list).map(([k, n]) => h('span', { class: 'chip', text: `${k} ×${n}` })) : [h('span', { class: 'note', text: 'Nothing recorded.' })])),
-    steer.length ? h('table', { class: 'audit' }, h('tr', {}, ...['steering', 'requests', 'smells', 'per request'].map(t => h('th', { text: t }))),
-      ...steer.map(o => h('tr', {}, h('td', { text: o.steer + (o.steer === steerOf(cur()) ? ' (this session)' : '') }), h('td', { text: String(o.requests) }), h('td', { text: String(o.smells) }), h('td', { text: o.rate == null ? '-' : o.rate.toFixed(3) })))) : '',
+    h('div', { class: 'targets' }, h('b', { text: 'targets' }), ...Object.entries(TARGETS).map(([k, t]) => h('label', { class: 'field' }, h('span', { text: `${t.label} (${t.better === 'higher' ? '≥' : '≤'})` }), h('input', { type: 'number', step: k === 'cost' ? '0.0005' : '0.01', min: '0', 'data-target': k, value: String(targetOf(k)) })))),
+    (() => { const st = steerStats(); if (!st.length) return ''; const cell = (k, v) => h('td', { 'data-met': String(meets(k, v)), text: v == null ? '-' : TARGETS[k].fmt(v) });
+      return h('table', { class: 'audit targets-t' }, h('tr', {}, ...['steering', 'requests', 'cache', 'smells/req', '$/req'].map(t => h('th', { text: t }))),
+        ...st.map(o => h('tr', {}, h('td', { text: o.steer + (o.steer === steerOf(cur()) ? ' (this session)' : '') }), h('td', { text: String(o.requests) }), cell('cache', o.cache), cell('smells', o.smellRate), cell('cost', o.costRate)))); })(),
     h('div', { class: 'items' }, ...props.filter(p => p.status === 'pending').map(p => item({ kind: 'proposal', name: p.id, meta: p.model, tone: 'warn', open: true, attrs: { 'data-kind': 'proposal' },
       body: [h('pre', { text: p.text })],
       actions: [btn('adopt', { 'data-act': 'propose', 'data-id': p.id, 'data-to': 'adopted' }), btn('dismiss', { 'data-act': 'propose', 'data-id': p.id, 'data-to': 'dismissed' })] }))),
@@ -1718,6 +1741,7 @@ const actions = {
   async export() {
     if (!cur()) return;
     const s = cur(), bundle = exportBundle(s), blobs = {};
+    for (const x of bundle.sessions) if (sealedOf(state.sessions[x.id] || x)) { x.system = '[sealed]'; delete x.over; x.sealed = true; }
     // carry the stored outputs these sessions cite, so handles still resolve after import
     for (const hd of new Set(bundle.sessions.flatMap(x => x.messages.flatMap(m => [...handlesIn(m.content), ...handlesIn(m.x?.wire), ...(m.tool_calls || []).flatMap(t => handlesIn(t.function.arguments))])))) { const t = await get(hd).catch(() => null); if (t != null) blobs[hd] = t; }
     if (Object.keys(blobs).length) bundle.blobs = blobs;
@@ -1725,6 +1749,7 @@ const actions = {
     download((s.title.replace(/[^\w\- ]+/g, '').trim() || 'session') + '.session', bundle);
   },
   smellsclear() { smells.clear(); renderSmells(); },
+  concern() { return concernForm(); },
   explore() { return openExplorer(); },
   async 'q-run'(el) { const it = queue().find(x => x.id === el.closest('[data-q]').dataset.q); if (it) await runItem(it); },
   'q-dismiss'(el) { const it = queue().find(x => x.id === el.closest('[data-q]').dataset.q); if (it) { it.status = 'dismissed'; it.done = Date.now(); saveMeta(); renderQueue(); } },
@@ -1933,6 +1958,7 @@ function bind() {
     if (!f || !card) return;
     const p = profiles().find(x => x.id === card.dataset.prof), v = e.target.type === 'checkbox' ? e.target.checked : e.target.value.trim();
     if (f === 'mutable') p.mutable = v ? undefined : false;
+    else if (f === 'sealed' && p.mutable !== false) p.sealed = v || undefined;
     else if (p.mutable === false) { renderProfiles(); return; }
     else if (f === 'name') p.name = v || p.name;
     else if (f === 'parent') p.parent = v || undefined;
@@ -1967,16 +1993,24 @@ function bind() {
   });
   $('#polmodel').addEventListener('change', e => { state.meta.settings.policyModel = e.target.value.trim(); saveMeta(); });
   showIntent();
+  $('#smells').addEventListener('change', e => { const k = e.target.dataset?.target; if (!k) return; (state.meta.settings.targets ??= {})[k] = Number(e.target.value); saveMeta(); renderSmells(); });
   $('#qbudget').value = state.meta.settings.queueBudget || 20000;
   $('#qbudget').addEventListener('change', e => { state.meta.settings.queueBudget = Number(e.target.value) || 20000; saveMeta(); });
   renderQueue();
+  // autostart: with the machine switched on (and the page isolated), boot it now
+  if (vmWanted() && vmReady() && state.meta.settings.vmAutostart !== false) setTimeout(() => vm().run('true', 300, { quiet: true, label: 'autostart' }).catch(() => {}), 1500);
   // conditions checked at start: a credential never checked, or not for a week
   if ((state.keys.github || state.keys.ghapp) && Date.now() - (state.meta.settings.ghScopeAt || 0) > 7 * 864e5) enqueue({ type: 'scope-check', targets: [{ kind: 'credential', id: gh.mode() || 'github', label: 'GitHub credential' }], reason: { kind: state.meta.settings.ghScopeAt ? 'stale' : 'never checked', detail: state.meta.settings.ghScopeAt ? 'last checked over a week ago' : 'the credential has not been checked against its intended use' } });
   for (const id of ['#ghintent', '#ghpulls', '#ghcreate']) $(id).addEventListener('change', readIntent);
+  $('#concernrepo').value = state.meta.settings.concernRepo || '';
+  $('#concernrepo').placeholder = bootEnv?.repo || 'owner/name';
+  $('#concernrepo').addEventListener('change', e => { state.meta.settings.concernRepo = e.target.value.trim() || undefined; saveMeta(); });
   $('#logrepo').value = state.meta.settings.logRepo || '';
   $('#logrepo').addEventListener('change', e => { state.meta.settings.logRepo = e.target.value.trim(); state.meta.settings.logReady = false; saveMeta(); slot($('#logstat'), 'press "set up"'); });
   if (state.meta.settings.logReady) slot($('#logstat'), state.meta.settings.logRepo + ': ready');
   $('#vmon').checked = vmWanted();
+  $('#vmauto').checked = state.meta.settings.vmAutostart !== false;
+  $('#vmauto').addEventListener('change', e => { state.meta.settings.vmAutostart = e.target.checked; saveMeta(); });
   $('#vmon').addEventListener('change', e => { try { localStorage.setItem('wh:vm', e.target.checked ? '1' : '0'); } catch {} location.reload(); });
   $('#wire').addEventListener('change', e => { const s = cur(); if (!s) return; s.wire = e.target.value; saveSession(s); showCore(); });
   // a session whose profile supplies the model gets its own override; otherwise the Settings value changes
@@ -2071,7 +2105,9 @@ function rows() {
 }
 const redrawSessions = () => { $('#sessions').replaceChildren(...rows()); rule('active', `.thread:not([data-session="${state.meta.active}"]),.stagebox:not([data-session="${state.meta.active}"]){display:none}\n#sessions [data-id="${state.meta.active}"]{background:var(--sel)}`); };
 
+let bootEnv = null;
 export function boot(env) {
+  bootEnv = env;
   load(); // throws (and the shell shows why) if stored data is newer than this build
   app = $('#app');
   app.innerHTML = SHELL;
@@ -2377,10 +2413,10 @@ function logPayload(since, repo = state.meta.settings.logRepo) {
   const list = state.meta.order.map(id => state.sessions[id]).filter(s => s && logRepoOf(s) === repo);
   const ids = new Set(list.map(s => s.id)), isDefault = repo === state.meta.settings.logRepo;
   const sm = smells.all().filter(r => r.session ? ids.has(r.session) : isDefault);
-  const steering = [...new Map(list.map(x => [steerOf(x), x])).entries()].map(([fp, x]) => ({ fp, core: corePrompt(x), system: x.system || '', policies: policiesFor(x), profile: eff(x).path, tools: toolsFor(x).map(d => d.function.name) }));
+  const steering = [...new Map(list.map(x => [steerOf(x), x])).entries()].map(([fp, x]) => sealedOf(x) ? { fp, sealed: true } : ({ fp, core: corePrompt(x), system: x.system || '', policies: policiesFor(x), profile: eff(x).path, tools: toolsFor(x).map(d => d.function.name) }));
   const sessions = list.filter(x => (x.ledger.at(-1)?.t || x.created) > since).map(x => {
     const sum = k => x.ledger.reduce((n, e) => n + (Number(e[k]) || 0), 0);
-    return { session: x.id, parent: x.parent?.id || null, profile: eff(x).path || null, created: x.created, model: x.ledger.at(-1)?.model || null, steer: steerOf(x), tools: x.tools || [], requests: x.ledger.filter(e => !e.helper).length, side: x.ledger.filter(e => e.helper).length, prompt: sum('prompt'), cached: sum('cached'), completion: sum('completion'), cost: +sum('cost').toFixed(6), smells: sm.filter(r => r.session === x.id).length };
+    return { session: x.id, parent: x.parent?.id || null, profile: pathOut(x), created: x.created, model: x.ledger.at(-1)?.model || null, steer: steerOf(x), tools: x.tools || [], requests: x.ledger.filter(e => !e.helper).length, side: x.ledger.filter(e => e.helper).length, prompt: sum('prompt'), cached: sum('cached'), completion: sum('completion'), cost: +sum('cost').toFixed(6), smells: sm.filter(r => r.session === x.id).length };
   });
   return { smells: sm, sessions, steering, proposals: isDefault ? smells.proposals() : [] };
 }
@@ -2428,7 +2464,7 @@ async function transcriptItems(l) {
   const sent = st.sent || {};
   const items = [], artifacts = [];
   for (const s of state.meta.order.map(id => state.sessions[id]).filter(Boolean)) {
-    if (s.private || logRepoOf(s) !== l.repo || cfg(s).logTranscripts === false) continue;
+    if (s.private || sealedOf(s) || logRepoOf(s) !== l.repo || cfg(s).logTranscripts === false) continue;
     const skipped = [];
     const from = sent[s.id] || 0;
     const mask = maskFor(s);
@@ -2558,7 +2594,8 @@ function reviewInput(s) {
   s ||= { core: 3, keep: true, edge: 'marks', system: '' }; // no session: the defaults new sessions get
   const steer = smells.bySteer(state.meta.order.map(id => state.sessions[id]).filter(Boolean).map(x => ({ steer: steerOf(x), requests: x.ledger.filter(e => !e.helper).length })));
   const rows = smells.all().slice(-200).map(r => ({ kind: r.kind, steer: r.steer, tool: r.tool, policy: r.policy, why: r.why, detail: r.detail?.slice(0, 120) }));
-  return { steer, rows, text: `STEERING VERSIONS:\n${JSON.stringify(steer)}\n\nRECENT ROWS:\n${rows.map(r => JSON.stringify(r)).join('\n')}\n\nCURRENT CONVENTIONS:\n${corePrompt(s)}\n\nCURRENT POLICIES:\n${policyList().map(p => `${p.name} [${p.tool}${p.on === false ? ', off' : ''}] /${p.pattern}/${p.flags || ''} ${p.rule}`).join('\n')}\n\nCURRENT SYSTEM PROMPT:\n${s.system || '(empty)'}` };
+  const missed = missedTargets();
+  return { steer, rows, text: `TARGETS MISSED:\n${missed.join('\n') || '(none)'}\n\nSTEERING VERSIONS:\n${JSON.stringify(steer)}\n\nRECENT ROWS:\n${rows.map(r => JSON.stringify(r)).join('\n')}\n\nCURRENT CONVENTIONS:\n${corePrompt(s)}\n\nCURRENT POLICIES:\n${policyList().map(p => `${p.name} [${p.tool}${p.on === false ? ', off' : ''}] /${p.pattern}/${p.flags || ''} ${p.rule}`).join('\n')}\n\nCURRENT SYSTEM PROMPT:\n${s.system || '(empty)'}` };
 }
 // conditions: enough new smells, or any refusal, queue a review
 function considerReview(r) {
@@ -2624,6 +2661,46 @@ function renderQueue() {
 }
 const pending = list => cust.pending(list).length;
 
+// ---------- sealed sessions ----------
+
+// A session whose profile chain is sealed keeps its directives (system prompt,
+// profile and session settings, values) inside its execution: exports, the log
+// repo, the bridge and copied config get "[sealed]" instead.
+const sealedOf = s => !!(s && eff(s).sealed);
+const pathOut = s => sealedOf(s) ? '[sealed]' : (eff(s).path || null);
+
+// ---------- concerns: issues in the harness repo ----------
+
+// The repo concerns go to: Settings, else the repo this page is served from.
+const concernRepo = () => state.meta.settings.concernRepo || bootEnv?.repo || '';
+function concernBody(s, a, who) {
+  const e = s ? eff(s) : null;
+  return [
+    `**Kind:** ${a.kind}`, '', '### What happened', a.what || '', '',
+    a.expected ? '### What should happen instead\n' + a.expected + '\n' : '',
+    a.intent ? '### Intent\n' + a.intent + '\n' : '',
+    '### Where', s ? `session \`${s.id}\` · steering \`${steerOf(s)}\`${e?.path ? ' · profile `' + pathOut(s) + '`' : ''} · model \`${cfg(s).model || '-'}\`` : 'no session', '',
+    `<sub>Filed by ${who} from WebHarness ${VERSION} · ${new Date().toISOString()}</sub>`,
+  ].filter(x => x !== '').join('\n');
+}
+async function fileConcern(s, a, who) {
+  const repo = concernRepo();
+  if (!repo) return 'No concerns repository is configured.';
+  const g = gitClient({ token: gh.token, trace, get, confirm: what => s ? approve(s, what) : ask2('File this concern?', `${what.repo}\n${what.title}\n\n${what.body}`, 'File'), scope: () => null });
+  const r = await g.issue({ repo, title: '[concern] ' + String(a.title).slice(0, 120), kind: a.kind, body: concernBody(s, a, who), approved: who === 'you' });
+  smells.add({ kind: 'concern-filed', session: s?.id, detail: r.split('\n')[0] });
+  return r;
+}
+async function concernForm() {
+  const s = cur();
+  const f = { kind: h('select', {}, ...['pattern', 'interop', 'protocol', 'policy', 'cost', 'ui', 'other'].map(k => h('option', { value: k, text: k }))), title: h('input', { placeholder: 'short title' }), what: h('textarea', { rows: '4', placeholder: 'what happened: the evidence' }), expected: h('textarea', { rows: '2' }), intent: h('input', { placeholder: 'what the change is for' }) };
+  const repo = concernRepo();
+  if (!await modal({ title: 'File a concern', body: [h('p', { class: 'note', text: repo ? `As an issue in ${repo}, labelled "concern".` : 'Set the concerns repository in Settings first.' }), ...Object.entries(f).map(([k, el]) => field(k, el))], actions: [{ text: 'Cancel', value: false, cancel: true }, { text: 'File', value: true, primary: true }] })) return;
+  if (!repo || !f.title.value.trim() || !f.what.value.trim()) return;
+  const r = await fileConcern(s, { kind: f.kind.value, title: f.title.value.trim(), what: f.what.value, expected: f.expected.value, intent: f.intent.value }, 'you').catch(e => 'Not filed: ' + e.message);
+  modal({ title: 'Concern', body: r });
+}
+
 // ---------- approvals for outward-facing writes ----------
 
 // A repository write waits for a click. The card shows what will be written,
@@ -2635,8 +2712,8 @@ function approve(s, what) {
     const head = what.what === 'commit'
       ? `${what.repo} ${what.branch}${what.newBranchFrom ? ' (new, from ' + what.newBranchFrom + ')' : ''}\n${what.message}\n\n${what.files.join('\n')}`
       : `${what.repo} ${what.head} -> ${what.base}\n${what.title}\n\n${what.body}`;
-    const ask = { commit: 'Commit to GitHub?', 'pull request': 'Open a pull request?', repository: 'Create a GitHub repository?' }[what.what];
-    card.append(h('b', { text: ask }), h('pre', { text: what.what === 'repository' ? `${what.repo} (${what.title})\n${what.body}` : head }));
+    const ask = { commit: 'Commit to GitHub?', 'pull request': 'Open a pull request?', repository: 'Create a GitHub repository?', issue: 'File this concern as an issue?' }[what.what];
+    card.append(h('b', { text: ask }), h('pre', { text: what.what === 'repository' ? `${what.repo} (${what.title})\n${what.body}` : what.what === 'issue' ? `${what.repo}\n${what.title}\n\n${what.body}` : head }));
     for (const f of what.preview || []) {
       const d = h('details', {}, h('summary', { text: f.path }), h('pre', { class: 'full', text: f.text.length > 20000 ? f.text.slice(0, 20000) + '\n…' : f.text }));
       card.append(d);
@@ -2718,8 +2795,8 @@ async function startBridge(pair, env) {
         waiting.delete(turn); w({ content, tool_calls });
         return { answered: turn };
       },
-      state: () => ({ active: state.meta.active, busy, settings: { ...set }, profiles: profiles().map(p => ({ id: p.id, name: p.name, parent: p.parent || null })), sessions: state.meta.order.map(id => { const s = state.sessions[id]; return { id, title: s.title, profile: eff(s).path || null, parent: s.parent?.id || null, messages: s.messages.length, ledger: s.ledger?.length || 0 }; }) }),
-      session: ({ id }) => exportBundle(state.sessions[id || state.meta.active]),
+      state: () => ({ active: state.meta.active, busy, settings: { ...set }, profiles: profiles().map(p => ({ id: p.id, name: p.name, parent: p.parent || null })), sessions: state.meta.order.map(id => { const s = state.sessions[id]; return { id, title: s.title, profile: pathOut(s), parent: s.parent?.id || null, messages: s.messages.length, ledger: s.ledger?.length || 0 }; }) }),
+      session: ({ id }) => { const t = state.sessions[id || state.meta.active]; if (sealedOf(t)) throw new Error('that session is sealed'); return exportBundle(t); },
       trace: ({ from = 0 }) => trace.slice(from),
       trail: () => pat.trail(),
       smells: () => smells.all(),
