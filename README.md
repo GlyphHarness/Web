@@ -2,7 +2,7 @@
 
 A client-side LLM chat harness served straight from this repo with GitHub Pages. No server, no build step: the browser holds the API key, the sessions and the tools.
 
-Status: working skeleton (v0.26.0). The OpenRouter path is written from the OpenAI-compatible conventions and has not yet been run against the live API.
+Status: working skeleton (v0.27.0). The OpenRouter path is written from the OpenAI-compatible conventions and has not yet been run against the live API.
 
 ## Run
 
@@ -228,6 +228,9 @@ Settings → Log repo names a private repository (`owner/name`) where the harnes
 - **Cold start:** "set up" checks the repo. If it is missing, it offers to create it as a private repo with your credential; if it is empty, it writes the layout: `README.md`, `.harness/manifest.json` (schema 1), `smells/`, `sessions/`, `steering/`, `proposals/`.
 - **Sync:** at every session start and on "sync", one commit with what is new: smell rows, per-session metrics (model, requests, tokens, cache hits, cost, smell count, steering fingerprint; never message text), each new steering version's texts under its fingerprint, and proposals. Batch files are named `<device>-<time>` and never edited, so devices do not conflict. Stored keys are redacted.
 - **Agents read, do not write:** model-facing repo tools treat the log repo as read-only and refuse writes to it before any token is used; in app mode, reads get a contents:read token. Changes to steering go through review proposals and you.
+- **Transcripts and artifacts** (on by default; Settings switch, per-session opt-out "keep this session out"): each session's messages go to an orphan branch `wh-sessions` as append-only chunks (`sessions/<id>/<n>.jsonl` and `meta.json`), after each turn (at most once a minute), at session start and on "sync". Outputs the messages cite go to `artifacts/os_<handle>.txt`, and images, audio and video found as `data:` URLs go to `artifacts/media/<hash>.<ext>` as binary files, with the chunk keeping an `artifact:` reference. It is a record to read, never fed back into a session's cache. "browse transcripts" lists the sessions and loads one a chunk at a time. If the browser no longer has a stored output (cleared storage, another device), `output_read` fetches it from there.
+- **Masking:** stored credentials become `[key]`; values the model may not read are replaced by their `{{id}}`; value notes never appear; a session kept out writes nothing.
+- **Size:** media over 20 MB is noted in `meta.json` and not stored. Git LFS is not used: its endpoints do not allow cross-origin requests, so a page cannot reach them without a proxy.
 - Agents that improve on it from sessions come later; this is the scaffold.
 
 ### Linux machine

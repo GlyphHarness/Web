@@ -22,7 +22,17 @@ export async function put(text) {
   await tx('readwrite', s => s.put(text, handle));
   return handle;
 }
-export const get = handle => tx('readonly', s => s.get(handle));
+// A handle missing here (cleared storage, another device) can come from elsewhere:
+// the log repo keeps cited outputs as artifacts. What is fetched is cached again.
+let fallback = null;
+export const setFallback = f => { fallback = f; };
+export async function get(handle) {
+  const v = await tx('readonly', s => s.get(handle));
+  if (v != null || !fallback || !/^os:[a-z0-9]+$/.test(handle)) return v;
+  const r = await fallback(handle).catch(() => null);
+  if (typeof r === 'string') await tx('readwrite', s => s.put(r, handle));
+  return r ?? v;
+}
 
 // Deterministic noise removal, applied to every tool result before anything else:
 // colour codes, trailing spaces, runs of blank lines, and runs of identical lines.

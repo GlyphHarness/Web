@@ -20,10 +20,10 @@ import * as vals from './values.js';
 import * as bridge from './bridge.js';
 import { render } from './widgets.js';
 import * as pat from './patterns.js';
-import { put, get, handlesIn } from './outstore.js';
+import { put, get, handlesIn, setFallback } from './outstore.js';
 import { buildRequest, measure, report, padAttachment, inherit, imitatesNote, keptLines, corePrompt, EDGE_MIN, markedOnly, edgeReplies, turnOf, KINDS } from './context.js';
 
-export const VERSION = '0.26.0';
+export const VERSION = '0.27.0';
 const MAX_STEPS = 8; // model <-> tool round trips per user turn
 const MAX_BRANCHES = 6; // concerns per fan_out
 const FOLD_MAX = 2000; // chars of a fold handed back to the source
@@ -89,6 +89,8 @@ const SHELL = `
     <label>Log repo: a private repo of yours where the harness keeps tracking over time (owner/name). Only the harness writes to it; agents can read it.</label>
     <div style="display:flex;gap:6px"><input id="logrepo" placeholder="owner/name" autocomplete="off"><button data-act="logsetup">set up</button><button data-act="logsync">sync</button></div>
     <p class="note" id="logstat"></p>
+    <label><input type="checkbox" id="logtx"> Keep session transcripts and the outputs and media they cite in the log repo (branch wh-sessions; masked; read progressively)</label>
+    <button data-act="logbrowse">browse transcripts</button>
     <label>Pinned code ref (tag, branch or commit; empty = this branch)</label>
     <input id="ref" placeholder="e.g. v0.1.0">
     <label>API base URL (empty = provider default)</label>
@@ -141,6 +143,7 @@ const SHELL = `
     <label>Profile (scope): what this session may use. Only this profile or one below it can be chosen; changing it can change the tool list, which breaks the cached prefix once.</label>
     <select id="sprofile"></select>
     <p class="note" id="sscope"></p>
+    <label><input type="checkbox" id="sprivate"> Keep this session out of the log repo (no transcript, no artifacts)</label>
     <label><input type="checkbox" id="repotools"> Repository tools (repo_read, repo_commit, repo_pr, repo_create; needs GitHub access in Settings). Turning this on or off changes the tool list, which breaks the cached prefix once.</label>
     <label><input type="checkbox" id="vmtools"> Linux machine (shell tool). Changes the tool list, which breaks the cached prefix once.</label>
     <label><input type="checkbox" id="keep"> Keep marks: the model flags lines to keep with "!" (adds one sentence to the system prompt)</label>
@@ -549,6 +552,7 @@ function activate(id) {
   renderValues();
   $('#wire').value = s.wire || 'calls';
   $('#repotools').checked = !!s.tools?.includes('repo');
+  $('#sprivate').checked = !!s.private;
   $('#vmtools').checked = !!s.tools?.includes('vm');
   $('#keep').checked = !!s.keep;
   $('#edge').value = s.edge || 'off';
@@ -721,6 +725,9 @@ function retitle(s, title) {
 
 // One user-initiated run. Branches started inside it go through turns() directly.
 async function run(s) {
+  try { return await runInner(s); } finally { transcriptSoon(); }
+}
+async function runInner(s) {
   const set = cfg(s), p = provider();
   if (!set.model) return notice(s, 'Choose a model first.');
   if (p.needsKey && !state.keys[set.provider]) return notice(s, 'Add an API key in Settings first.');
@@ -1452,6 +1459,7 @@ const actions = {
     } catch (e) { slot(stat, e.message); }
   },
   logsync() { return logSync('by hand'); },
+  logbrowse() { return browseTranscripts(); },
   async review() {
     const s = cur(), set = state.meta.settings;
     const model = set.policyModel || set.helper || set.model;
@@ -1568,6 +1576,11 @@ function bind() {
     // said once in the log, where it is cacheable from then on, rather than rewriting the first message
     if (e.target.checked && s.messages.length) { const n = ghNote(s).trim(); if (n) push(s, { role: 'user', content: n }); }
   });
+  $('#sprivate').addEventListener('change', e => { const s = cur(); s.private = e.target.checked || undefined; saveSession(s); });
+  $('#logtx').checked = state.meta.settings.logTranscripts !== false;
+  $('#logtx').addEventListener('change', e => { state.meta.settings.logTranscripts = e.target.checked; saveMeta(); });
+  // outputs the browser no longer has come back from the log repo
+  setFallback(async hd => { const l = logs(); return l && state.meta.settings.logReady ? l.artifact(hd) : null; });
   $('#vmtools').addEventListener('change', e => {
     const s = cur();
     s.tools = e.target.checked ? [...new Set([...(s.tools || []), 'vm'])] : (s.tools || []).filter(t => t !== 'vm');
@@ -1790,8 +1803,99 @@ async function logSync(why) {
   if (!l || !state.meta.settings.logReady || logBusy) return logBusy;
   const since = (() => { try { return JSON.parse(localStorage.getItem('wh:logsync') || '{}')[l.repo]?.t || 0; } catch { return 0; } })();
   slot($('#logstat'), 'syncing (' + why + ')…');
-  logBusy = l.sync(logPayload(since)).then(r => { slot($('#logstat'), `${l.repo}: ${r}`); }, e => { slot($('#logstat'), `${l.repo}: sync failed: ${e.message}`); smells.add({ kind: 'log-sync-failed', detail: e.message.slice(0, 200) }); }).finally(() => { logBusy = null; });
+  logBusy = l.sync(logPayload(since)).then(async r => { const t = await transcriptSync(l).catch(e => 'transcripts failed: ' + e.message); slot($('#logstat'), `${l.repo}: ${r}; ${t}`); }, e => { slot($('#logstat'), `${l.repo}: sync failed: ${e.message}`); smells.add({ kind: 'log-sync-failed', detail: e.message.slice(0, 200) }); }).finally(() => { logBusy = null; });
   return logBusy;
+}
+
+// ---------- transcripts and artifacts in the log repo (logrepo.js) ----------
+//
+// Each session's messages go to the log repo's wh-sessions branch as append-only
+// chunks, with the outputs and media they cite as artifacts. On by default; a
+// session can be kept out. Masked: stored credentials are redacted, values hidden
+// from the model are replaced by their {{id}}, media leaves as a file reference.
+const MEDIA_MAX = 20 * 1024 * 1024; // larger media is noted, not stored (Git LFS is not reachable from a page)
+const DATA_URL = /data:((?:image|audio|video)\/[\w.+-]+);base64,([A-Za-z0-9+/=]+)/g;
+const EXT = t => ({ 'image/png': 'png', 'image/jpeg': 'jpg', 'image/gif': 'gif', 'image/webp': 'webp', 'image/svg+xml': 'svg', 'audio/mpeg': 'mp3', 'audio/wav': 'wav', 'audio/ogg': 'ogg', 'video/mp4': 'mp4', 'video/webm': 'webm' }[t] || t.split('/')[1].replace(/[^\w]/g, '').slice(0, 8) || 'bin');
+const shash = t => { let a = 5381, b = 52711; for (let i = 0; i < t.length; i += 7) { const c = t.charCodeAt(i); a = (a * 33 ^ c) >>> 0; b = (b * 31 + c) >>> 0; } return (a.toString(36) + b.toString(36) + t.length.toString(36)).slice(0, 14); };
+
+function maskFor(s) {
+  // values the model may not read: their current text becomes {{id}} wherever it appears
+  const masks = valuesFor(s).map(v => [v, vals.current(v)]).filter(([, r]) => (r.hidden || r.expose !== 'value') && String(typeof r.value === 'string' ? r.value : JSON.stringify(r.value)).length >= 3)
+    .map(([v, r]) => [typeof r.value === 'string' ? r.value : JSON.stringify(r.value), `{{${v.id}}}`]);
+  return t => masks.reduce((x, [a, b]) => x.split(a).join(b), t);
+}
+
+async function transcriptItems(l) {
+  let st = {};
+  try { st = JSON.parse(localStorage.getItem('wh:logsync') || '{}')[l.repo] || {}; } catch {}
+  const sent = st.sent || {};
+  const items = [], artifacts = [];
+  for (const s of state.meta.order.map(id => state.sessions[id]).filter(Boolean)) {
+    if (s.private) continue;
+    const skipped = [];
+    const from = sent[s.id] || 0;
+    const mask = maskFor(s);
+    const msgs = [];
+    for (let i = from; i < s.messages.length; i++) {
+      const m = s.messages[i];
+      let text = JSON.stringify({ i, role: m.role, content: m.content, ...(m.tool_calls ? { tool_calls: m.tool_calls } : {}), ...(m.tool_call_id ? { tool_call_id: m.tool_call_id } : {}),
+        x: m.x ? { model: m.x.model, usage: m.x.usage, ms: m.x.ms, tool: m.x.tool, ok: m.x.ok, policy: m.x.policy?.id, values: m.x.values, wire: m.x.wire } : undefined });
+      // media out of the line, into files
+      text = text.replace(DATA_URL, (all, type, b64) => {
+        const name = `media/${shash(b64)}.${EXT(type)}`;
+        if (b64.length * 3 / 4 > MEDIA_MAX) { skipped.push({ name, bytes: Math.floor(b64.length * 3 / 4) }); return `artifact:${name} (too large, not stored)`; }
+        if (!artifacts.some(a => a.handle === name)) artifacts.push({ handle: name, base64: b64 });
+        return `artifact:${name}`;
+      });
+      text = mask(text);
+      msgs.push(JSON.parse(text));
+      for (const hd of handlesIn(text)) if (!artifacts.some(a => a.handle === hd)) { const t = await get(hd).catch(() => null); if (typeof t === 'string' && t.length < 500000) artifacts.push({ handle: hd, text: mask(t) }); }
+    }
+    const meta = { id: s.id, title: s.title, created: s.created, profile: eff(s).path || null, parent: s.parent?.id || null, model: cfg(s).model, messages: s.messages.length, updated: Date.now(), ...(skipped.length ? { skippedMedia: skipped } : {}) };
+    if (msgs.length || from === 0) items.push({ session: s.id, meta, messages: msgs, upto: s.messages.length });
+  }
+  return { items, artifacts };
+}
+async function transcriptSync(l) {
+  if (state.meta.settings.logTranscripts === false) return 'transcripts off';
+  const { items, artifacts } = await transcriptItems(l);
+  const r = await l.transcripts(items, artifacts);
+  let all = {}; try { all = JSON.parse(localStorage.getItem('wh:logsync') || '{}'); } catch {}
+  const cur = all[l.repo] ||= {}; cur.sent ||= {};
+  for (const it of items) cur.sent[it.session] = it.upto;
+  localStorage.setItem('wh:logsync', JSON.stringify(all));
+  return r;
+}
+// after a turn: at most one transcript sync a minute
+let transcriptTimer = null, transcriptLast = 0;
+function transcriptSoon() {
+  if (!state.meta.settings.logReady || state.meta.settings.logTranscripts === false || transcriptTimer) return;
+  transcriptTimer = setTimeout(() => { transcriptTimer = null; transcriptLast = Date.now(); logSync('turn'); }, Math.max(0, 60e3 - (Date.now() - transcriptLast)));
+}
+
+// Read a session from the log repo, a chunk at a time.
+async function browseTranscripts() {
+  const l = logs();
+  if (!l || !state.meta.settings.logReady) return modal({ title: 'Transcripts', body: 'Set up a log repo first (Settings).' });
+  const list = h('div', { class: 'tlist' }, h('p', { class: 'note', text: 'loading…' }));
+  const view = h('div', { class: 'tview' });
+  const more = btn('load more', { class: 'tmore', hidden: '' });
+  let open = null;
+  more.onclick = async () => {
+    if (!open || !open.left.length) return;
+    const name = open.left.shift();
+    more.disabled = true;
+    for (const m of await l.chunk(open.id, name)) view.append(h('div', { class: 'trow', 'data-role': m.role }, h('span', { class: 'role', text: `${m.i} ${m.role}${m.x?.tool ? ' ' + m.x.tool : ''}` }), h('pre', { text: typeof m.content === 'string' ? m.content : JSON.stringify(m.content ?? m.tool_calls, null, 1) })));
+    more.disabled = false; more.hidden = !open.left.length; more.textContent = `load more (${open.left.length} chunks left)`;
+  };
+  const ids = await l.sessions().catch(e => { list.replaceChildren(h('p', { class: 'note bad', text: e.message })); return []; });
+  list.replaceChildren(...(ids.length ? [] : [h('p', { class: 'note', text: 'No transcripts yet.' })]), ...ids.map(id => {
+    const b = btn(id, { class: 'trec' });
+    l.meta(id).then(m => { b.textContent = `${m.title} · ${m.messages} messages${m.profile ? ' · ' + m.profile : ''}`; }).catch(() => {});
+    b.onclick = async () => { view.replaceChildren(); open = { id, left: await l.chunks(id) }; more.hidden = false; more.click(); };
+    return b;
+  }));
+  return modal({ title: `Transcripts in ${l.repo} (${'wh-sessions'})`, body: [list, view, more], actions: [{ text: 'Close', value: true, primary: true }] });
 }
 
 // ---------- approvals for outward-facing writes ----------

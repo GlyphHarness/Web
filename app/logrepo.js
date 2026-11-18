@@ -85,9 +85,51 @@ export function logRepo({ git, repo, redact = s => s }) {
     for (const x of newSteer) changes.push({ path: `steering/${x.fp}.json`, content: redact(JSON.stringify(x, null, 2)) + '\n' });
     if (!changes.length) return 'nothing new';
     const out = await git.commit({ repo, branch: await defaultBranch(), message: `sync ${stamp}: ${newSmells.length} smells, ${sessions.length} sessions, ${newSteer.length} steering, ${newProps.length} proposals`, changes });
-    save({ ...state(), [repo]: { t, steering: [...sent, ...newSteer.map(x => x.fp)] } });
+    save({ ...state(), [repo]: { ...(state()[repo] || {}), t, steering: [...sent, ...newSteer.map(x => x.fp)] } }); // keep the transcript cursors
     return out.split('\n')[0];
   }
 
-  return { repo, status, create, init, sync };
+  // ---- transcripts and artifacts, on their own branch ----
+  // wh-sessions holds each session's conversation as append-only chunks
+  // (sessions/<id>/<n>.jsonl, plus meta.json) and the outputs those messages cite
+  // (artifacts/<handle>.txt), so they can be read progressively and fetched when
+  // the browser no longer has them. It is a record to read, never fed back into
+  // a session's cache. Created as an orphan branch: no history shared with main.
+  async function ensureBranch() {
+    try { await git.call('GET', `/repos/${repo}/git/ref/heads/${TRANSCRIPT_BRANCH}`); return; }
+    catch (e) { if (e.status !== 404) throw e; }
+    const tree = await git.call('POST', `/repos/${repo}/git/trees`, { tree: [{ path: 'README.md', mode: '100644', type: 'blob', content: `# ${TRANSCRIPT_BRANCH}\n\nSession transcripts (sessions/<id>/<n>.jsonl, append-only chunks) and cited outputs (artifacts/<handle>.txt), written by the WebHarness frontend. Credentials are redacted and values hidden from the model are masked as {{id}}.\n` }] });
+    const commit = await git.call('POST', `/repos/${repo}/git/commits`, { message: 'Open the transcript branch', tree: tree.sha, parents: [] });
+    await git.call('POST', `/repos/${repo}/git/refs`, { ref: 'refs/heads/' + TRANSCRIPT_BRANCH, sha: commit.sha });
+  }
+  // items: [{session, meta, messages: [...], from}] ; artifacts: [{handle, text}]
+  async function transcripts(items, artifacts) {
+    const st = state(), cur = st[repo] || {}, chunksOf = { ...(cur.chunks || {}) }, sentArt = new Set(cur.artifacts || []);
+    const changes = [];
+    for (const it of items) {
+      changes.push({ path: `sessions/${it.session}/meta.json`, content: redact(JSON.stringify(it.meta, null, 1)) + '\n' });
+      if (!it.messages.length) continue;
+      const n = (chunksOf[it.session] || 0) + 1;
+      changes.push({ path: `sessions/${it.session}/${String(n).padStart(5, '0')}.jsonl`, content: jsonl(it.messages) });
+      chunksOf[it.session] = n;
+    }
+    const newArt = artifacts.filter(a => !sentArt.has(a.handle));
+    for (const a of newArt) changes.push(a.base64 != null ? { path: `artifacts/${a.handle}`, base64: a.base64 } : { path: `artifacts/${a.handle.replace(':', '_')}.txt`, content: redact(a.text) });
+    if (!changes.length) return 'no new messages';
+    await ensureBranch();
+    const out = await git.commit({ repo, branch: TRANSCRIPT_BRANCH, message: `transcripts: ${items.filter(i => i.messages.length).length} sessions, ${items.reduce((n, i) => n + i.messages.length, 0)} messages, ${newArt.length} artifacts`, changes });
+    save({ ...state(), [repo]: { ...(state()[repo] || {}), chunks: chunksOf, artifacts: [...sentArt, ...newArt.map(a => a.handle)].slice(-5000) } });
+    return out.split('\n')[0];
+  }
+  const readAt = path => git.read({ repo, op: 'file', path, ref: TRANSCRIPT_BRANCH });
+  const listAt = async path => { try { return (await git.read({ repo, op: 'file', path, ref: TRANSCRIPT_BRANCH })).split('\n').filter(Boolean); } catch (e) { if (/404/.test(e.message)) return []; throw e; } };
+  return {
+    repo, status, create, init, sync, transcripts,
+    sessions: async () => (await listAt('sessions')).map(p => p.replace(/^sessions\/|\/$/g, '')).filter(Boolean),
+    meta: async id => JSON.parse(await readAt(`sessions/${id}/meta.json`)),
+    chunks: async id => (await listAt(`sessions/${id}`)).map(p => p.split('/').pop()).filter(n => /\.jsonl$/.test(n)).sort(),
+    chunk: async (id, name) => (await readAt(`sessions/${id}/${name}`)).trim().split('\n').filter(Boolean).map(l => JSON.parse(l)),
+    artifact: handle => readAt(`artifacts/${handle.replace(':', '_')}.txt`),
+  };
 }
+export const TRANSCRIPT_BRANCH = 'wh-sessions';

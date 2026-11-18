@@ -15,6 +15,7 @@ const TOKEN = 'github_pat_TESTTOKEN_' + 'x'.repeat(20);
 const sha = () => randomBytes(20).toString('hex');
 const repos = { 'o/r': { main: { sha: sha(), files: { 'a.txt': 'hello world\n', 'src/x.js': 'x' } } } };
 const branches = repos['o/r'];
+const trees = {}, commits = {};
 const seen = []; // [method, path, body]
 const b64 = s => Buffer.from(s).toString('base64');
 const etagOf = v => '"' + createHash('sha1').update(JSON.stringify(v)).digest('hex') + '"';
@@ -53,6 +54,9 @@ function api(method, path, q, body, headers) {
   if (path === '/user') return [200, { login: 'tester' }];
   if (path === '/repos/o/r') return [200, { default_branch: 'main' }];
   if ((m = /^\/repos\/o\/r\/git\/ref\/heads\/(.+)$/.exec(path))) { const b = B[decodeURIComponent(m[1])]; return b ? [200, { object: { sha: b.sha } }] : [404, { message: 'Not Found' }]; }
+  if (path === '/repos/o/r/git/trees' && method === 'POST') { const t = sha(); trees[t] = Object.fromEntries(body.tree.map(e => [e.path, e.content])); return [201, { sha: t }]; }
+  if (path === '/repos/o/r/git/commits' && method === 'POST') { const c = sha(); commits[c] = { files: { ...trees[body.tree] } }; return [201, { sha: c }]; }
+  if (path === '/repos/o/r/git/refs' && method === 'POST' && commits[body.sha]) { B[body.ref.replace('refs/heads/', '')] = { sha: body.sha, files: { ...commits[body.sha].files } }; return [201, {}]; }
   if (path === '/repos/o/r/git/refs' && method === 'POST') {
     const from = Object.values(B).find(b => b.sha === body.sha);
     B[body.ref.replace('refs/heads/', '')] = { sha: body.sha, files: { ...from.files } };
@@ -63,14 +67,20 @@ function api(method, path, q, body, headers) {
     const br = B[q.get('ref') || body?.branch || 'main'];
     if (!br) return [404, { message: 'No commit found for the ref' }];
     if (method === 'PUT') { br.files[p] = Buffer.from(body.content, 'base64').toString(); br.sha = sha(); return [201, { content: { path: p } }]; }
-    if (br.files[p] != null) return [200, { type: 'file', path: p, sha: 'blob', encoding: 'base64', content: b64(br.files[p]) }];
-    const list = Object.keys(br.files).filter(f => f.startsWith(p + '/')).map(f => ({ name: f.slice(p.length + 1), path: f, type: 'file' }));
+    if (br.files[p] != null) return [200, { type: 'file', path: p, sha: 'blob', encoding: 'base64', content: Buffer.isBuffer(br.files[p]) ? br.files[p].toString('base64') : b64(br.files[p]) }];
+    // like GitHub: direct children only, folders as type dir
+    const seenNames = new Set(), list = [];
+    for (const f of Object.keys(br.files).filter(f => f.startsWith(p + '/'))) {
+      const rest = f.slice(p.length + 1), name = rest.split('/')[0], dir = rest.includes('/');
+      if (seenNames.has(name)) continue; seenNames.add(name);
+      list.push({ name, path: p + '/' + name, type: dir ? 'dir' : 'file' });
+    }
     return list.length ? [200, list, { etag: etagOf(list) }] : [404, { message: 'Not Found' }];
   }
   if (path === '/graphql') {
     const i = body.variables.i, br = B[i.branch.branchName];
     if (br.sha !== i.expectedHeadOid) return [200, { errors: [{ message: 'Expected branch to point to ' + i.expectedHeadOid }] }];
-    for (const a of i.fileChanges.additions) br.files[a.path] = Buffer.from(a.contents, 'base64').toString();
+    for (const a of i.fileChanges.additions) { const buf = Buffer.from(a.contents, 'base64'); br.files[a.path] = /\.(png|jpg|gif|webp|mp3|wav|ogg|mp4|webm)$/.test(a.path) ? buf : buf.toString(); }
     for (const d of i.fileChanges.deletions) delete br.files[d.path];
     br.sha = sha();
     return [200, { data: { createCommitOnBranch: { commit: { oid: br.sha, url: 'https://github.com/o/r/commit/' + br.sha } } } }];
@@ -237,6 +247,46 @@ const tools2 = await page.evaluate(async () => {
   return { read, write };
 });
 check('log repo: agents can read it but not write to it', /^# o\/logs/.test(tools2.read) && /read-only here/.test(tools2.write) && !repos['o/logs'].main.files['evil.txt'], JSON.stringify(tools2));
+
+// ---- transcripts and artifacts on the wh-sessions branch ----
+await page.click('[data-act=new]');
+await say('my token is ' + TOKEN + ' please remember'); await idle();
+await say('show an image please'); await idle();
+await say('make it big'); await idle();
+const bigOut = await thread().locator('.msg[data-role=tool] > details:not(.policy) pre').last().textContent();
+const bigHandle = /os:[a-z0-9]+/.exec(bigOut)?.[0];
+await page.evaluate(() => document.querySelector('[data-act=logsync]').click());
+await until(async () => !/syncing/.test(await slotOf('#logstat')) && /transcripts|messages/.test(await slotOf('#logstat')), 20000);
+const T = repos['o/logs']['wh-sessions']?.files || {};
+const sid = await page.evaluate(() => JSON.parse(localStorage['wh:meta']).active);
+const chunkPath = Object.keys(T).find(f => f.startsWith(`sessions/${sid}/`) && f.endsWith('.jsonl'));
+const chunkText = chunkPath ? T[chunkPath] : '';
+const allChunks = Object.keys(T).filter(f => f.startsWith(`sessions/${sid}/`) && f.endsWith('.jsonl')).sort().map(f => T[f]).join('');
+check('transcripts: an orphan branch holds the session as chunks, with meta', !!repos['o/logs']['wh-sessions'] && !!T[`sessions/${sid}/meta.json`] && !!chunkPath && !('README.md' in repos['o/logs'].main.files && T['.harness/manifest.json']), Object.keys(T).slice(0, 8).join(' '));
+check('transcripts: credentials are masked', allChunks.includes('[key]') && !allChunks.includes(TOKEN));
+const media = Object.keys(T).find(f => /^artifacts\/media\/\w+\.png$/.test(f));
+check('transcripts: media leaves the line as a file (binary), the chunk keeps a reference', !!media && Buffer.isBuffer(T[media]) && T[media].slice(1, 4).toString() === 'PNG' && allChunks.includes('artifact:' + media.replace('artifacts/', '')) && !allChunks.includes('iVBORw0KGgo'));
+check('transcripts: cited outputs are stored as artifacts', !!bigHandle && !!T[`artifacts/${bigHandle.replace(':', '_')}.txt`]);
+await page.evaluate(() => new Promise(ok => { const r = indexedDB.open('webharness', 1); r.onsuccess = () => { const t = r.result.transaction('out', 'readwrite'); t.objectStore('out').clear(); t.oncomplete = ok; }; }));
+await say('read ' + bigHandle); await idle();
+check('artifacts: an output the browser lost comes back from the log repo', /line 399/.test(await thread().locator('.msg[data-role=tool] > details:not(.policy) pre').last().textContent()));
+const before2 = Object.keys(repos['o/logs']['wh-sessions'].files).filter(f => f.startsWith(`sessions/${sid}/`)).length;
+await page.evaluate(() => document.querySelector('[data-act=logsync]').click());
+await until(async () => !/syncing/.test(await slotOf('#logstat')), 20000);
+const after2 = Object.keys(repos['o/logs']['wh-sessions'].files).filter(f => f.startsWith(`sessions/${sid}/`));
+check('transcripts: later syncs (after a turn, or by hand) append chunks; earlier ones untouched', after2.filter(f => f.endsWith('.jsonl')).length >= 2 && repos['o/logs']['wh-sessions'].files[chunkPath] === chunkText, after2.join(' '));
+await page.evaluate(() => document.querySelector('[data-act=logbrowse]').click());
+await page.waitForSelector('.modal .trec');
+await until(async () => /messages/.test(await page.evaluate(id => [...document.querySelectorAll('.modal .trec')].map(b => b.textContent).join('|'), sid)), 10000);
+await page.evaluate(id => [...document.querySelectorAll('.modal .trec')].find(b => /my token|messages/.test(b.textContent) && b.textContent.length)?.click(), sid);
+await until(async () => await page.locator('.modal .trow').count() > 0, 10000);
+check('transcripts: the viewer reads a session a chunk at a time', await page.locator('.modal .trow').count() > 0 && /load more/.test(await page.textContent('.modal .tmore')));
+await page.click('.modal .primary');
+await page.evaluate(() => { const c = document.querySelector('#sprivate'); c.checked = true; c.dispatchEvent(new Event('change')); });
+await say('a private thought'); await idle();
+await page.evaluate(() => document.querySelector('[data-act=logsync]').click());
+await until(async () => !/syncing/.test(await slotOf('#logstat')), 20000);
+check('transcripts: a session kept out of the log repo is not written', !Object.values(repos['o/logs']['wh-sessions'].files).some(t => typeof t === 'string' && t.includes('a private thought')));
 
 // ---- GitHub App mode: no pasted token, tokens minted per repository and permission ----
 await page.evaluate(pem => { localStorage.setItem('wh:keys', JSON.stringify({ ghapp: { appId: '123', pem } })); }, PEM);

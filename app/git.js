@@ -112,6 +112,7 @@ export function client(env) {
   async function resolve(repo, branch, ch) {
     if (!ch?.path) throw new Error('every change needs a path');
     if (ch.delete) return { path: ch.path, delete: true };
+    if (typeof ch.base64 === 'string') return { path: ch.path, b64: ch.base64, binary: Math.floor(ch.base64.length * 3 / 4) }; // media and other binary files
     if (typeof ch.content === 'string') return { path: ch.path, text: ch.content };
     if (typeof ch.from === 'string') {
       const t = await env.get(ch.from);
@@ -141,8 +142,8 @@ export function client(env) {
     for (const ch of a.changes) files.push(await resolve(repo, readAt, ch));
     const summary = {
       what: 'commit', repo, branch: a.branch, newBranchFrom: head ? null : base, message: a.message,
-      files: files.map(f => f.delete ? `delete ${f.path}` : `${f.edited ? 'edit' : 'write'} ${f.path} (${f.text.length} chars${f.edited ? ', ' + f.edited + ' edits' : ''})`),
-      preview: files.filter(f => !f.delete).map(f => ({ path: f.path, text: f.text })),
+      files: files.map(f => f.delete ? `delete ${f.path}` : f.b64 ? `write ${f.path} (binary, ${f.binary} bytes)` : `${f.edited ? 'edit' : 'write'} ${f.path} (${f.text.length} chars${f.edited ? ', ' + f.edited + ' edits' : ''})`),
+      preview: files.filter(f => !f.delete && !f.b64).map(f => ({ path: f.path, text: f.text })),
     };
     if (!(await env.confirm(summary))) return 'Not committed: the user declined.';
     if (!head) {
@@ -158,7 +159,7 @@ export function client(env) {
         branch: { repositoryNameWithOwner: repo, branchName: a.branch },
         message: { headline, body: rest.join('\n').trim() || undefined },
         expectedHeadOid: head,
-        fileChanges: { additions: files.filter(f => !f.delete).map(f => ({ path: f.path, contents: b64.enc(f.text) })), deletions: files.filter(f => f.delete).map(f => ({ path: f.path })) },
+        fileChanges: { additions: files.filter(f => !f.delete).map(f => ({ path: f.path, contents: f.b64 ?? b64.enc(f.text) })), deletions: files.filter(f => f.delete).map(f => ({ path: f.path })) },
       } },
     });
     const c = j.data.createCommitOnBranch.commit;

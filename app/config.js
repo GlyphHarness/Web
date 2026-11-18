@@ -17,6 +17,7 @@ export const FIELDS = {
   pace: { check: v => ['run', 'requests', 'tools', 'both'].includes(v) },
   base: { check: v => v && typeof v === 'object' && Object.values(v).every(x => S(x) && (x === '' || /^https?:\/\//.test(x))), hint: '{provider: url}' },
   machine: { check: v => typeof v === 'boolean', hint: 'true/false; reloads the page' },
+  logTranscripts: { check: v => typeof v === 'boolean' },
 };
 const SECRET = /token|key|pem|secret|passw|credential|auth|bearer/i;
 const POLICY_FIELDS = ['name', 'tool', 'pattern', 'flags', 'rule', 'on'];

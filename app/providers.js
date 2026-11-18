@@ -171,6 +171,9 @@ const mock = {
       yield { choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_' + Date.now(), type: 'function', function: { name: 'run_js', arguments: JSON.stringify({ code: "return Array.from({length:400},(_,i)=>'line '+i).join('\\n')" }) } }] } }] };
     } else if (/form/i.test(last.content || '')) {
       yield { choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_' + Date.now(), type: 'function', function: { name: 'show_widget', arguments: JSON.stringify({ slot: 'demo', kind: 'form', title: 'Demo form', data: { fields: [{ name: 'name', label: 'Name' }, { name: 'n', label: 'Count', type: 'number', value: 3 }], submit: 'Send' } }) } }] } }] };
+    } else if (/show an image/i.test(last.content || '')) {
+      const png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+      yield { choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_' + Date.now(), type: 'function', function: { name: 'show_widget', arguments: JSON.stringify({ slot: 'img', kind: 'image', title: 'Dot', data: { url: 'data:image/png;base64,' + png } }) } }] } }] };
     } else if (/chart/i.test(last.content || '')) {
       yield { choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_' + Date.now(), type: 'function', function: { name: 'show_widget', arguments: JSON.stringify({ slot: 'demo', kind: 'chart', title: 'Demo chart', data: { type: 'bar', labels: ['a', 'b', 'c', 'd'], values: [3, 7, 4, 9] } }) } }] } }] };
     } else if (/widget/i.test(last.content || '')) {

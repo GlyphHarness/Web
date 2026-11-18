@@ -224,3 +224,12 @@ button.primary { border-color: var(--accent); background: var(--accent); color: 
 .hist summary { font-size: 11px; color: var(--dim); cursor: pointer; }
 .histrow { display: flex; gap: 6px; align-items: baseline; flex-wrap: wrap; font-size: 11px; padding: 2px 0; border-top: 1px dashed var(--line); }
 .histrow button { font-size: 10px; padding: 0 6px; margin-left: auto; }
+.tlist { display: flex; flex-direction: column; gap: 4px; max-height: 25vh; overflow: auto; margin-bottom: 8px; }
+.tlist .trec { text-align: left; font-size: 12px; }
+.tview { display: flex; flex-direction: column; gap: 4px; max-height: 45vh; overflow: auto; }
+.trow { border-left: 3px solid var(--line); padding: 2px 8px; }
+.trow[data-role=user] { border-color: var(--accent); }
+.trow[data-role=tool] { border-color: var(--ok); }
+.trow .role { font: 10px ui-monospace, monospace; color: var(--dim); }
+.trow pre { max-height: 160px; overflow: auto; }
+.modal:has(.tview) { width: min(860px, 100%); }
