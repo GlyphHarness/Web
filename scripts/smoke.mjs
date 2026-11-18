@@ -342,6 +342,20 @@ check('profiles: capabilities narrow the tool list (no run_js; machine stays den
 check('profiles: a tool outside the scope is refused even when the model names it', /^Not run: run_js is not available in this session's scope \(org \/ research\)/.test(await visible().locator('.msg[data-role=tool] > details:not(.policy) pre').last().textContent()));
 check('profiles: the refusal is a smell with the scope', await page.evaluate(() => JSON.parse(localStorage['wh:smells']).some(r => r.kind === 'scope-refused' && r.profile === 'org / research')));
 check('profiles: the session can only move within its scope', await page.evaluate(() => [...document.querySelectorAll('#sprofile option')].map(o => o.textContent).join()) === 'org / research');
+// the per-session scope panel: value, source level, lock, set at a level
+const scopeRow = k => page.evaluate(k => { const tr = document.querySelector(`#scope [data-attr="${k}"]`), ed = document.querySelector(`#scope tr.scope-edit[data-row="${k}"]`); return { value: tr.children[1].textContent, from: tr.querySelector('.from').textContent, lock: tr.querySelector('.lock')?.title || '', disabled: [...ed.querySelectorAll('[data-sl] option')].filter(o => o.disabled).map(o => o.textContent) }; }, k);
+const mrow = await scopeRow('model');
+check('scope: each attribute shows its value, the level it comes from and its lock', mrow.value === 'mock-pro' && mrow.from === 'org' && /org/.test(mrow.lock) && mrow.disabled.join() === 'this session,research', JSON.stringify(mrow));
+await page.evaluate(() => { const tr = document.querySelector('#scope tr.scope-edit[data-row="helper"]'); tr.querySelector('[data-sv]').value = 'mock-pro'; tr.querySelector('[data-act="scope-set"]').click(); });
+const hrow = await scopeRow('helper');
+check('scope: a value set at the session level applies to this session only', hrow.value === 'mock-pro' && hrow.from === 'this session' && await page.evaluate(() => JSON.parse(localStorage['wh:meta']).settings.helper) === 'mock-free:free', JSON.stringify(hrow));
+await page.evaluate(() => { const tr = document.querySelector('#scope tr.scope-edit[data-row="ask"]'); tr.querySelector('[data-sv]').value = '0'; tr.querySelector('[data-act="scope-set"]').click(); });
+const arow = await scopeRow('ask');
+await say('hello scoped');
+const toolsNow = (JSON.parse(await page.textContent('#req')).tools || []).map(t => t.function.name);
+check('scope: a session can narrow its own capabilities', arow.value === 'no' && arow.from === 'this session' && !toolsNow.includes('ask') && !toolsNow.includes('value_set'), toolsNow.join(','));
+await page.evaluate(() => { const tr = document.querySelector('#scope tr.scope-edit[data-row="ask"]'); tr.querySelector('[data-sv]').value = ''; tr.querySelector('[data-act="scope-set"]').click(); });
+
 await page.fill('#input', 'a concern for a branch');
 await page.click('[data-act=branch]');
 await page.waitForSelector('#app:not([data-busy])', { state: 'attached', timeout: 20000 });

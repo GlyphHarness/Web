@@ -54,8 +54,17 @@ export function effective(profiles, id, global, over = {}) {
     for (const pol of p.policies || []) if (!policies.some(x => x.name === pol.name)) policies.push({ ...pol, from: p.name });
   }
   for (const [k, v] of Object.entries(over || {})) if (SETTING_KEYS.includes(k) && v != null && v !== '' && !locked.has(k)) { settings[k] = v; from[k] = 'this session'; }
+  // a session may narrow its own capabilities, never widen them
+  const capFrom = {};
+  for (const p of c) for (const k of CAP_KEYS) if (p.caps?.[k] != null) capFrom[k] = p.name;
+  for (const [k, v] of Object.entries(over?.caps || {})) {
+    if (!CAP_KEYS.includes(k) || v == null) continue;
+    const before = caps[k];
+    caps[k] = k === 'repo' ? (REPO_RANK[v] < REPO_RANK[caps.repo] ? v : caps.repo) : caps[k] && !!v;
+    if (caps[k] !== before) capFrom[k] = 'this session';
+  }
   const repoAllowed = repo => repoLists.every(r => r.list.some(pat => globMatch(pat, repo)));
-  return { chain: c, settings, from, locked, caps, repoLists, repoAllowed, policies, path: c.map(p => p.name).join(' / ') };
+  return { chain: c, settings, from, locked, caps, capFrom, repoLists, repoAllowed, policies, path: c.map(p => p.name).join(' / ') };
 }
 
 // Tools a session may have, from its tool groups and the resolved capabilities.

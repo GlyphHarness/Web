@@ -2,7 +2,7 @@
 
 A client-side LLM chat harness served straight from this repo with GitHub Pages. No server, no build step: the browser holds the API key, the sessions and the tools.
 
-Status: working skeleton (v0.27.0). The OpenRouter path is written from the OpenAI-compatible conventions and has not yet been run against the live API.
+Status: working skeleton (v0.28.0). The OpenRouter path is written from the OpenAI-compatible conventions and has not yet been run against the live API.
 
 ## Run
 
@@ -186,6 +186,7 @@ Sessions can belong to a profile (Inspector → Profiles). Access is decided by 
 - **Policies** add up: Settings policies first, then each profile's; a lower profile cannot replace one above it.
 - **Hierarchy of sessions:** branches and folded sessions inherit their source's profile, and a session can only be moved to its profile or one below it. "New sessions use" picks the profile for new sessions.
 - **In the sidebar** sessions are grouped under their scope path (`org / research`), with a coloured edge and badge.
+- **The inspector is per session.** Its first section, "This session's scope", lists every setting and capability as this session resolves it, with the level it comes from (this session, a named profile, or defaults) and a lock mark where one applies. "edit" opens a row to set the value at a chosen level from this session up; levels below a lock are disabled. Capabilities can be narrowed for this one session (never widened). The former Settings section is "Defaults and connections": the bottom of every chain, plus keys and connections.
 - Profiles are part of paste config (merged by name, `parent` by name) and of steering fingerprints and log-repo session rows.
 
 ### Scoped values

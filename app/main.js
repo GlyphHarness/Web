@@ -23,7 +23,7 @@ import * as pat from './patterns.js';
 import { put, get, handlesIn, setFallback } from './outstore.js';
 import { buildRequest, measure, report, padAttachment, inherit, imitatesNote, keptLines, corePrompt, EDGE_MIN, markedOnly, edgeReplies, turnOf, KINDS } from './context.js';
 
-export const VERSION = '0.27.0';
+export const VERSION = '0.28.0';
 const MAX_STEPS = 8; // model <-> tool round trips per user turn
 const MAX_BRANCHES = 6; // concerns per fan_out
 const FOLD_MAX = 2000; // chars of a fold handed back to the source
@@ -61,7 +61,7 @@ const SHELL = `
   </header>
   <div id="threads"></div>
   <form id="composer">
-    <textarea id="input" rows="3" placeholder="Message (Enter makes a new line; only "send" submits)"></textarea>
+    <textarea id="input" rows="3" placeholder="Message. Enter adds a line; the send button sends."></textarea>
     <button id="send">send</button>
     <button type="button" data-act="stop">stop</button>
   </form>
@@ -71,7 +71,11 @@ const SHELL = `
   <div id="stage"></div>
   <div id="machine"><p class="note" id="vmstat">The machine is off. Switch it on in Settings.</p><div id="vmterm"></div></div>
   <div id="insp">
-  <details open><summary>Settings</summary>
+  <details open><summary>This session's scope <span class="count" id="scopecount"></span></summary>
+    <p class="note">Every setting and capability as this session resolves it, and the level it comes from: this session, a profile in its chain, or the defaults. Set a value at any level from this session up; a lock stops the levels below it. Capabilities can be narrowed for this session only, never widened.</p>
+    <table class="scope" id="scope"></table>
+  </details>
+  <details open><summary>Defaults and connections</summary>
     <div class="cfgbar"><button data-act="cfgpaste">paste config</button><button data-act="cfgcopy">copy config</button></div>
     <label>API key (kept in this browser only, never exported)</label>
     <input id="key" type="password" autocomplete="off">
@@ -394,7 +398,7 @@ function showSettings() {
   $('#provider').value = set.provider; $('#model').value = set.model || ''; $('#helper').value = set.helper || '';
   $('#polmodel').value = set.policyModel || ''; $('#ghlabel').value = set.ghlabel || ''; $('#logrepo').value = set.logRepo || '';
   $('#budget').value = set.branchBudget || BRANCH_BUDGET; $('#pace').value = pace();
-  showBase(); renderPolicies(); renderProfiles(); redrawSessions(); showPrice();
+  showBase(); renderPolicies(); renderProfiles(); redrawSessions(); showPrice(); renderScope();
 }
 async function pasteConfig() {
   const ta = h('textarea', { rows: '10', class: 'mono', spellcheck: 'false', placeholder: '{"settings": {"model": "...", "helper": "..."}, "policies": [{"name": "...", "rule": "..."}]}' });
@@ -471,6 +475,56 @@ function policyList() {
   if (!Array.isArray(set.policyList)) { set.policyList = typeof set.policies === 'string' ? policy.fromText(set.policies) : structuredClone(policy.DEFAULT_LIST); delete set.policies; saveMeta(); }
   return set.policyList;
 }
+// ---------- this session's scope, attribute by attribute ----------
+
+const SCOPE_ROWS = [...prof.SETTING_KEYS.map(k => ({ k, kind: 'set' })), ...prof.CAP_KEYS.map(k => ({ k, kind: 'cap' }))];
+const SCOPE_LABEL = { model: 'model', helper: 'helper model', policyModel: 'policy model', pace: 'pace', branchBudget: 'branch budget', run_js: 'run code', fanout: 'fan out', ask: 'ask and values', vm: 'machine', repo: 'repositories' };
+// levels from this session up: session, each profile leaf to root, defaults
+function scopeLevels(s) {
+  const ch = eff(s).chain;
+  return [{ id: 'session', name: 'this session' }, ...ch.slice().reverse().map(p => ({ id: 'p:' + p.id, name: p.name, p })), { id: 'default', name: 'defaults' }];
+}
+function renderScope() {
+  const s = cur(), box = $('#scope');
+  if (!s || !box) return;
+  const e = eff(s), levels = scopeLevels(s);
+  const opt = (v, t, sel, dis) => Object.assign(h('option', { value: v, text: t }), { selected: !!sel, disabled: !!dis });
+  const show = (row, v) => row.kind === 'cap' ? (v === true ? 'yes' : v === false ? 'no' : v) : (v === '' || v == null ? '—' : String(v));
+  box.replaceChildren(h('tr', {}, ...['', 'value', 'from', ''].map(t => h('th', { text: t }))), ...SCOPE_ROWS.flatMap(row => {
+    const k = row.k, val = row.kind === 'set' ? e.settings[k] : e.caps[k];
+    const from = row.kind === 'set' ? (e.from[k] || 'defaults') : (e.capFrom[k] || 'defaults');
+    const lockBy = row.kind === 'set' ? e.locked.get(k) : null;
+    // a lock held by profile P allows P and the levels above it; nothing below
+    const lockIdx = lockBy ? levels.findIndex(l => l.name === lockBy) : -1;
+    const lv = h('select', { 'data-sl': k }, ...levels.map((l, i) => opt(l.id, l.name, i === 0 && lockIdx < 0 || i === lockIdx, (lockIdx >= 0 && i < lockIdx) || (row.kind === 'cap' && l.id === 'default'))));
+    const input = row.kind === 'set'
+      ? h('input', { 'data-sv': k, value: s.over?.[k] ?? '', placeholder: 'blank = inherit', list: /model|helper/i.test(k) ? 'models' : '', class: 'mono' })
+      : k === 'repo' ? h('select', { 'data-sv': k }, opt('', 'inherit', true), ...['none', 'read', 'write'].map(x => opt(x, x)))
+      : h('select', { 'data-sv': k }, opt('', 'inherit', true), opt('1', 'allow'), opt('0', 'deny'));
+    const edit = h('tr', { class: 'scope-edit', 'data-row': k, hidden: '' }, h('td', { colspan: '4' }, h('div', { class: 'setat' }, field('set at', lv), field(row.kind === 'set' ? 'value (blank = inherit)' : 'value', input), btn('set', { 'data-act': 'scope-set', class: 'primary' }))));
+    const toggle = btn('edit', { class: 'scope-toggle' });
+    toggle.onclick = () => { edit.hidden = !edit.hidden; toggle.textContent = edit.hidden ? 'edit' : 'close'; };
+    return [h('tr', { 'data-attr': k, ...(lockBy ? { 'data-locked': '' } : {}) },
+      h('th', { text: SCOPE_LABEL[k] || k }), h('td', { class: 'mono', title: show(row, val), text: show(row, val) }),
+      h('td', {}, h('span', { class: 'from', 'data-from': from === 'this session' ? 'session' : from === 'defaults' ? 'default' : 'profile', text: from }), lockBy ? h('span', { class: 'lock', title: 'locked by ' + lockBy, text: ' 🔒' }) : ''),
+      h('td', {}, toggle)), edit];
+  }));
+  slot($('#scopecount'), e.path || 'defaults');
+}
+function scopeSet(el) {
+  const s = cur(), tr = el.closest('[data-row]'), k = tr.dataset.row, row = SCOPE_ROWS.find(r => r.k === k);
+  const level = tr.querySelector('[data-sl]').value, raw = tr.querySelector('[data-sv]').value.trim();
+  const e = eff(s), lockBy = row.kind === 'set' ? e.locked.get(k) : null, levels = scopeLevels(s);
+  const at = levels.findIndex(l => l.id === level), lockIdx = lockBy ? levels.findIndex(l => l.name === lockBy) : -1;
+  if (lockIdx >= 0 && at < lockIdx) return modal({ title: 'Locked', body: `${SCOPE_LABEL[k]} is locked by profile ${lockBy}; set it there or above.` });
+  const v = row.kind === 'cap' ? (raw === '' ? null : k === 'repo' ? raw : raw === '1') : raw === '' ? null : k === 'branchBudget' ? Number(raw) || null : raw;
+  const assign = (obj, key) => { if (v == null) delete obj[key]; else obj[key] = v; };
+  if (level === 'session') { s.over ??= {}; if (row.kind === 'cap') { s.over.caps ??= {}; assign(s.over.caps, k); } else assign(s.over, k); saveSession(s); }
+  else if (level === 'default') { if (row.kind === 'set') { assign(state.meta.settings, k); saveMeta(); showSettings(); } }
+  else { const p = profiles().find(x => 'p:' + x.id === level); if (row.kind === 'cap') { p.caps ??= {}; assign(p.caps, k); } else { p.settings ??= {}; assign(p.settings, k); } saveMeta(); renderProfiles(); }
+  renderScope(); showScope();
+}
+
 // ---------- profiles (profiles.js) ----------
 
 const CAP_LABEL = { run_js: 'run code', fanout: 'fan out', ask: 'ask', vm: 'machine' };
@@ -494,6 +548,7 @@ function renderProfiles() {
       actions: [btn('delete', { 'data-act': 'prof-drop' })] });
   }));
   slot($('#profcount'), ps.length || '');
+  renderScope();
   $('#newprofile').replaceChildren(opt('', '(no profile)', !state.meta.settings.newProfile), ...ps.map(p => opt(p.id, prof.chain(ps, p.id).map(c => c.name).join(' / '), state.meta.settings.newProfile === p.id)));
   showScope();
 }
@@ -550,6 +605,7 @@ function activate(id) {
   $('#system').value = s.system;
   showScope();
   renderValues();
+  renderScope();
   $('#wire').value = s.wire || 'calls';
   $('#repotools').checked = !!s.tools?.includes('repo');
   $('#sprivate').checked = !!s.private;
@@ -1430,6 +1486,7 @@ const actions = {
   'val-hide'(el) { const v = allValues().find(x => x.id === el.closest('[data-val]').dataset.val); const r = vals.current(v); valueEdit(v, { hidden: !r.hidden }, r.hidden ? 'unhidden' : 'hidden'); },
   'val-restore'(el) { const v = allValues().find(x => x.id === el.closest('[data-val]').dataset.val); const old = v.revs.find(x => x.rev === Number(el.dataset.rev)); valueEdit(v, { label: old.label, role: old.role, value: old.value, purpose: old.purpose, expose: old.expose, show: old.show }, 'restored rev ' + old.rev); },
   'val-goto'(el) { const v = allValues().find(x => x.id === el.closest('[data-val]').dataset.val); const sid = v.revs[0].by?.session; if (state.sessions[sid]) activate(sid); },
+  'scope-set'(el) { return scopeSet(el); },
   'prof-add'() { const ps = profiles(); const p = { id: uid('p'), name: 'profile-' + (ps.length + 1), color: prof.PALETTE[ps.length % prof.PALETTE.length], settings: {}, caps: {}, locks: [], policies: [] }; ps.push(p); saveMeta(); renderProfiles(); const c = $(`#profiles [data-prof="${p.id}"]`); c.open = true; c.querySelector('[data-pf=name]').focus(); },
   async 'prof-drop'(el) {
     const id = el.closest('[data-prof]').dataset.prof, ps = profiles(), p = ps.find(x => x.id === id);
