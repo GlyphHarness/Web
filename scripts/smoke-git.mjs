@@ -2,7 +2,7 @@
 // api.github.com served from Playwright routes (offline, mock model provider).
 // Usage: python3 -m http.server 8787 (repo root), then: node scripts/smoke-git.mjs [url]
 import { createRequire } from 'node:module';
-import { createHash, randomBytes, webcrypto } from 'node:crypto';
+import { createHash, randomBytes, webcrypto, generateKeyPairSync, createVerify } from 'node:crypto';
 const { chromium } = createRequire(import.meta.url)('playwright');
 
 const url = process.argv[2] || 'http://localhost:8787/';
@@ -15,8 +15,32 @@ const branches = { main: { sha: sha(), files: { 'a.txt': 'hello world\n', 'src/x
 const seen = []; // [method, path, body]
 const b64 = s => Buffer.from(s).toString('base64');
 const etagOf = v => '"' + createHash('sha1').update(JSON.stringify(v)).digest('hex') + '"';
+// GitHub App: a PKCS#1 key as GitHub issues it; minted tokens carry permissions
+const { privateKey: PEM, publicKey: PUB } = generateKeyPairSync('rsa', { modulusLength: 2048, privateKeyEncoding: { type: 'pkcs1', format: 'pem' }, publicKeyEncoding: { type: 'spki', format: 'pem' } });
+const mints = [], minted = {}, used = []; // used: [path, perms of the token]
+function jwtOk(h) {
+  const [a, b, c] = (h || '').replace('Bearer ', '').split('.');
+  if (!c) return false;
+  const v = createVerify('RSA-SHA256'); v.update(a + '.' + b);
+  const claims = JSON.parse(Buffer.from(b, 'base64url'));
+  return v.verify(PUB, Buffer.from(c, 'base64url')) && claims.iss === '123' && claims.exp > Date.now() / 1000;
+}
+const need = (method, path) => method === 'GET' ? ['contents', 'read'] : /\/pulls$/.test(path) ? ['pull_requests', 'write'] : ['contents', 'write'];
 function api(method, path, q, body, headers) {
-  if (headers.authorization !== 'Bearer ' + TOKEN) return [401, { message: 'Bad credentials' }];
+  if (path === '/app') return jwtOk(headers.authorization) ? [200, { slug: 'wh-test', installations_count: 1 }] : [401, { message: 'bad jwt' }];
+  if (path === '/repos/o/r/installation') return jwtOk(headers.authorization) ? [200, { id: 99 }] : [401, { message: 'bad jwt' }];
+  if (path === '/app/installations/99/access_tokens') {
+    if (!jwtOk(headers.authorization)) return [401, { message: 'bad jwt' }];
+    const t = 'ghs_' + randomBytes(12).toString('hex');
+    minted[t] = body; mints.push(body);
+    return [201, { token: t, expires_at: new Date(Date.now() + 3600e3).toISOString() }];
+  }
+  const tok = (headers.authorization || '').replace('Bearer ', '');
+  if (minted[tok]) {
+    const [perm, lvl] = need(method, path), has = minted[tok].permissions[perm];
+    used.push([method + ' ' + path, minted[tok].permissions]);
+    if (!(has === 'write' || has === lvl) || !minted[tok].repositories.includes('r')) return [403, { message: 'Resource not accessible by integration' }];
+  } else if (tok !== TOKEN) return [401, { message: 'Bad credentials' }];
   let m;
   if (path === '/user') return [200, { login: 'tester' }];
   if (path === '/repos/o/r') return [200, { default_branch: 'main' }];
@@ -144,6 +168,27 @@ await page.click('#bridgebar [data-bask] button:has-text("deny")');
 check('bridge: send waits for a click; deny is reported', /declined by the user/.test((await pend)?.error || ''));
 const unknown = await directive('eval', { code: '1' });
 check('bridge: unknown directives are refused', unknown && !unknown.ok && /unknown directive/.test(unknown.error));
+
+// ---- GitHub App mode: no pasted token, tokens minted per repository and permission ----
+await page.evaluate(pem => { localStorage.setItem('wh:keys', JSON.stringify({ ghapp: { appId: '123', pem } })); }, PEM);
+await page.reload();
+await page.selectOption('#provider', 'mock');
+await page.fill('#model', 'mock-1');
+await page.dispatchEvent('#model', 'change');
+await page.click('[data-act=ghcheck]');
+check('app: check signs a JWT from the PKCS#1 key', await until(async () => /app wh-test/.test(await page.textContent('#ghwho'))));
+await page.click('[data-act=new]');
+branches.feat.files['a.txt'] = 'hello again\n';
+await say('repo read please'); await idle();
+await say('repo commit please');
+await page.waitForSelector('.thread:visible .msg[data-role=approve]:not([data-done]) button');
+await thread().locator('.msg[data-role=approve]:not([data-done]) button', { hasText: 'allow' }).click();
+await idle();
+check('app: commit landed using minted tokens', branches.feat.files['a.txt'] === 'goodbye again\n', await thread().locator('.msg[data-role=tool] pre').last().textContent());
+check('app: each token is for repo r only, at the level asked', mints.length >= 2 && mints.every(m => m.repositories.join() === 'r') && mints.some(m => m.permissions.contents === 'read' && Object.keys(m.permissions).length === 1) && mints.some(m => m.permissions.contents === 'write'));
+check('app: reads used a read-only token, the commit a write token', used.filter(([p]) => p.startsWith('GET /repos/o/r/contents/a.txt')).some(([, pm]) => pm.contents === 'read') && used.some(([p, pm]) => p === 'POST /graphql' && pm.contents === 'write'));
+const allUp = JSON.stringify(await upEvents());
+check('app: neither the key nor a minted token leaves the page', !allUp.includes('BEGIN RSA') && !Object.keys(minted).some(t => allUp.includes(t)));
 
 check('no page errors', errors.filter(e => !/Failed to load resource|ERR_/.test(e)).length === 0, errors.join(' | '));
 await browser.close();

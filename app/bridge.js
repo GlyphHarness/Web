@@ -61,7 +61,7 @@ export async function start(pair, host) {
 
   // GitHub calls made here stay out of the trace: they would be sent up again.
   async function gh(method, path, body, extra = {}) {
-    const tok = host.token();
+    const tok = await host.token();
     if (!tok) throw new Error('no GitHub token');
     return fetch(API + path, { method, cache: 'no-store', headers: { Accept: 'application/vnd.github+json', Authorization: 'Bearer ' + tok, ...(body ? { 'Content-Type': 'application/json' } : {}), ...extra }, body: body ? JSON.stringify(body) : undefined });
   }
@@ -144,7 +144,7 @@ export async function start(pair, host) {
     bar.remove();
   }
 
-  if (!host.token()) bar.querySelector('[data-bstat]').textContent = 'Set a GitHub token in Settings, then reload: the bridge runs over a git branch.';
+  if (!(await host.token().catch(() => ''))) bar.querySelector('[data-bstat]').textContent = 'Set a GitHub token in Settings, then reload: the bridge runs over a git branch.';
   else { await prime(); check(); }
   emit('hello', host.hello());
   status();

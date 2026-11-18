@@ -2,7 +2,7 @@
 
 A client-side LLM chat harness served straight from this repo with GitHub Pages. No server, no build step: the browser holds the API key, the sessions and the tools.
 
-Status: working skeleton (v0.15.0). The OpenRouter path is written from the OpenAI-compatible conventions and has not yet been run against the live API.
+Status: working skeleton (v0.16.0). The OpenRouter path is written from the OpenAI-compatible conventions and has not yet been run against the live API.
 
 ## Run
 
@@ -160,7 +160,10 @@ Tool definitions make no mention of where they run. Current set: `run_js`, `scra
 
 A page can call `api.github.com` (it answers any origin) but not git's own HTTP endpoints or GitHub's sign-in token exchange, which send no CORS headers. So there is no clone and no OAuth flow. Reads, commits, branches and pull requests go through the REST and GraphQL APIs with a token you paste in Settings.
 
-- **Token:** a fine-grained personal access token limited to the repos it may touch, with Contents read/write, Pull requests read/write and Metadata read. It is stored with the other keys, never exported, recorded in no trace and redacted from the bridge. "check" shows which account it belongs to.
+- **Credentials, either of:**
+  - a fine-grained personal access token limited to the repos it may touch (Contents read/write, Pull requests read/write, Metadata read). GitHub has no API for creating these; they are made in the web UI.
+  - a GitHub App (App ID + private key). For each request the page mints an installation token for exactly the repository that request touches, with only the permission it needs (contents read, contents write, or pull requests write), valid one hour. Commits are attributed to the app's bot account. The installation is looked up per repository, so one app installed on several repos or orgs works.
+- Credentials are stored with the other keys, never exported, masked in the trace and redacted from the bridge. "check" shows the account or app.
 - **Tools:** sessions created while a token is set get `repo_read` (file, tree, log, diff, branches, prs), `repo_commit` and `repo_pr`. Older sessions keep their tool list, so their cached prefix is unchanged.
 - **Commits:** one commit per call through GraphQL `createCommitOnBranch`, guarded by the branch head it read. A change is whole `content`, `edits` (exact find/replace, each match unique), `from` (an `os:` handle) or `delete`. A missing branch is created from `from` or the default branch.
 - **Approval:** every commit and pull request waits for a click on a card showing what will be written, built from the resolved files rather than the model's description.

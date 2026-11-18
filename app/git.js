@@ -2,7 +2,8 @@
 // Access-Control-Allow-Origin: *) but not git's smart-HTTP endpoints or the
 // OAuth token exchange, so there is no clone and no sign-in flow: reads, commits,
 // branches and pull requests go through REST and GraphQL with a fine-grained
-// personal access token the user pastes in Settings.
+// token from ghauth.js: a pasted personal access token, or an installation token
+// minted per repository from a GitHub App.
 //
 // Writes (commit, pull request) are shown to the user and wait for a click.
 // Every request is recorded in the trace without the Authorization header.
@@ -14,10 +15,13 @@ const b64 = {
 };
 const REPO = /^[\w.-]+\/[\w.-]+$/;
 
-// env = { token() -> string, trace: [], confirm(summary) -> Promise<bool>, get(handle) -> Promise<string|null> }
+// env = { token(repo, level) -> Promise<string> (ghauth.js; level read | write | pr), trace: [], confirm(summary) -> Promise<bool>, get(handle) -> Promise<string|null> }
 export function client(env) {
   async function call(method, path, body) {
-    const tok = env.token();
+    // the repository and the least permission this request needs decide which token is used
+    const repo = /^\/repos\/([^/]+\/[^/]+)/.exec(path)?.[1] || body?.variables?.i?.branch?.repositoryNameWithOwner;
+    const level = method === 'GET' ? 'read' : /\/pulls$/.test(path) ? 'pr' : 'write';
+    const tok = await env.token(repo, level);
     if (!tok) throw new Error('No GitHub token is set.');
     const t0 = performance.now();
     const rec = { t: new Date().toISOString(), url: API + path, request: { method, body }, status: 0, chunks: [] };
@@ -167,6 +171,5 @@ export function client(env) {
     return `#${p.number} ${p.head.ref} -> ${p.base.ref}\n${p.html_url}`;
   }
 
-  async function whoami() { const u = await call('GET', '/user'); return u.login; }
-  return { read, commit, pr, whoami, call };
+  return { read, commit, pr, call };
 }

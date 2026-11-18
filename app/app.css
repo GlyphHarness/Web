@@ -138,3 +138,4 @@ details.call pre.full { margin-top: 6px; padding-top: 6px; border-top: 1px dashe
 .msg[data-role=approve] { border-left: 3px solid #e0a040; }
 .msg[data-role=approve] .row { display: flex; gap: 6px; margin-top: 6px; }
 .msg[data-role=approve][data-done]::after { content: attr(data-done); font-size: 11px; color: var(--dim); }
+.sub { border: 0 !important; padding: 2px 0 !important; }

@@ -8,13 +8,14 @@ import { rule } from './styles.js';
 import { providers } from './providers.js';
 import { defsFor, execTool, SWAPPABLE, ARG_MAX, runJs } from './tools.js';
 import { client as gitClient } from './git.js';
+import { auth as ghAuth } from './ghauth.js';
 import * as bridge from './bridge.js';
 import { render } from './widgets.js';
 import * as pat from './patterns.js';
 import { put, get, handlesIn } from './outstore.js';
 import { buildRequest, measure, report, padAttachment, inherit, imitatesNote, keptLines, corePrompt, EDGE_MIN, markedOnly, edgeReplies, turnOf, KINDS } from './context.js';
 
-export const VERSION = '0.15.0';
+export const VERSION = '0.16.0';
 const MAX_STEPS = 8; // model <-> tool round trips per user turn
 const MAX_BRANCHES = 6; // concerns per fan_out
 const FOLD_MAX = 2000; // chars of a fold handed back to the source
@@ -65,6 +66,11 @@ const SHELL = `
     <input id="key" type="password" autocomplete="off">
     <label>GitHub token (fine-grained, limited to the repos it may touch; kept in this browser only). New sessions get repository tools while one is set.</label>
     <div style="display:flex;gap:6px"><input id="ghkey" type="password" autocomplete="off"><button data-act="ghcheck">check</button></div>
+    <details class="sub"><summary>or a GitHub App (mints a one-hour token per repository and permission)</summary>
+      <label>App ID</label><input id="ghappid" autocomplete="off">
+      <label>Private key (.pem, as downloaded)</label><textarea id="ghpem" rows="3" spellcheck="false" placeholder="-----BEGIN RSA PRIVATE KEY-----"></textarea>
+      <p class="note">When both are set the app is used and the token above is ignored.</p>
+    </details>
     <p class="note" id="ghwho"></p>
     <label>Pinned code ref (tag, branch or commit; empty = this branch)</label>
     <input id="ref" placeholder="e.g. v0.1.0">
@@ -124,6 +130,7 @@ const SHELL = `
 
 let app, busy = false, ctl = null, link = null;
 const trace = []; // raw request/response records, memory only
+const gh = ghAuth(() => state.keys, trace); // mint and lookup calls appear in the trace, tokens masked
 const opt = () => ({ base: state.meta.settings.base?.[state.meta.settings.provider] || '', trace });
 const cur = () => state.sessions[state.meta.active];
 const provider = () => providers[state.meta.settings.provider] || providers.openrouter;
@@ -573,7 +580,7 @@ async function turns(s, depth, onFirst) {
     knownRef: r => !!state.sessions[r] || s.messages.some(m => typeof m.content === 'string' && m.content.includes(r)),
     onPatterns: renderPatterns,
     helper: set.helper ? (want, text) => helper(s, want, text) : null,
-    git: s.tools?.includes('repo') ? gitClient({ token: () => state.keys.github, trace, get, confirm: what => approve(s, what) }) : null,
+    git: s.tools?.includes('repo') ? gitClient({ token: gh.token, trace, get, confirm: what => approve(s, what) }) : null,
   };
   for (let step = 0; step < MAX_STEPS; step++) {
     const body = buildRequest(s, set.model, defsFor(s));
@@ -794,7 +801,7 @@ const download = (name, obj) => {
 
 const actions = {
   trace() { download('webharness-' + new Date().toISOString().replace(/[:.]/g, '-') + '.trace', { kind: 'webharness.trace', version: 1, build: VERSION, exchanges: trace, trail: pat.trail() }); },
-  new() { const s = newSession({ keep: true, core: 2, edge: 'marks', ...(state.keys.github ? { tools: ['repo'] } : {}) }); $('#sessions').prepend(sessionRow(s)); activate(s.id); $('#input').focus(); },
+  new() { const s = newSession({ keep: true, core: 2, edge: 'marks', ...(gh.mode() ? { tools: ['repo'] } : {}) }); $('#sessions').prepend(sessionRow(s)); activate(s.id); $('#input').focus(); },
   import() { $('#file').click(); },
   async export() {
     const s = cur(), bundle = exportBundle(s), blobs = {};
@@ -807,7 +814,7 @@ const actions = {
   async ghcheck() {
     const who = $('#ghwho');
     who.textContent = 'checking…';
-    try { who.textContent = 'signed in as ' + await gitClient({ token: () => state.keys.github, trace }).whoami(); }
+    try { who.textContent = await gh.whoami(); }
     catch (e) { who.textContent = e.message; }
   },
   inspector() { state.meta.settings.inspector = !state.meta.settings.inspector; saveMeta(); applyInspector(); },
@@ -913,6 +920,9 @@ function bind() {
   $('#picker').addEventListener('mousedown', e => { const r = e.target.closest('[data-model]'); if (r) { e.preventDefault(); pickModel(r.dataset.model); $('#model').blur(); } });
   $('#provider').addEventListener('change', e => { state.meta.settings.provider = e.target.value; saveMeta(); $('#key').value = state.keys[e.target.value] || ''; showBase(); loadModels(); });
   $('#base').addEventListener('change', e => { (state.meta.settings.base ??= {})[state.meta.settings.provider] = e.target.value.trim(); saveMeta(); loadModels(); });
+  const saveApp = () => { const appId = $('#ghappid').value.trim(), pem = $('#ghpem').value.trim(); state.keys.ghapp = appId || pem ? { appId, pem } : undefined; saveKeys(); $('#ghwho').textContent = ''; };
+  $('#ghappid').addEventListener('change', saveApp);
+  $('#ghpem').addEventListener('change', saveApp);
   $('#ghkey').addEventListener('change', e => { state.keys.github = e.target.value.trim(); saveKeys(); $('#ghwho').textContent = ''; });
   $('#key').addEventListener('change', e => { state.keys[state.meta.settings.provider] = e.target.value.trim(); saveKeys(); });
   $('#ref').addEventListener('change', e => { location.search = '?ref=' + encodeURIComponent(e.target.value.trim()); });
@@ -972,6 +982,8 @@ export function boot(env) {
   $('#model').value = set.model;
   $('#key').value = state.keys[set.provider] || '';
   $('#ghkey').value = state.keys.github || '';
+  $('#ghappid').value = state.keys.ghapp?.appId || '';
+  $('#ghpem').value = state.keys.ghapp?.pem || '';
   $('#sessions').append(...rows());
   $('#budget').value = set.branchBudget || BRANCH_BUDGET;
   $('#helper').value = set.helper || '';
@@ -1021,8 +1033,8 @@ async function startBridge(pair, env) {
   const hello = () => ({ build: VERSION, schema: SCHEMA, ref: env.ref || '', url: location.origin + location.pathname, ua: navigator.userAgent, provider: set.provider, model: set.model, helper: set.helper || '', sessions: state.meta.order.length });
   const lastReply = s => { const m = [...s.messages].reverse().find(m => m.role === 'assistant'); return m?.content || ''; };
   link = await bridge.start(pair, {
-    trace, hello, token: () => state.keys.github,
-    secrets: () => Object.values(state.keys),
+    trace, hello, token: () => gh.token(pair.repo, 'write'),
+    secrets: () => [...Object.values(state.keys).filter(v => typeof v === 'string'), ...gh.secrets()],
     gated: new Set(['send', 'set', 'reload']),
     directives: {
       ping: hello,
