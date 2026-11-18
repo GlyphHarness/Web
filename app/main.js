@@ -8,7 +8,8 @@ import { rule, slot, slotText } from './styles.js';
 import { providers } from './providers.js';
 import { defsFor, execTool, SWAPPABLE, ARG_MAX, runJs } from './tools.js';
 import { client as gitClient } from './git.js';
-import { auth as ghAuth } from './ghauth.js';
+import { auth as ghAuth, appJwt } from './ghauth.js';
+import * as tokencheck from './tokencheck.js';
 import { machine, vmWanted, vmReady } from './vm.js';
 import * as policy from './policy.js';
 import * as smells from './smells.js';
@@ -24,7 +25,7 @@ import * as pat from './patterns.js';
 import { put, get, handlesIn, setFallback } from './outstore.js';
 import { buildRequest, measure, report, padAttachment, inherit, imitatesNote, keptLines, corePrompt, EDGE_MIN, markedOnly, edgeReplies, turnOf, KINDS } from './context.js';
 
-export const VERSION = '0.32.0';
+export const VERSION = '0.33.0';
 const MAX_STEPS = 8; // model <-> tool round trips per user turn
 const MAX_BRANCHES = 6; // concerns per fan_out
 const FOLD_MAX = 2000; // chars of a fold handed back to the source
@@ -102,6 +103,14 @@ const SHELL = `
     <label>Label for this access, told to the model in new sessions (e.g. "fine-grained token: one repo, contents + PRs")</label>
     <input id="ghlabel" autocomplete="off">
     <p class="note" id="ghwho"></p>
+    <details class="sub" id="ghintentbox"><summary>intended use of this credential <span class="note" id="ghscopes"></span></summary>
+      <p class="note">One line per repository or pattern and what it needs (read or write). Filled from the configuration (log repos, profile allowlists); edit freely. The check compares this with what the credential can actually do, using plain API calls.</p>
+      <textarea id="ghintent" rows="3" class="mono" spellcheck="false" placeholder="owner/name write&#10;owner/* read"></textarea>
+      <label class="check"><input type="checkbox" id="ghpulls"> opens pull requests</label>
+      <label class="check"><input type="checkbox" id="ghcreate"> creates repositories</label>
+      <label class="check"><input type="checkbox" id="ghprobe"> probe write access (creates an unreferenced blob in each repo that needs write; no commit, no branch change)</label>
+      <div class="cfgbar"><button data-act="ghderive">fill from configuration</button><button data-act="ghscopes" class="primary">check scopes</button></div>
+    </details>
     <label><input type="checkbox" id="vmon"> Linux machine: a <code>shell</code> tool for new sessions (bash, git, python3, gh). Downloads the image once; switching this reloads the page to turn cross-origin isolation on or off.</label>
     <label>Log repo: a private repo of yours where the harness keeps tracking over time (owner/name). Only the harness writes to it; agents can read it.</label>
     <div style="display:flex;gap:6px"><input id="logrepo" placeholder="owner/name" autocomplete="off"><button data-act="logsetup">set up</button><button data-act="logsync">sync</button></div>
@@ -1589,6 +1598,8 @@ const actions = {
     download((s.title.replace(/[^\w\- ]+/g, '').trim() || 'session') + '.session', bundle);
   },
   smellsclear() { smells.clear(); renderSmells(); },
+  ghscopes() { return checkScopes(); },
+  ghderive() { state.meta.settings.ghIntent = tokencheck.derive({ settings: state.meta.settings, profiles: profiles() }); saveMeta(); showIntent(); },
   cfgpaste() { return pasteConfig(); },
   cfgimport() { return importLines(); },
   async cfgcopy() {
@@ -1817,6 +1828,8 @@ function bind() {
     const open = card.open; renderPolicies(); const again = $(`#policies [data-pol="${card.dataset.pol}"]`); if (again) again.open = open;
   });
   $('#polmodel').addEventListener('change', e => { state.meta.settings.policyModel = e.target.value.trim(); saveMeta(); });
+  showIntent();
+  for (const id of ['#ghintent', '#ghpulls', '#ghcreate']) $(id).addEventListener('change', readIntent);
   $('#logrepo').value = state.meta.settings.logRepo || '';
   $('#logrepo').addEventListener('change', e => { state.meta.settings.logRepo = e.target.value.trim(); state.meta.settings.logReady = false; saveMeta(); slot($('#logstat'), 'press "set up"'); });
   if (state.meta.settings.logReady) slot($('#logstat'), state.meta.settings.logRepo + ': ready');
@@ -2107,6 +2120,45 @@ async function browseTranscripts() {
     return b;
   }));
   return modal({ title: `Transcripts in ${l.repo} (${'wh-sessions'})`, body: [list, view, more], actions: [{ text: 'Close', value: true, primary: true }] });
+}
+
+// ---------- token scope check (tokencheck.js) ----------
+
+const intentText = it => it.repos.map(r => `${r.pattern} ${r.need}`).join('\n');
+function ghIntent() {
+  const set = state.meta.settings;
+  if (!set.ghIntent) set.ghIntent = tokencheck.derive({ settings: set, profiles: profiles() });
+  return set.ghIntent;
+}
+function showIntent() {
+  const it = ghIntent();
+  $('#ghintent').value = intentText(it); $('#ghpulls').checked = !!it.pulls; $('#ghcreate').checked = !!it.create;
+  slot($('#ghscopes'), state.meta.settings.ghScopeSummary ? '· last check: ' + state.meta.settings.ghScopeSummary : '');
+}
+function readIntent() {
+  const repos = $('#ghintent').value.split('\n').map(l => l.trim()).filter(Boolean).map(l => { const [pattern, need] = l.split(/\s+/); return { pattern, need: need === 'read' ? 'read' : 'write', why: 'intended' }; }).filter(r => /^[\w.-]+\/[\w.*-]+$/.test(r.pattern));
+  state.meta.settings.ghIntent = { repos, pulls: $('#ghpulls').checked, create: $('#ghcreate').checked };
+  saveMeta();
+  return state.meta.settings.ghIntent;
+}
+async function checkScopes() {
+  const it = readIntent();
+  slot($('#ghscopes'), '· checking…');
+  let rows;
+  try {
+    if (gh.mode() === 'app') rows = await tokencheck.checkApp(await appJwt(state.keys.ghapp), it);
+    else if (state.keys.github) rows = await tokencheck.check(state.keys.github, it, { probeWrite: $('#ghprobe').checked });
+    else rows = [{ check: 'credential', expected: 'a token or a GitHub App', observed: 'none set', status: 'missing' }];
+  } catch (e) { rows = [{ check: 'check', expected: 'completed', observed: e.message, status: 'missing' }]; }
+  const sum = tokencheck.summary(rows);
+  state.meta.settings.ghScopeSummary = `${sum} (${new Date().toLocaleString()})`; saveMeta();
+  slot($('#ghscopes'), '· ' + sum);
+  const bad = rows.filter(r => r.status === 'missing' || r.status === 'excess');
+  if (bad.length) smells.add({ kind: 'token-scope', detail: bad.map(r => `${r.status}: ${r.check}`).join('; ').slice(0, 300) });
+  renderSmells();
+  return modal({ title: 'Credential scopes', body: [h('p', { class: 'note', text: sum + '. Compared with the intended use; no model was involved.' }),
+    h('table', { class: 'audit tcheck' }, h('tr', {}, ...['check', 'expected', 'observed', ''].map(t => h('th', { text: t }))),
+      ...rows.map(r => h('tr', { 'data-st': r.status }, h('td', { text: r.check }), h('td', { text: r.expected }), h('td', { text: r.observed }), h('td', { class: 'st', text: r.status }))))] });
 }
 
 // ---------- approvals for outward-facing writes ----------

@@ -15,7 +15,7 @@ const TOKEN = 'github_pat_TESTTOKEN_' + 'x'.repeat(20);
 const sha = () => randomBytes(20).toString('hex');
 const repos = { 'o/r': { main: { sha: sha(), files: { 'a.txt': 'hello world\n', 'src/x.js': 'x' } } } };
 const branches = repos['o/r'];
-const trees = {}, commits = {};
+const trees = {}, commits = {}, blobsMade = [];
 const seen = []; // [method, path, body]
 const b64 = s => Buffer.from(s).toString('base64');
 const etagOf = v => '"' + createHash('sha1').update(JSON.stringify(v)).digest('hex') + '"';
@@ -52,6 +52,8 @@ function api(method, path, q, body, headers) {
   } else if (tok !== TOKEN) return [401, { message: 'Bad credentials' }];
   let m;
   if (path === '/user') return [200, { login: 'tester' }];
+  if (path === '/user/repos') return [200, [...Object.keys(repos), 'x/other'].map(full_name => ({ full_name, permissions: { pull: true, push: true, admin: false } }))];
+  if (path === '/repos/o/r/git/blobs' && method === 'POST') { blobsMade.push(repoName); return [201, { sha: sha() }]; }
   if (path === '/repos/o/r') return [200, { default_branch: 'main' }];
   if ((m = /^\/repos\/o\/r\/git\/ref\/heads\/(.+)$/.exec(path))) { const b = B[decodeURIComponent(m[1])]; return b ? [200, { object: { sha: b.sha } }] : [404, { message: 'Not Found' }]; }
   if (path === '/repos/o/r/git/trees' && method === 'POST') { const t = sha(); trees[t] = Object.fromEntries(body.tree.map(e => [e.path, e.content])); return [201, { sha: t }]; }
@@ -63,17 +65,18 @@ function api(method, path, q, body, headers) {
     return [201, {}];
   }
   if ((m = /^\/repos\/o\/r\/contents\/(.*)$/.exec(path))) {
-    const p = m[1].split('/').map(decodeURIComponent).join('/');
+    const p = m[1].split('/').map(decodeURIComponent).join('/').replace(/\/$/, '');
     const br = B[q.get('ref') || body?.branch || 'main'];
     if (!br) return [404, { message: 'No commit found for the ref' }];
     if (method === 'PUT') { br.files[p] = Buffer.from(body.content, 'base64').toString(); br.sha = sha(); return [201, { content: { path: p } }]; }
     if (br.files[p] != null) return [200, { type: 'file', path: p, sha: 'blob', encoding: 'base64', content: Buffer.isBuffer(br.files[p]) ? br.files[p].toString('base64') : b64(br.files[p]) }];
     // like GitHub: direct children only, folders as type dir
     const seenNames = new Set(), list = [];
-    for (const f of Object.keys(br.files).filter(f => f.startsWith(p + '/'))) {
-      const rest = f.slice(p.length + 1), name = rest.split('/')[0], dir = rest.includes('/');
+    if (p === '' && !Object.keys(br.files).length) return [404, { message: 'This repository is empty.' }];
+    for (const f of Object.keys(br.files).filter(f => p === '' || f.startsWith(p + '/'))) {
+      const rest = p === '' ? f : f.slice(p.length + 1), name = rest.split('/')[0], dir = rest.includes('/');
       if (seenNames.has(name)) continue; seenNames.add(name);
-      list.push({ name, path: p + '/' + name, type: dir ? 'dir' : 'file' });
+      list.push({ name, path: (p ? p + '/' : '') + name, type: dir ? 'dir' : 'file' });
     }
     return list.length ? [200, list, { etag: etagOf(list) }] : [404, { message: 'Not Found' }];
   }
@@ -308,6 +311,24 @@ check('log repo per profile: an empty repo gets the layout on first use', JSON.p
 check('log repo per profile: the profile\'s sessions go there, not to the defaults\' repo', !!TB[`sessions/${sidB}/meta.json`] && !Object.keys(repos['o/logs']['wh-sessions'].files).some(f => f.startsWith(`sessions/${sidB}/`)));
 check('log repo per profile: a missing repo is not created silently (a smell, skipped)', !repos['o/nowhere'] && await page.evaluate(() => JSON.parse(localStorage['wh:smells']).some(r => r.kind === 'log-repo-unavailable' && /o\/nowhere/.test(r.detail))));
 await pickProfile('(no profile)');
+
+// ---- credential scope check: intended use vs what the token can do (no model) ----
+await page.click('[data-pane=insp]');
+await page.evaluate(() => { document.querySelector('#ghintentbox').open = true; document.querySelector('#ghintentbox').closest('details:not(#ghintentbox)').open = true; document.querySelector('[data-act=ghderive]').click(); });
+const intentLines = await page.inputValue('#ghintent');
+check('scopes: the intent is filled from the configuration (log repos need write)', /^o\/logs write$/m.test(intentLines) && /^o\/logs-b write$/m.test(intentLines) && /^o\/nowhere write$/m.test(intentLines), intentLines);
+await page.evaluate(() => { const c = document.querySelector('#ghprobe'); c.checked = true; });
+await page.evaluate(() => document.querySelector('[data-act=ghscopes]').click());
+await page.waitForSelector('.modal .tcheck');
+const tc = await page.evaluate(() => [...document.querySelectorAll('.modal .tcheck tr[data-st]')].map(tr => [tr.children[0].textContent, tr.dataset.st, tr.children[2].textContent]));
+const tst = name => tc.find(r => r[0] === name)?.[1];
+check('scopes: token type and identity', tst('token type') === 'ok' && tst('token works') === 'ok');
+check('scopes: intended repos read and (probed) write are confirmed', tst('o/logs contents read') === 'ok' && tst('o/logs contents write') === 'ok' && tst('o/logs-b contents write') === 'ok' && blobsMade.includes('o/logs'), JSON.stringify(tc));
+check('scopes: an intended repo the token cannot reach is missing', tst('o/nowhere metadata') === 'missing');
+check('scopes: repos the token reaches beyond the intent are excess', /x\/other/.test(tc.find(r => r[0] === 'repos beyond the intent')?.[2] || '') && tst('repos beyond the intent') === 'excess');
+check('scopes: what cannot be proven without writing is said so', !tc.some(r => r[0] === 'open pull requests') || tst('open pull requests') === 'unverifiable');
+check('scopes: the summary is kept beside the credential, and mismatches are smells', /missing/.test(await slotOf('#ghscopes')) && await page.evaluate(() => JSON.parse(localStorage['wh:smells']).some(r => r.kind === 'token-scope')));
+await page.click('.modal .actions button');
 
 // ---- GitHub App mode: no pasted token, tokens minted per repository and permission ----
 await page.evaluate(pem => { localStorage.setItem('wh:keys', JSON.stringify({ ghapp: { appId: '123', pem } })); }, PEM);

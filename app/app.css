@@ -275,3 +275,9 @@ figure.handoff iframe { width: 100%; height: 260px; border: 0; background: #fff;
 #sessioncard > summary .name { font-weight: 600; }
 .item .actions .check { margin-right: auto !important; }
 .aud { margin-left: 4px; font: 9px ui-monospace, monospace; border-radius: 6px; padding: 0 4px; border: 1px solid var(--line); color: var(--dim); } .aud[data-aud=tools] { color: var(--accent); }
+.tcheck td { vertical-align: top; overflow-wrap: anywhere; }
+.tcheck tr[data-st=ok] .st { color: var(--ok); }
+.tcheck tr[data-st=missing] .st { color: var(--bad); font-weight: 600; }
+.tcheck tr[data-st=excess] .st { color: #e0a040; font-weight: 600; }
+.tcheck tr[data-st=unverifiable] .st, .tcheck tr[data-st=info] .st { color: var(--dim); }
+.modal:has(.tcheck) { width: min(820px, 100%); }

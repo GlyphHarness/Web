@@ -2,7 +2,7 @@
 
 A client-side LLM chat harness served straight from this repo with GitHub Pages. No server, no build step: the browser holds the API key, the sessions and the tools.
 
-Status: working skeleton (v0.32.0). The OpenRouter path is written from the OpenAI-compatible conventions and has not yet been run against the live API.
+Status: working skeleton (v0.33.0). The OpenRouter path is written from the OpenAI-compatible conventions and has not yet been run against the live API.
 
 ## Run
 
@@ -168,6 +168,7 @@ A page can call `api.github.com` (it answers any origin) but not git's own HTTP 
   - a fine-grained personal access token limited to the repos it may touch (Contents read/write, Pull requests read/write, Metadata read). GitHub has no API for creating these; they are made in the web UI.
   - a GitHub App (App ID + private key). For each request the page mints an installation token for exactly the repository that request touches, with only the permission it needs (contents read, contents write, or pull requests write), valid one hour. Commits are attributed to the app's bot account. The installation is looked up per repository, so one app installed on several repos or orgs works.
 - Credentials are stored with the other keys, never exported, masked in the trace and redacted from the bridge. "check" shows the account or app.
+- **Scope check (no model):** under the token, "intended use of this credential" lists the repositories it is for and what each needs (read or write), filled from the configuration (log repos, profile allowlists) and editable, plus whether it opens pull requests or creates repositories. "check scopes" compares that with what the credential can actually do, using plain API calls: the token type (by prefix), classic scopes (`X-OAuth-Scopes`), the repositories it reaches (`/user/repos`), and per intended repo metadata and contents read; contents write is probed only when you allow it, by creating an unreferenced blob (no commit, no branch change). For a GitHub App it reads each installation's permissions and repository selection. Every row is ok, missing, excess (more than intended: other repositories, risky classic scopes, admin, all repositories) or unverifiable (pull requests and repository creation cannot be proven without writing). The summary stays beside the credential; mismatches are recorded as smells.
 - **Tools:** sessions created while a token is set get `repo_read` (file, tree, log, diff, branches, prs), `repo_commit`, `repo_pr` and `repo_create`. Older sessions keep their tool list, so their cached prefix is unchanged; the "Repository tools" switch under the system prompt adds or removes them for one session (one prefix break, shown in the ledger).
 - **Commits:** one commit per call through GraphQL `createCommitOnBranch`, guarded by the branch head it read. A change is whole `content`, `edits` (exact find/replace, each match unique), `from` (an `os:` handle) or `delete`. A missing branch is created from `from` or the default branch.
 - **Approval:** every commit and pull request waits for a click on a card showing what will be written, built from the resolved files rather than the model's description.
