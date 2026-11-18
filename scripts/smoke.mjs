@@ -284,6 +284,30 @@ const snap = JSON.parse(await page.textContent('.modal .cfgshow'));
 check('config: copy gives the same shape back, without credentials', snap.settings.helper === 'mock-free:free' && snap.policies.some(p => p.name === 'no-rm-root') && !JSON.stringify(snap).includes('SECRET'));
 await page.click('.modal button');
 
+// ---- profiles: scoped, hierarchical configuration ----
+await page.evaluate(() => document.querySelector('[data-act=cfgpaste]').click());
+await page.fill('.modal textarea', JSON.stringify({ profiles: [
+  { name: 'org', color: '#e0a040', settings: { model: 'mock-pro' }, locks: ['model'], caps: { vm: false, repo: 'read' }, repos: ['o/*'] },
+  { name: 'research', parent: 'org', color: '#6fd08c', settings: { model: 'mock-1' }, caps: { run_js: false, vm: true } },
+] }));
+await page.click('.modal .primary');
+await page.evaluate(() => { const sel = document.querySelector('#newprofile'); sel.value = [...sel.options].find(o => o.textContent === 'org / research').value; sel.dispatchEvent(new Event('change')); });
+await page.click('[data-act=new]');
+check('profiles: sidebar groups sessions under their scope with a badge', await page.evaluate(() => [...document.querySelectorAll('#sessions .pgroup')].map(e => e.textContent).includes('org / research') && document.querySelector(`#sessions [data-id="${JSON.parse(localStorage['wh:meta']).active}"] .pbadge`)?.textContent === 'research'));
+check('profiles: a locked setting wins over the child and the session (model box locked)', await page.inputValue('#model') === 'mock-pro' && await page.isDisabled('#model'));
+const scopeTools = await page.evaluate(() => { const m = JSON.parse(localStorage['wh:meta']); return m; });
+await say('please use a tool');
+const req = JSON.parse(await page.textContent('#req'));
+const names = (req.tools || []).map(t => t.function.name);
+check('profiles: capabilities narrow the tool list (no run_js; machine stays denied by the parent)', req.model === 'mock-pro' && !names.includes('run_js') && !names.includes('shell') && names.includes('ask'), names.join(','));
+check('profiles: a tool outside the scope is refused even when the model names it', /^Not run: run_js is not available in this session's scope \(org \/ research\)/.test(await visible().locator('.msg[data-role=tool] > details:not(.policy) pre').last().textContent()));
+check('profiles: the refusal is a smell with the scope', await page.evaluate(() => JSON.parse(localStorage['wh:smells']).some(r => r.kind === 'scope-refused' && r.profile === 'org / research')));
+check('profiles: the session can only move within its scope', await page.evaluate(() => [...document.querySelectorAll('#sprofile option')].map(o => o.textContent).join()) === 'org / research');
+await page.fill('#input', 'a concern for a branch');
+await page.click('[data-act=branch]');
+await page.waitForSelector('#app:not([data-busy])', { state: 'attached', timeout: 20000 });
+check('profiles: a branch inherits its source\'s profile', await page.evaluate(() => { const m = JSON.parse(localStorage['wh:meta']); const s = JSON.parse(localStorage['wh:s:' + m.active]); return !!s.parent && s.profile === JSON.parse(localStorage['wh:s:' + s.parent.id]).profile; }));
+
 await page.evaluate(() => { const m = JSON.parse(localStorage['wh:meta']); m.schema = 99; localStorage['wh:meta'] = JSON.stringify(m); });
 await page.reload();
 check('newer-schema data: build refuses to start', /schema 99/.test(await page.locator('#app pre').textContent()));

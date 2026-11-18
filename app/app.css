@@ -211,3 +211,12 @@ button.primary { border-color: var(--accent); background: var(--accent); color: 
 .cfgrow.bad, .cfgrow.bad code { color: var(--bad); }
 .modal textarea { width: 100%; }
 .cfgshow { max-height: 50vh; overflow: auto; }
+/* profiles: scope badges and grouped sidebar */
+#sessions > div[style] { box-shadow: inset 3px 0 0 var(--pc); }
+.pbadge { font: 9px ui-monospace, monospace; font-style: normal; color: var(--pc); border: 1px solid var(--pc); border-radius: 8px; padding: 0 5px; margin-left: 4px; white-space: nowrap; }
+.pgroup { margin: 8px 0 2px calc(var(--pd, 0) * 10px); padding-left: 6px; border-left: 3px solid var(--pc); font-size: 10px; text-transform: uppercase; letter-spacing: .05em; color: var(--dim); }
+.pgroup:first-child { margin-top: 0; }
+.item[data-prof] { border-left-color: var(--pc); }
+.caps { display: grid; grid-template-columns: repeat(auto-fill, minmax(90px, 1fr)); gap: 6px; }
+.field input[type=color] { padding: 0; height: 28px; }
+#model:disabled { opacity: .7; cursor: not-allowed; }

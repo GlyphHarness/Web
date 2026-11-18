@@ -2,7 +2,7 @@
 
 A client-side LLM chat harness served straight from this repo with GitHub Pages. No server, no build step: the browser holds the API key, the sessions and the tools.
 
-Status: working skeleton (v0.24.0). The OpenRouter path is written from the OpenAI-compatible conventions and has not yet been run against the live API.
+Status: working skeleton (v0.25.0). The OpenRouter path is written from the OpenAI-compatible conventions and has not yet been run against the live API.
 
 ## Run
 
@@ -175,6 +175,18 @@ A page can call `api.github.com` (it answers any origin) but not git's own HTTP 
 ### Sandbox
 
 `run_js` runs in a Worker started inside a hidden `sandbox="allow-scripts"` iframe whose CSP is `default-src 'none'`. The code cannot fetch, open sockets, import scripts or reach the page's storage. It is killed on timeout. `html` widgets get the same no-network CSP, so remote media goes only through the click-gated kinds. Verified in Chromium (`scripts/smoke-git.mjs`); Firefox and Safari are untested.
+
+### Profiles: scoped, hierarchical configuration
+
+Sessions can belong to a profile (Inspector → Profiles). Access is decided by configuration level, not by user. A profile has a parent, a colour, settings (model, helper, policy model, pace, branch budget), capabilities (run code, fan out, ask, machine, repositories none/read/write), an allowlist of repositories (`owner/name`, `owner/*`), its own policies, and locks. A session's scope is resolved down the chain:
+
+- **Settings** are overridden going down, unless a profile above locked them; a locked model shows the model box disabled. Where a profile supplies the model, choosing another one sets this session's own override instead of the global setting.
+- **Capabilities only narrow**: a child never grants what its parent withholds. The session's tool list is built from them, and a call to a tool outside the scope is refused even if the model names it (recorded as a `scope-refused` smell).
+- **Repositories** must be allowed by every profile in the chain that lists them; repo tools refuse others before any token is used.
+- **Policies** add up: Settings policies first, then each profile's; a lower profile cannot replace one above it.
+- **Hierarchy of sessions:** branches and folded sessions inherit their source's profile, and a session can only be moved to its profile or one below it. "New sessions use" picks the profile for new sessions.
+- **In the sidebar** sessions are grouped under their scope path (`org / research`), with a coloured edge and badge.
+- Profiles are part of paste config (merged by name, `parent` by name) and of steering fingerprints and log-repo session rows.
 
 ### Paste config
 

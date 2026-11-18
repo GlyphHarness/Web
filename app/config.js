@@ -26,7 +26,7 @@ export function plan(text, current) {
   let j;
   try { j = JSON.parse(String(text).trim()); } catch (e) { return { error: 'Not JSON: ' + e.message }; }
   if (!j || typeof j !== 'object' || Array.isArray(j)) return { error: 'Expected a JSON object.' };
-  const src = j.settings && typeof j.settings === 'object' ? j.settings : Object.fromEntries(Object.entries(j).filter(([k]) => k !== 'policies' && k !== 'webharness' && k !== 'v'));
+  const src = j.settings && typeof j.settings === 'object' ? j.settings : Object.fromEntries(Object.entries(j).filter(([k]) => !['policies', 'profiles', 'webharness', 'v'].includes(k)));
   const changes = [], refused = [], settings = {}, ctx = { providers: current.providers };
   let machine = null;
   for (const [k, v] of Object.entries(src)) {
@@ -67,7 +67,28 @@ export function plan(text, current) {
       }
     }
   }
-  return { changes, refused, next: { settings, policies, machine } };
+  // profiles merge by name; parent is given by name
+  let profiles = null;
+  if (j.profiles != null) {
+    if (!Array.isArray(j.profiles)) refused.push({ path: 'profiles', why: 'must be a list' });
+    else {
+      profiles = (current.profiles || []).map(p => structuredClone(p));
+      const byName = n => profiles.find(p => p.name === n);
+      for (const [i, p] of j.profiles.entries()) {
+        if (!p || !S(p.name) || !p.name.trim()) { refused.push({ path: `profiles[${i}]`, why: 'needs a name' }); continue; }
+        let t = byName(p.name);
+        if (p.remove === true) { if (t) { profiles.splice(profiles.indexOf(t), 1); for (const x of profiles) if (x.parent === t.id) x.parent = t.parent; changes.push({ path: `profile ${p.name}`, from: 'present', to: 'removed' }); } continue; }
+        if (!t) { t = { id: 'p' + Math.random().toString(36).slice(2, 10), name: p.name, color: S(p.color) ? p.color : '#7fb4ff', settings: {}, caps: {}, locks: [], policies: [] }; profiles.push(t); changes.push({ path: `profile ${p.name}`, from: '(none)', to: 'added' }); }
+        if ('parent' in p) { const par = p.parent ? byName(p.parent) : null; if (p.parent && !par) refused.push({ path: `profile ${p.name}.parent`, why: 'no profile named ' + p.parent }); else if (par && par.id === t.id) refused.push({ path: `profile ${p.name}.parent`, why: 'cannot be its own parent' }); else if ((t.parent || null) !== (par?.id || null)) { changes.push({ path: `profile ${p.name}.parent`, from: profiles.find(x => x.id === t.parent)?.name || '', to: p.parent || '' }); t.parent = par?.id; } }
+        for (const [k, v] of Object.entries(p.settings || {})) { if (SECRET.test(k) || !['model', 'helper', 'policyModel', 'pace', 'branchBudget'].includes(k)) { refused.push({ path: `profile ${p.name}.settings.${k}`, why: 'not a profile setting' }); continue; } if (t.settings[k] !== v) { changes.push({ path: `profile ${p.name}.settings.${k}`, from: t.settings[k] ?? '', to: v }); t.settings[k] = v; } }
+        for (const [k, v] of Object.entries(p.caps || {})) { const ok = k === 'repo' ? ['none', 'read', 'write'].includes(v) : ['run_js', 'fanout', 'ask', 'vm'].includes(k) && typeof v === 'boolean'; if (!ok) { refused.push({ path: `profile ${p.name}.caps.${k}`, why: 'invalid capability' }); continue; } if (t.caps[k] !== v) { changes.push({ path: `profile ${p.name}.caps.${k}`, from: t.caps[k] ?? 'inherit', to: v }); t.caps[k] = v; } }
+        if (Array.isArray(p.repos)) { const bad = p.repos.filter(r => !/^[\w.-]+\/[\w.*-]+$/.test(r)); if (bad.length) refused.push({ path: `profile ${p.name}.repos`, why: 'bad entries: ' + bad.join(', ') }); else { changes.push({ path: `profile ${p.name}.repos`, from: (t.repos || []).join(', '), to: p.repos.join(', ') }); t.repos = p.repos; } }
+        if (Array.isArray(p.locks)) { changes.push({ path: `profile ${p.name}.locks`, from: (t.locks || []).join(', '), to: p.locks.join(', ') }); t.locks = p.locks.filter(k => ['model', 'helper', 'policyModel', 'pace', 'branchBudget'].includes(k)); }
+        if (S(p.color) && p.color !== t.color) t.color = p.color;
+      }
+    }
+  }
+  return { changes, refused, next: { settings, policies, machine, profiles } };
 }
 
 // The current non-secret configuration, in the same shape plan() reads.
@@ -77,5 +98,7 @@ export function snapshot(current) {
     if (k === 'machine') settings.machine = current.machine;
     else if (current.settings[k] != null && current.settings[k] !== '') settings[k] = current.settings[k];
   }
-  return { webharness: 'config', v: 1, settings, policies: current.policies.map(p => Object.fromEntries(POLICY_FIELDS.filter(f => p[f] != null).map(f => [f, p[f]]))) };
+  const name = id => (current.profiles || []).find(p => p.id === id)?.name;
+  return { webharness: 'config', v: 1, settings, policies: current.policies.map(p => Object.fromEntries(POLICY_FIELDS.filter(f => p[f] != null).map(f => [f, p[f]]))),
+    profiles: (current.profiles || []).map(p => ({ name: p.name, ...(p.parent ? { parent: name(p.parent) } : {}), color: p.color, settings: p.settings, caps: p.caps, ...(p.repos ? { repos: p.repos } : {}), locks: p.locks })) };
 }

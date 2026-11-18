@@ -15,13 +15,14 @@ import * as smells from './smells.js';
 import { logRepo } from './logrepo.js';
 import * as asks from './ask.js';
 import * as config from './config.js';
+import * as prof from './profiles.js';
 import * as bridge from './bridge.js';
 import { render } from './widgets.js';
 import * as pat from './patterns.js';
 import { put, get, handlesIn } from './outstore.js';
 import { buildRequest, measure, report, padAttachment, inherit, imitatesNote, keptLines, corePrompt, EDGE_MIN, markedOnly, edgeReplies, turnOf, KINDS } from './context.js';
 
-export const VERSION = '0.24.0';
+export const VERSION = '0.25.0';
 const MAX_STEPS = 8; // model <-> tool round trips per user turn
 const MAX_BRANCHES = 6; // concerns per fan_out
 const FOLD_MAX = 2000; // chars of a fold handed back to the source
@@ -97,6 +98,13 @@ const SHELL = `
     <input id="budget" type="number" min="1000" step="1000">
     <p class="note" id="build"></p>
   </details>
+  <details><summary>Profiles <span class="count" id="profcount"></span></summary>
+    <p class="note">Scopes for sessions, by configuration level. A session in a profile resolves its settings down the chain (a locked setting cannot be overridden below), its capabilities only narrow, its repositories must be allowed at every level that lists them, and policies add up. Branches stay in their profile or one below it.</p>
+    <label>New sessions use</label>
+    <select id="newprofile"></select>
+    <div class="items" id="profiles"></div>
+    <button data-act="prof-add">+ profile</button>
+  </details>
   <details><summary>Policies <span class="count" id="polcount"></span></summary>
     <p class="note">Checked before every tool call. A call that breaks one is repaired by the policy model from the policy and the call alone, re-checked, and runs as repaired; the original stays visible. The pattern is matched against the call's arguments as JSON.</p>
     <div class="items" id="policies"></div>
@@ -124,6 +132,9 @@ const SHELL = `
     <select id="wire"><option value="calls">calls: structured, as the model made them</option><option value="notes">notes: one text line per call, results as text</option></select>
     <label>Replies, when first sent back to the model</label>
     <select id="edge"><option value="off">off: sent whole</option><option value="marks">marks: a long reply with "!" lines is sent as those lines</option><option value="helper">helper: marks, else condensed by the helper model</option></select>
+    <label>Profile (scope): what this session may use. Only this profile or one below it can be chosen; changing it can change the tool list, which breaks the cached prefix once.</label>
+    <select id="sprofile"></select>
+    <p class="note" id="sscope"></p>
     <label><input type="checkbox" id="repotools"> Repository tools (repo_read, repo_commit, repo_pr, repo_create; needs GitHub access in Settings). Turning this on or off changes the tool list, which breaks the cached prefix once.</label>
     <label><input type="checkbox" id="vmtools"> Linux machine (shell tool). Changes the tool list, which breaks the cached prefix once.</label>
     <label><input type="checkbox" id="keep"> Keep marks: the model flags lines to keep with "!" (adds one sentence to the system prompt)</label>
@@ -164,6 +175,13 @@ const gh = ghAuth(() => state.keys, trace); // mint and lookup calls appear in t
 const opt = () => ({ base: state.meta.settings.base?.[state.meta.settings.provider] || '', trace });
 const cur = () => state.sessions[state.meta.active];
 const provider = () => providers[state.meta.settings.provider] || providers.openrouter;
+// A session's resolved scope: its profile chain over the Settings values, then its
+// own overrides (profiles.js). cfg(s) is the settings a turn uses; toolsFor(s) the
+// tools its capabilities allow.
+const profiles = () => (state.meta.profiles ??= []);
+const eff = s => prof.effective(profiles(), s?.profile, state.meta.settings, s?.over);
+const cfg = s => eff(s).settings;
+const toolsFor = s => { const c = eff(s).caps; return defsFor(s).filter(d => prof.allowedTool(d.function.name, c)); };
 
 // ---------- message rendering ----------
 
@@ -319,7 +337,11 @@ const notice = (s, text) => { link?.emit('notice', { session: s.id, text }); thr
 function sessionRow(s) {
   const attrs = { 'data-id': s.id };
   if (s.parent) attrs['data-parent'] = s.parent.id;
-  return h('div', attrs, h('span', { text: s.title }), h('button', { 'data-act': 'drop', type: 'button', title: 'Delete session', text: '×' }));
+  const pr = profiles().find(p => p.id === s.profile);
+  const parentProfile = s.parent ? state.sessions[s.parent.id]?.profile : undefined;
+  const badge = pr && (!s.parent || parentProfile !== s.profile) ? h('i', { class: 'pbadge', style: `--pc:${pr.color || '#888'}`, title: eff(s).path, text: pr.name }) : '';
+  if (pr) attrs.style = `--pc:${pr.color || '#888'}`;
+  return h('div', attrs, h('span', { text: s.title }), badge, h('button', { 'data-act': 'drop', type: 'button', title: 'Delete session', text: '×' }));
 }
 
 function ledgerRow(e, i) {
@@ -355,14 +377,14 @@ const ask2 = (title, text, yes = 'OK', no = 'Cancel') => modal({ title, body: te
 
 // ---------- paste-to-configure (config.js) ----------
 
-const cfgCurrent = () => ({ settings: state.meta.settings, policies: policyList(), providers: Object.keys(providers), machine: vmWanted() });
+const cfgCurrent = () => ({ settings: state.meta.settings, policies: policyList(), profiles: profiles(), providers: Object.keys(providers), machine: vmWanted() });
 // Inputs re-read from state after a merge.
 function showSettings() {
   const set = state.meta.settings;
   $('#provider').value = set.provider; $('#model').value = set.model || ''; $('#helper').value = set.helper || '';
   $('#polmodel').value = set.policyModel || ''; $('#ghlabel').value = set.ghlabel || ''; $('#logrepo').value = set.logRepo || '';
   $('#budget').value = set.branchBudget || BRANCH_BUDGET; $('#pace').value = pace();
-  showBase(); renderPolicies(); showPrice();
+  showBase(); renderPolicies(); renderProfiles(); redrawSessions(); showPrice();
 }
 async function pasteConfig() {
   const ta = h('textarea', { rows: '10', class: 'mono', spellcheck: 'false', placeholder: '{"settings": {"model": "...", "helper": "..."}, "policies": [{"name": "...", "rule": "..."}]}' });
@@ -384,7 +406,8 @@ async function pasteConfig() {
   setTimeout(() => ta.focus());
   const go = await modal({ title: 'Paste config', body: [ta, out], actions: [{ text: 'Cancel', value: false, cancel: true }, { text: 'Apply', value: true, primary: true }] });
   if (!go || !last || last.error || !last.changes.length) return;
-  const { settings, policies, machine } = last.next;
+  const { settings, policies, machine, profiles: nextProfiles } = last.next;
+  if (nextProfiles) state.meta.profiles = nextProfiles;
   Object.assign(state.meta.settings, settings);
   if ('logRepo' in settings) state.meta.settings.logReady = false;
   if (policies) state.meta.settings.policyList = policies;
@@ -438,6 +461,53 @@ function policyList() {
   if (!Array.isArray(set.policyList)) { set.policyList = typeof set.policies === 'string' ? policy.fromText(set.policies) : structuredClone(policy.DEFAULT_LIST); delete set.policies; saveMeta(); }
   return set.policyList;
 }
+// ---------- profiles (profiles.js) ----------
+
+const CAP_LABEL = { run_js: 'run code', fanout: 'fan out', ask: 'ask', vm: 'machine' };
+function renderProfiles() {
+  const ps = profiles();
+  const opt = (v, t, sel) => Object.assign(h('option', { value: v, text: t }), { selected: sel });
+  const tri = (k, v) => h('select', { 'data-pf': 'cap.' + k }, opt('', 'inherit', v == null), opt('1', 'allow', v === true), opt('0', 'deny', v === false));
+  $('#profiles').replaceChildren(...ps.map(p => {
+    const e = prof.effective(ps, p.id, state.meta.settings);
+    return item({ kind: 'profile', name: e.path, meta: `${state.meta.order.filter(id => state.sessions[id]?.profile === p.id).length} sessions`, attrs: { 'data-prof': p.id, style: `--pc:${p.color}` }, tone: '',
+      body: [
+        h('div', { class: 'row2' }, field('name', h('input', { 'data-pf': 'name', value: p.name })), field('parent', h('select', { 'data-pf': 'parent' }, opt('', '(top level)', !p.parent), ...ps.filter(x => x.id !== p.id && !prof.chain(ps, x.id).some(a => a.id === p.id)).map(x => opt(x.id, prof.chain(ps, x.id).map(c => c.name).join(' / '), p.parent === x.id)))), field('colour', h('input', { type: 'color', 'data-pf': 'color', value: p.color, class: 'narrow' }))),
+        h('p', { class: 'note', text: 'Settings (blank = inherit; lock = no profile or session below may change it)' }),
+        ...prof.SETTING_KEYS.map(k => h('div', { class: 'row2' }, field(k + (e.from[k] && e.from[k] !== p.name ? ` (now: ${e.settings[k]} from ${e.from[k]})` : ''), h('input', { 'data-pf': 'set.' + k, value: p.settings?.[k] ?? '', list: /model|helper/i.test(k) ? 'models' : '' })), h('label', { class: 'check' }, Object.assign(h('input', { type: 'checkbox', 'data-pf': 'lock.' + k }), { checked: (p.locks || []).includes(k) }), ' lock'))),
+        h('p', { class: 'note', text: 'Capabilities (can only narrow what the parent allows)' }),
+        h('div', { class: 'caps' }, ...['run_js', 'fanout', 'ask', 'vm'].map(k => field(CAP_LABEL[k], tri(k, p.caps?.[k]))),
+          field('repos', h('select', { 'data-pf': 'cap.repo' }, opt('', 'inherit', p.caps?.repo == null), ...['none', 'read', 'write'].map(v => opt(v, v, p.caps?.repo === v))))),
+        field('allowed repositories (owner/name or owner/*, comma separated; blank = inherit)', h('input', { 'data-pf': 'repos', value: (p.repos || []).join(', '), class: 'mono' })),
+        h('p', { class: 'note', text: `resolved: ${Object.entries(e.caps).map(([k, v]) => `${CAP_LABEL[k] || k} ${v === true ? 'yes' : v === false ? 'no' : v}`).join(' · ')}${e.repoLists.length ? ' · repos ' + e.repoLists.map(r => r.list.join('|')).join(' ∩ ') : ''}${(p.policies || []).length ? ' · own policies: ' + p.policies.map(x => x.name).join(', ') : ''}` }),
+      ],
+      actions: [btn('delete', { 'data-act': 'prof-drop' })] });
+  }));
+  slot($('#profcount'), ps.length || '');
+  $('#newprofile').replaceChildren(opt('', '(no profile)', !state.meta.settings.newProfile), ...ps.map(p => opt(p.id, prof.chain(ps, p.id).map(c => c.name).join(' / '), state.meta.settings.newProfile === p.id)));
+  showScope();
+}
+// The current session's profile picker and resolved scope; the model box follows it.
+function showScope() {
+  const s = cur();
+  if (!s || !$('#sprofile')) return;
+  const ps = profiles(), e = eff(s);
+  const choices = prof.assignable(ps, s.profile);
+  const opt = (v, t, sel) => Object.assign(h('option', { value: v, text: t }), { selected: sel });
+  $('#sprofile').replaceChildren(...(s.profile ? [] : [opt('', '(no profile)', true)]), ...choices.map(p => opt(p.id, prof.chain(ps, p.id).map(c => c.name).join(' / '), p.id === s.profile)));
+  slot($('#sscope'), e.chain.length ? `model ${e.settings.model || '-'}${e.from.model ? ' (' + e.from.model + ')' : ''}${e.locked.size ? ' · locked: ' + [...e.locked.keys()].join(', ') : ''} · tools ${toolsFor(s).length}` : '');
+  const lockedModel = e.locked.has('model');
+  $('#model').value = e.settings.model || '';
+  $('#model').disabled = lockedModel;
+  $('#model').title = lockedModel ? `locked by profile ${e.locked.get('model')}` : '';
+  $('#pace').value = pace(s);
+}
+
+// Settings policies first; a profile adds its own but cannot replace one above it.
+function policiesFor(s) {
+  const base = policyList();
+  return [...base, ...eff(s).policies.filter(p => !base.some(b => b.name === p.name))];
+}
 function renderPolicies() {
   const list = policyList(), compiled = policy.compile(list.map(p => ({ ...p, on: true })));
   const fired = name => smells.count(r => r.policy === name && /^policy-/.test(r.kind));
@@ -468,6 +538,7 @@ function activate(id) {
   rule('active', `.thread:not([data-session="${id}"]),.stagebox:not([data-session="${id}"]){display:none}\n#sessions [data-id="${id}"]{background:var(--sel)}`);
   $('#title').value = s.title;
   $('#system').value = s.system;
+  showScope();
   $('#wire').value = s.wire || 'calls';
   $('#repotools').checked = !!s.tools?.includes('repo');
   $('#vmtools').checked = !!s.tools?.includes('vm');
@@ -568,10 +639,10 @@ function showPicker() {
   app.setAttribute('data-picking', '');
 }
 
+function pickModelSession(id) { const s = cur(), e = eff(s); if (e.from.model && e.from.model !== 'this session' || s?.over?.model) { (s.over ??= {}).model = id; saveSession(s); return true; } return false; }
 function pickModel(id) {
   $('#model').value = id;
-  state.meta.settings.model = id;
-  saveMeta();
+  if (!pickModelSession(id)) { state.meta.settings.model = id; saveMeta(); }
   showPrice();
   app.removeAttribute('data-picking');
 }
@@ -642,7 +713,7 @@ function retitle(s, title) {
 
 // One user-initiated run. Branches started inside it go through turns() directly.
 async function run(s) {
-  const set = state.meta.settings, p = provider();
+  const set = cfg(s), p = provider();
   if (!set.model) return notice(s, 'Choose a model first.');
   if (p.needsKey && !state.keys[set.provider]) return notice(s, 'Add an API key in Settings first.');
   busy = true; app.setAttribute('data-busy', ''); ctl = new AbortController();
@@ -743,7 +814,7 @@ function overview() {
 // Request > stream > tool calls > repeat, for one session.
 // Returns 'done', 'failed' or 'limit'. onFirst fires on the first response event.
 async function turns(s, depth, onFirst) {
-  const set = state.meta.settings, p = provider(), key = state.keys[set.provider];
+  const set = cfg(s), p = provider(), key = state.keys[set.provider];
   const shown = () => s.id === state.meta.active;
   const ctx = {
     pads: state.meta.pads, savePads: () => { saveMeta(); renderPads(); },
@@ -756,10 +827,10 @@ async function turns(s, depth, onFirst) {
     vm: s.tools?.includes('vm') ? vm() : null,
     ask: a => askCard(s, a),
     runtime: (id, what) => smell(s, { kind: 'policy-runtime', tool: 'shell', policy: id, detail: what.slice(0, 200), rule: policyList().find(p => p.name === id)?.rule }),
-    git: s.tools?.includes('repo') ? gitClient({ token: gh.token, trace, get, confirm: what => approve(s, what), readOnly: () => [state.meta.settings.logRepo].filter(Boolean) }) : null,
+    git: s.tools?.includes('repo') ? gitClient({ token: gh.token, trace, get, confirm: what => approve(s, what), readOnly: () => [state.meta.settings.logRepo].filter(Boolean), scope: repo => eff(s).repoAllowed(repo) ? null : `${repo} is outside this session's scope (${eff(s).path}).` }) : null,
   };
   for (let step = 0; step < MAX_STEPS; step++) {
-    const body = buildRequest(s, set.model, defsFor(s));
+    const body = buildRequest(s, set.model, toolsFor(s));
     // Cache affinity: ask OpenRouter for the upstream that served this session last, so
     // its prefix cache is warm. Fallbacks stay allowed. Outside the messages, so the prefix is unchanged.
     if (set.provider === 'openrouter' && s.upstream && s.pin !== false) body.provider = { order: [s.upstream], allow_fallbacks: true };
@@ -836,11 +907,14 @@ async function turns(s, depth, onFirst) {
     }
     for (const tc of calls) {
       ctx.audit = null;
-      const pol = await enforce(s, tc);
+      // scope: a tool the profile does not allow never runs, even if the model names it
+      const scopeNo = !toolsFor(s).some(d => d.function.name === tc.function.name) && tools_known(tc.function.name);
+      const pol = scopeNo ? null : await enforce(s, tc);
       let content;
       // pacing: the call waits as it will run (after any policy repair)
-      const go = pol?.refused ? 'release' : await hold(s, 'tool', `${tc.function.name} ${pol ? pol.to : await fullArgs(tc)}`);
-      if (go === 'skip') content = 'Not run: skipped by the user.';
+      const go = scopeNo || pol?.refused ? 'release' : await hold(s, 'tool', `${tc.function.name} ${pol ? pol.to : await fullArgs(tc)}`);
+      if (scopeNo) { content = `Not run: ${tc.function.name} is not available in this session's scope (${eff(s).path || 'no profile'}).`; smell(s, { kind: 'scope-refused', tool: tc.function.name, detail: eff(s).path }); }
+      else if (go === 'skip') content = 'Not run: skipped by the user.';
       else if (pol?.refused) {
         content = `Not run: policy ${pol.id} (${pol.rule}): ${pol.refused}`;
         pat.trailAdd({ t: Date.now(), ...ctx.by(), tool: tc.function.name, shape: 'policy-refused', via: 'policy', ok: false, chars: content.length, ms: 0 });
@@ -863,15 +937,17 @@ async function turns(s, depth, onFirst) {
   return 'limit';
 }
 
+const tools_known = name => defsFor({ tools: ['ask', 'repo', 'vm'] }).some(d => d.function.name === name);
+
 // ---------- pacing: hold model requests and/or tool calls ----------
 
 // settings.pace: run | requests | tools | both. A held step is a card with what
 // will go out; release, release all (back to run) or skip. The paired agent can
 // release too (bridge directive "release").
 const held = new Map();
-const pace = () => state.meta.settings.pace || 'run';
+const pace = s => (s ? cfg(s).pace : state.meta.settings.pace) || 'run';
 function hold(s, kind, detail) {
-  const p = pace();
+  const p = pace(s);
   if (p === 'run' || (p === 'requests' && kind !== 'request') || (p === 'tools' && kind !== 'tool')) return Promise.resolve('release');
   return new Promise(ok => {
     const id = uid('h');
@@ -888,6 +964,11 @@ function hold(s, kind, detail) {
   });
 }
 function letLoose(by = 'you') {
+  // where the pace comes from a profile, the session gets its own "run" (unless locked)
+  for (const x of state.meta.order.map(id => state.sessions[id]).filter(Boolean)) {
+    const e = eff(x);
+    if (e.from.pace && e.from.pace !== 'this session' && !e.locked.has('pace')) { (x.over ??= {}).pace = 'run'; saveSession(x); }
+  }
   state.meta.settings.pace = 'run'; saveMeta(); $('#pace').value = 'run';
   for (const x of [...held.values()]) x.done('release', by);
 }
@@ -935,8 +1016,8 @@ function askCard(s, args) {
 // Check a call against the policies; on a match ask the policy model for a repair.
 // Returns null (no policy applies), {..., to} (run this instead) or {..., refused}.
 async function enforce(s, tc) {
-  const set = state.meta.settings;
-  const pols = policy.compile(policyList());
+  const set = cfg(s);
+  const pols = policy.compile(policiesFor(s));
   let args = tc.function.arguments || '{}';
   try {
     const a = JSON.parse(args);
@@ -944,7 +1025,7 @@ async function enforce(s, tc) {
   } catch {}
   const p = policy.broken(pols, tc.function.name, args)[0];
   if (!p) return null;
-  const def = defsFor(s).find(d => d.function.name === tc.function.name);
+  const def = toolsFor(s).find(d => d.function.name === tc.function.name);
   const model = set.policyModel || set.helper || set.model;
   const rec = { id: p.id, rule: p.rule, model, from: args };
   let fix = null;
@@ -974,10 +1055,10 @@ async function relog(s, tc, to) {
 // reaches a session's cached prefix.
 function steerOf(s) {
   const set = state.meta.settings;
-  return smells.fp([s.core || 0, s.keep ? 1 : 0, s.edge || '', s.system || '', JSON.stringify(policyList()), JSON.stringify(defsFor(s).map(d => d.function.name + d.function.description))].join('\u0000'));
+  return smells.fp([s.core || 0, s.keep ? 1 : 0, s.edge || '', s.system || '', eff(s).path, JSON.stringify(policiesFor(s)), JSON.stringify(toolsFor(s).map(d => d.function.name + d.function.description))].join('\u0000'));
 }
 function smell(s, row) {
-  const r = smells.add({ session: s.id, model: state.meta.settings.model, steer: steerOf(s), ...row });
+  const r = smells.add({ session: s.id, model: cfg(s).model, profile: eff(s).path || undefined, steer: steerOf(s), ...row });
   link?.emit('smell', r);
   renderSmells();
   if (r.policy) renderPolicies();
@@ -1004,7 +1085,7 @@ function renderSmells() {
 
 // One request to a side model (policy repair); traced, with its own ledger row.
 async function aux(s, model, system, content, kind) {
-  const set = state.meta.settings, p = provider();
+  const set = cfg(s), p = provider();
   const body = { model, messages: [{ role: 'system', content: system }, { role: 'user', content }], stream: true };
   let out = '', usage = null;
   for await (const ev of p.stream(body, state.keys[set.provider], ctl?.signal, opt())) {
@@ -1026,7 +1107,7 @@ async function aux(s, model, system, content, kind) {
 const HELPER_SYSTEM = 'You filter tool output for another program. You are given WANT and OUTPUT. Reply with only the parts of OUTPUT that answer WANT: at most 12 short lines, values copied exactly, no commentary. If OUTPUT does not contain it, reply exactly: not found';
 
 async function helper(s, want, text) {
-  const set = state.meta.settings, p = provider();
+  const set = cfg(s), p = provider();
   const body = { model: set.helper, messages: [{ role: 'system', content: HELPER_SYSTEM }, { role: 'user', content: `WANT: ${want}\n\nOUTPUT:\n${text.slice(0, 60000)}` }], stream: true };
   let out = '', usage = null;
   for await (const ev of p.stream(body, state.keys[set.provider], ctl?.signal, opt())) {
@@ -1065,12 +1146,12 @@ const concernMessage = (id, task, deps = '') => `concern ${id}: ${task}\n${deps 
 
 function fork(source, id, cut) {
   const b = newSession({
-    title: '↳ ' + id, system: source.system, tools: source.tools, wire: source.wire, keep: source.keep, core: source.core, edge: source.edge, sent: Math.min(source.sent || 0, cut), padSeen: { ...source.padSeen },
+    title: '↳ ' + id, system: source.system, tools: source.tools, profile: source.profile, over: source.over ? { ...source.over } : undefined, wire: source.wire, keep: source.keep, core: source.core, edge: source.edge, sent: Math.min(source.sent || 0, cut), padSeen: { ...source.padSeen },
     parent: { id: source.id, at: cut, concern: id },
     messages: structuredClone(source.messages.slice(0, cut)),
   });
   inherit(b.id, source.id);
-  ($$(`#sessions [data-parent="${source.id}"]`).at(-1) || $(`#sessions [data-id="${source.id}"]`)).after(sessionRow(b));
+  redrawSessions();
   return b;
 }
 
@@ -1132,7 +1213,7 @@ const POCKET_REQUEST = 'Write the pocket that replaces this conversation for who
 // Rough cost case for folding now, from the last request and the catalogue prices.
 function foldCase(s) {
   const now = s.ledger.at(-1)?.prompt || Math.ceil(JSON.stringify(s.messages).length / 4);
-  const after = Math.ceil((s.system.length + JSON.stringify(defsFor(s)).length) / 4) + 600;
+  const after = Math.ceil((s.system.length + JSON.stringify(toolsFor(s)).length) / 4) + 600;
   const m = catalogue.find(m => m.id === state.meta.settings.model);
   const pin = Number(m?.pricing.prompt) || 0, pc = m?.pricing.input_cache_read != null ? Number(m.pricing.input_cache_read) : pin, pout = Number(m?.pricing.completion) || 0;
   const saving = (now - after) * pc, cost = now * pc + 600 * pout + after * (pin - pc);
@@ -1160,7 +1241,7 @@ const download = (name, obj) => {
 
 const actions = {
   trace() { download('webharness-' + new Date().toISOString().replace(/[:.]/g, '-') + '.trace', { kind: 'webharness.trace', version: 1, build: VERSION, exchanges: trace, trail: pat.trail(), smells: smells.all(), proposals: smells.proposals() }); },
-  new() { logSync('session start'); const s = newSession({ keep: true, core: 2, edge: 'marks', ...(() => { const t = ['ask', ...(gh.mode() ? ['repo'] : []), ...(vmWanted() && vmReady() ? ['vm'] : [])]; return t.length ? { tools: t } : {}; })() }); $('#sessions').prepend(sessionRow(s)); activate(s.id); $('#input').focus(); },
+  new() { logSync('session start'); const np = profiles().some(p => p.id === state.meta.settings.newProfile) ? state.meta.settings.newProfile : undefined; const s = newSession({ keep: true, core: 2, edge: 'marks', ...(np ? { profile: np } : {}), ...(() => { const t = ['ask', ...(gh.mode() ? ['repo'] : []), ...(vmWanted() && vmReady() ? ['vm'] : [])]; return t.length ? { tools: t } : {}; })() }); redrawSessions(); activate(s.id); $('#input').focus(); },
   import() { $('#file').click(); },
   async export() {
     const s = cur(), bundle = exportBundle(s), blobs = {};
@@ -1177,6 +1258,15 @@ const actions = {
     let copied = false;
     try { await navigator.clipboard.writeText(text); copied = true; } catch {}
     modal({ title: copied ? 'Config copied' : 'Config', body: [copied ? 'Copied to the clipboard (no credentials):' : 'Copy it from here (no credentials):', h('pre', { class: 'cfgshow', text })] });
+  },
+  'prof-add'() { const ps = profiles(); const p = { id: uid('p'), name: 'profile-' + (ps.length + 1), color: prof.PALETTE[ps.length % prof.PALETTE.length], settings: {}, caps: {}, locks: [], policies: [] }; ps.push(p); saveMeta(); renderProfiles(); const c = $(`#profiles [data-prof="${p.id}"]`); c.open = true; c.querySelector('[data-pf=name]').focus(); },
+  async 'prof-drop'(el) {
+    const id = el.closest('[data-prof]').dataset.prof, ps = profiles(), p = ps.find(x => x.id === id);
+    const used = state.meta.order.filter(x => state.sessions[x]?.profile === id).length, kids = ps.filter(x => x.parent === id).length;
+    if (!await ask2('Delete profile?', `Delete "${p.name}"? ${used} sessions move to its parent${kids ? `, and ${kids} profiles below it move up a level` : ''}.`, 'Delete')) return;
+    for (const x of state.meta.order.map(i => state.sessions[i]).filter(Boolean)) if (x.profile === id) { x.profile = p.parent || undefined; saveSession(x); }
+    for (const x of ps) if (x.parent === id) x.parent = p.parent || undefined;
+    ps.splice(ps.indexOf(p), 1); saveMeta(); renderProfiles(); redrawSessions();
   },
   'pol-add'() { const list = policyList(); let n = list.length + 1; while (list.some(p => p.name === 'policy-' + n)) n++; list.push({ name: 'policy-' + n, tool: '*', pattern: '', flags: '', rule: '', on: true }); saveMeta(); renderPolicies(); const c = $(`#policies [data-pol="${list.length - 1}"]`); c.open = true; c.querySelector('[data-pf=name]').focus(); },
   'pol-drop'(el) { const i = Number(el.closest('[data-pol]').dataset.pol); policyList().splice(i, 1); saveMeta(); renderPolicies(); },
@@ -1237,8 +1327,8 @@ const actions = {
       pocket = m.content;
     }
     const epoch = (src.epoch || 1) + 1;
-    const n = newSession({ title: src.title.replace(/ · epoch \d+$/, '') + ' · epoch ' + epoch, system: src.system, tools: src.tools, wire: src.wire, keep: src.keep, core: src.core, edge: src.edge, epoch, from: src.id });
-    $('#sessions').prepend(sessionRow(n));
+    const n = newSession({ title: src.title.replace(/ · epoch \d+$/, '') + ' · epoch ' + epoch, system: src.system, tools: src.tools, profile: src.profile, over: src.over ? { ...src.over } : undefined, wire: src.wire, keep: src.keep, core: src.core, edge: src.edge, epoch, from: src.id });
+    redrawSessions();
     push(n, { role: 'user', content: 'Pocket:\n' + pocket });
     activate(n.id);
   },
@@ -1319,7 +1409,30 @@ function bind() {
     s.tools = e.target.checked ? [...new Set([...(s.tools || []), 'vm'])] : (s.tools || []).filter(t => t !== 'vm');
     saveSession(s);
   });
-  $('#pace').value = pace();
+  renderProfiles();
+  $('#newprofile').addEventListener('change', e => { state.meta.settings.newProfile = e.target.value || undefined; saveMeta(); });
+  $('#profiles').addEventListener('change', e => {
+    const f = e.target.dataset.pf, card = e.target.closest('[data-prof]');
+    if (!f || !card) return;
+    const p = profiles().find(x => x.id === card.dataset.prof), v = e.target.type === 'checkbox' ? e.target.checked : e.target.value.trim();
+    if (f === 'name') p.name = v || p.name;
+    else if (f === 'parent') p.parent = v || undefined;
+    else if (f === 'color') p.color = v;
+    else if (f === 'repos') p.repos = v ? v.split(/[\s,]+/).filter(Boolean) : undefined;
+    else if (f.startsWith('set.')) { const k = f.slice(4); p.settings ??= {}; if (v === '') delete p.settings[k]; else p.settings[k] = k === 'branchBudget' ? Number(v) || undefined : v; }
+    else if (f.startsWith('lock.')) { const k = f.slice(5); p.locks = (p.locks || []).filter(x => x !== k); if (v) p.locks.push(k); }
+    else if (f.startsWith('cap.')) { const k = f.slice(4); p.caps ??= {}; if (v === '') delete p.caps[k]; else p.caps[k] = k === 'repo' ? v : v === '1'; }
+    saveMeta();
+    const open = card.open; renderProfiles(); const again = $(`#profiles [data-prof="${p.id}"]`); if (again) again.open = open;
+    redrawSessions();
+  });
+  $('#sprofile').addEventListener('change', async e => {
+    const s = cur(), to = e.target.value || undefined, before = toolsFor(s).map(d => d.function.name).join();
+    const after = (() => { const o = s.profile; s.profile = to; const t = toolsFor(s).map(d => d.function.name).join(); s.profile = o; return t; })();
+    if (before !== after && s.messages.length && !await ask2('Change profile?', `This changes the session's tools (${after.split(',').length} instead of ${before.split(',').length}), which breaks the cached prefix once.`, 'Change')) { showScope(); return; }
+    s.profile = to; saveSession(s); redrawSessions(); showScope(); renderProfiles();
+  });
+  $('#pace').value = pace(cur());
   $('#pace').addEventListener('change', e => { if (e.target.value === 'run') letLoose(); else { state.meta.settings.pace = e.target.value; saveMeta(); } });
   $('#polmodel').value = state.meta.settings.policyModel || '';
   $('#toolnames').replaceChildren(...['*', ...defsFor({ tools: ['repo', 'vm'] }).map(d => d.function.name)].map(n => h('option', { value: n })));
@@ -1339,7 +1452,8 @@ function bind() {
   $('#vmon').checked = vmWanted();
   $('#vmon').addEventListener('change', e => { try { localStorage.setItem('wh:vm', e.target.checked ? '1' : '0'); } catch {} location.reload(); });
   $('#wire').addEventListener('change', e => { const s = cur(); s.wire = e.target.value; saveSession(s); showCore(); });
-  $('#model').addEventListener('change', e => { state.meta.settings.model = e.target.value.trim(); saveMeta(); showPrice(); });
+  // a session whose profile supplies the model gets its own override; otherwise the Settings value changes
+  $('#model').addEventListener('change', e => { const s = cur(), e2 = eff(s), v = e.target.value.trim(); if (e2.from.model && e2.from.model !== 'this session' || s?.over?.model) { (s.over ??= {}).model = v; saveSession(s); } else { state.meta.settings.model = v; saveMeta(); } showPrice(); showScope(); });
   $('#model').addEventListener('input', showPicker);
   $('#model').addEventListener('focus', e => { e.target.select(); showPicker(); });
   $('#model').addEventListener('blur', () => app.removeAttribute('data-picking'));
@@ -1395,11 +1509,28 @@ function bind() {
 }
 
 // Sidebar rows: top-level sessions in order, each followed by its branches.
+// Sidebar: top-level sessions grouped by profile (in profile-tree order), each
+// followed by its branches. A header names the scope; a badge marks a branch that
+// was moved to a subordinate profile.
 function rows() {
-  const all = state.meta.order.map(id => state.sessions[id]);
+  const all = state.meta.order.map(id => state.sessions[id]).filter(Boolean);
   const under = s => [sessionRow(s), ...all.filter(x => x.parent?.id === s.id).reverse().flatMap(under)];
-  return all.filter(s => !s.parent || !state.sessions[s.parent.id]).flatMap(under);
+  const tops = all.filter(s => !s.parent || !state.sessions[s.parent.id]);
+  const ps = profiles();
+  const order = [undefined, ...ps.slice().sort((a, b) => prof.chain(ps, a.id).map(p => p.name).join('/').localeCompare(prof.chain(ps, b.id).map(p => p.name).join('/'))).map(p => p.id)];
+  const out = [];
+  for (const id of order) {
+    const group = tops.filter(s => (ps.some(p => p.id === s.profile) ? s.profile : undefined) === id);
+    if (!group.length) continue;
+    if (ps.length) {
+      const p = ps.find(x => x.id === id), depth = p ? prof.chain(ps, id).length - 1 : 0;
+      out.push(h('p', { class: 'pgroup', style: `--pc:${p?.color || 'var(--line)'};--pd:${depth}`, text: p ? prof.chain(ps, id).map(x => x.name).join(' / ') : 'no profile' }));
+    }
+    out.push(...group.flatMap(under));
+  }
+  return out;
 }
+const redrawSessions = () => { $('#sessions').replaceChildren(...rows()); rule('active', `.thread:not([data-session="${state.meta.active}"]),.stagebox:not([data-session="${state.meta.active}"]){display:none}\n#sessions [data-id="${state.meta.active}"]{background:var(--sel)}`); };
 
 export function boot(env) {
   load(); // throws (and the shell shows why) if stored data is newer than this build
@@ -1473,10 +1604,10 @@ function logs() {
 function logPayload(since) {
   const list = state.meta.order.map(id => state.sessions[id]).filter(Boolean);
   const sm = smells.all();
-  const steering = [...new Map(list.map(x => [steerOf(x), x])).entries()].map(([fp, x]) => ({ fp, core: corePrompt(x), system: x.system || '', policies: policyList(), tools: defsFor(x).map(d => d.function.name) }));
+  const steering = [...new Map(list.map(x => [steerOf(x), x])).entries()].map(([fp, x]) => ({ fp, core: corePrompt(x), system: x.system || '', policies: policiesFor(x), profile: eff(x).path, tools: toolsFor(x).map(d => d.function.name) }));
   const sessions = list.filter(x => (x.ledger.at(-1)?.t || x.created) > since).map(x => {
     const sum = k => x.ledger.reduce((n, e) => n + (Number(e[k]) || 0), 0);
-    return { session: x.id, parent: x.parent?.id || null, created: x.created, model: x.ledger.at(-1)?.model || null, steer: steerOf(x), tools: x.tools || [], requests: x.ledger.filter(e => !e.helper).length, side: x.ledger.filter(e => e.helper).length, prompt: sum('prompt'), cached: sum('cached'), completion: sum('completion'), cost: +sum('cost').toFixed(6), smells: sm.filter(r => r.session === x.id).length };
+    return { session: x.id, parent: x.parent?.id || null, profile: eff(x).path || null, created: x.created, model: x.ledger.at(-1)?.model || null, steer: steerOf(x), tools: x.tools || [], requests: x.ledger.filter(e => !e.helper).length, side: x.ledger.filter(e => e.helper).length, prompt: sum('prompt'), cached: sum('cached'), completion: sum('completion'), cost: +sum('cost').toFixed(6), smells: sm.filter(r => r.session === x.id).length };
   });
   return { smells: sm, sessions, steering, proposals: smells.proposals() };
 }
@@ -1576,7 +1707,7 @@ async function startBridge(pair, env) {
         waiting.delete(turn); w({ content, tool_calls });
         return { answered: turn };
       },
-      state: () => ({ active: state.meta.active, busy, settings: { ...set }, sessions: state.meta.order.map(id => { const s = state.sessions[id]; return { id, title: s.title, parent: s.parent?.id || null, messages: s.messages.length, ledger: s.ledger?.length || 0 }; }) }),
+      state: () => ({ active: state.meta.active, busy, settings: { ...set }, profiles: profiles().map(p => ({ id: p.id, name: p.name, parent: p.parent || null })), sessions: state.meta.order.map(id => { const s = state.sessions[id]; return { id, title: s.title, profile: eff(s).path || null, parent: s.parent?.id || null, messages: s.messages.length, ledger: s.ledger?.length || 0 }; }) }),
       session: ({ id }) => exportBundle(state.sessions[id || state.meta.active]),
       trace: ({ from = 0 }) => trace.slice(from),
       trail: () => pat.trail(),

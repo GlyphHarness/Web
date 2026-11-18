@@ -21,6 +21,8 @@ export function client(env) {
     // the repository and the least permission this request needs decide which token is used
     const repo = /^\/repos\/([^/]+\/[^/]+)/.exec(path)?.[1] || body?.variables?.i?.branch?.repositoryNameWithOwner;
     const level = method === 'GET' ? 'read' : /\/pulls$/.test(path) ? 'pr' : 'write';
+    const out = repo && env.scope?.(repo);
+    if (out) throw new Error(out);
     if (level !== 'read' && repo && env.readOnly?.().some(r => r.toLowerCase() === repo.toLowerCase())) throw new Error(`${repo} is read-only here: it is the log repo, written only by the harness. Propose changes through a review instead.`);
     const tok = await env.token(repo, level);
     if (!tok) throw new Error('No GitHub token is set.');
@@ -176,6 +178,8 @@ export function client(env) {
   async function create(a) {
     if (!/^[\w.-]+$/.test(a.name || '')) throw new Error('name must be a plain repository name');
     if (a.owner && !/^[\w.-]+$/.test(a.owner)) throw new Error('owner must be an account or organization name');
+    const out = a.owner && env.scope?.(a.owner + '/' + a.name);
+    if (out) throw new Error(out);
     const body = { name: a.name, private: a.private !== false, description: a.description || '', auto_init: a.readme !== false };
     if (!(await env.confirm({ what: 'repository', repo: (a.owner ? a.owner + '/' : '') + a.name, title: body.private ? 'private' : 'PUBLIC', head: '', base: '', body: body.description }))) return 'Not created: the user declined.';
     const r = await call('POST', a.owner ? `/orgs/${a.owner}/repos` : '/user/repos', body);
