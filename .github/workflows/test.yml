@@ -49,6 +49,10 @@ jobs:
       - name: Serve
         run: (python3 -m http.server 8787 >/dev/null 2>&1 &) && sleep 1
       - name: Run
+        # the machine's network requests are made inside the isolation service worker's reach;
+        # Playwright only routes (mocks) those with this switch, otherwise gh api reaches the real GitHub
+        env:
+          PW_EXPERIMENTAL_SERVICE_WORKER_NETWORK_EVENTS: '1'
         run: node scripts/ci.mjs ${{ steps.pick.outputs.suites }}
       - name: Report
         if: always()
