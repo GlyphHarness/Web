@@ -98,6 +98,7 @@ export function machine(env) {
   // and harness events (what the harness ran for itself), never mixed.
   const viewers = new Set(), watchers = new Set();
   let quiet = 0;
+  let activeSession = null; // session id of the command currently running on the machine
   const view = seg => { for (const v of viewers) v(seg); };
   const event = e => { const x = { t: Date.now(), ...e }; for (const w of watchers) w(x); return x; };
   const note = label => event({ label });
@@ -110,6 +111,7 @@ export function machine(env) {
     const sent = Object.entries(req.headers || {}).find(([k]) => k.toLowerCase() === 'authorization')?.[1] || '';
     if (!sent.includes(PLACEHOLDER)) return null;
     const repo = /^\/repos\/([^/]+\/[^/]+)/.exec(u.pathname)?.[1];
+    if (repo && env.sessionCheck?.(activeSession, repo) === false) return { status: 403, body: `${repo} is not available in this session.` };
     const level = (req.method || 'GET') === 'GET' ? 'read' : /\/pulls$/.test(u.pathname) ? 'pr' : 'write';
     let why = '';
     const tok = await env.token(repo, level).catch(e => { why = e.message || String(e); return ''; });
@@ -308,7 +310,7 @@ export function machine(env) {
 
   return {
     status: () => status,
-    run: (cmd, timeoutS, opt) => exec(cmd, timeoutS, opt),
+    run: async (cmd, timeoutS, opt) => { activeSession = opt?.session ?? null; try { return await exec(cmd, timeoutS, opt); } finally { activeSession = null; } },
     jobs: () => [...running.entries()].map(([id, j]) => ({ id, ...j, ms: Date.now() - j.t0 })),
     cancel, save, restore, stop,
     send: data => input?.(data),
