@@ -17,6 +17,7 @@
 //   wh show [-i id] [-n 6]                the last turns, one line each
 //   wh assess [-i id] [--all]             what is new since the last assess (then checked off)
 //   wh flags [-i id] | wh ok <n…>         open watcher flags; check flags off as handled
+//   wh review [-i id]                     assess (what is new) then every open flag, in one call
 //   wh watch [-i id]                      assess the calls not checked yet
 //   wh cost                               by strategy and model; checkpoints by kind
 //   wh raw [-i id] [-n 40]                the last request's raw stream (tool-call and finish chunks)
@@ -221,6 +222,10 @@ const CMDS = {
     const id = flagOf(a, 'i') || readState().current, p = await main(), s = await sess(p, id);
     const f = (s?.flags || []).map((x, i) => ({ n: i, ...x })).filter(x => !x.handled);
     return { text: f.map(x => `${x.n} #${x.at} ${x.tool}: ${x.why}`).join('\n') || 'no open flags', data: f };
+  },
+  async review(a) { // assess what is new, then list every open flag (one call instead of two)
+    const r = await CMDS.assess([...a]), f = await CMDS.flags([...a]);
+    return { ok: r.ok !== false, text: [r.text, 'open flags:\n' + f.text].join('\n'), data: { assess: r.data, flags: f.data } };
   },
   async ok(a) {
     const id = flagOf(a, 'i') || readState().current, p = await main();
