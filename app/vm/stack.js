@@ -159,7 +159,8 @@ function connect(name, shared, conn, certbuf) {
                     // WebHarness: the guest's GH_TOKEN is a placeholder; the page puts the real
                     // credential on GitHub API requests here, so it never enters the machine.
                     Promise.resolve(globalThis.whVmAuth ? globalThis.whVmAuth(connObj.address, connObj.request) : null).then((auth) => {
-                        if (auth) connObj.request.headers = { ...Object.fromEntries(Object.entries(connObj.request.headers || {}).filter(([k]) => k.toLowerCase() !== 'authorization')), Authorization: auth }; // one Authorization, whatever case the guest used
+                        if (auth && typeof auth === 'object') return new Response(auth.body, { status: auth.status });
+                        if (typeof auth === 'string' && auth) connObj.request.headers = { ...Object.fromEntries(Object.entries(connObj.request.headers || {}).filter(([k]) => k.toLowerCase() !== 'authorization')), Authorization: auth }; // one Authorization, whatever case the guest used
                         return fetch(connObj.address, connObj.request);
                     }).then((resp) => {
                         globalThis.whVmNet?.({ url: connObj.address, method: connObj.request.method, status: resp.status });
