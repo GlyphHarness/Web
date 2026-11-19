@@ -1,0 +1,1228 @@
+{
+ "at": "2026-11-19T19:20:28.880Z",
+ "sessions": [
+  {
+   "id": "smwnwx0zqhp1d",
+   "title": "issue 1 on hy4-flash",
+   "models": [
+    "tencent/hy4-flash"
+   ],
+   "strategies": [
+    "strat-stem-1.0"
+   ],
+   "slices": [
+    {
+     "group": "strat-stem-1.0 | tencent/hy4-flash",
+     "requests": 25,
+     "cost": 0.001896183,
+     "prompt": 261527,
+     "cached": 242688,
+     "out": 6212,
+     "reasoning": 2549,
+     "costs": [
+      0.0001503775,
+      0.0000448585,
+      0.000046223,
+      0.0000856385,
+      0.00008807,
+      0.000097363,
+      0.0000565525,
+      0.0000499505,
+      0.0000280305,
+      0.000055992,
+      0.000042158,
+      0.0000548905,
+      0.000030861,
+      0.0000426215,
+      0.0001118715,
+      0.000152678,
+      0.0002289425,
+      0.0000642235,
+      0.0000911705,
+      0.0000415965,
+      0.000099123,
+      0.000059907,
+      0.0000726075,
+      0.000038022,
+      0.000062454
+     ],
+     "firstHit": 1
+    },
+    {
+     "group": "helper:helper | tencent/hy4-flash",
+     "requests": 9,
+     "cost": 0.0041699315,
+     "prompt": 30092,
+     "cached": 0,
+     "out": 22183,
+     "reasoning": 20525,
+     "costs": [
+      0.001400027,
+      0.001038645,
+      0.000071038,
+      0.000510511,
+      0.000434675,
+      0.0002518415,
+      0.0001896605,
+      0.000064485,
+      0.0002090485
+     ],
+     "firstHit": null
+    },
+    {
+     "group": "helper:watch | qwen/qwen3.7-flash",
+     "requests": 44,
+     "cost": 0.00069534,
+     "prompt": 11738,
+     "cached": 0,
+     "out": 2640,
+     "reasoning": 2640,
+     "costs": [
+      0.0000213,
+      0.00001293,
+      0.00001479,
+      0.0000129,
+      0.00001209,
+      0.00003867,
+      0.00001197,
+      0.00001269,
+      0.00001161,
+      0.00001206,
+      0.00001254,
+      0.00001233,
+      0.00001263,
+      0.00002028,
+      0.00002034,
+      0.00002421,
+      0.00001218,
+      0.00001215,
+      0.00001176,
+      0.00001263,
+      0.00001218,
+      0.00002349,
+      0.00001134,
+      0.00001119,
+      0.00001179,
+      0.00001797,
+      0.00001182,
+      0.00001131,
+      0.00002148,
+      0.0000114,
+      0.0000117,
+      0.00001212,
+      0.00002019,
+      0.0000201,
+      0.00001347,
+      0.00003624,
+      0.00001341,
+      0.00001293,
+      0.00001563,
+      0.00001272,
+      0.00001878,
+      0.00001824,
+      0.00001269,
+      0.00002109
+     ],
+     "firstHit": null
+    }
+   ],
+   "messages": 85,
+   "turns": 4,
+   "requests": {
+    "main": 25,
+    "helper": 53,
+    "helperKinds": {
+     "helper": 9,
+     "watch": 44
+    }
+   },
+   "tokens": {
+    "prompt": 261527,
+    "cached": 242688,
+    "write": 0,
+    "out": 6212,
+    "reasoning": 2549
+   },
+   "cost": {
+    "total": 0.006761454500000003,
+    "main": 0.001896183,
+    "helper": 0.0048652715000000015,
+    "perRequestMedian": 0.000059907,
+    "helperMax": 0.001400027
+   },
+   "cache": {
+    "overallPct": 93,
+    "firstHitAtRequest": 1,
+    "curve": [
+     0,
+     88,
+     95,
+     70,
+     95,
+     84,
+     93,
+     94,
+     98,
+     95,
+     95,
+     94,
+     97,
+     94,
+     96,
+     76,
+     97,
+     98,
+     99,
+     98,
+     98,
+     95,
+     96,
+     99,
+     97
+    ]
+   },
+   "growth": {
+    "promptCurve": [
+     3875,
+     4367,
+     4603,
+     6247,
+     6438,
+     7639,
+     7987,
+     8449,
+     8658,
+     8923,
+     9118,
+     9498,
+     9723,
+     10055,
+     10380,
+     13497,
+     13747,
+     13846,
+     14034,
+     14135,
+     14438,
+     15088,
+     15399,
+     15491,
+     15892
+    ],
+    "outCurve": [
+     105,
+     147,
+     220,
+     91,
+     488,
+     316,
+     183,
+     143,
+     57,
+     190,
+     104,
+     161,
+     56,
+     57,
+     591,
+     166,
+     1379,
+     243,
+     449,
+     71,
+     466,
+     86,
+     221,
+     74,
+     148
+    ],
+    "reasoningShare": 0.41
+   },
+   "calls": {
+    "total": 56,
+    "byTool": {
+     "repo_read": 15,
+     "output_read": 38,
+     "repo_commit": 3
+    },
+    "byResultClass": {
+     "ok": 56
+    },
+    "repeats": 2,
+    "repeatRuns": 2,
+    "callsBeforeFirstWrite": 49,
+    "firstWriteTool": "repo_commit"
+   },
+   "perTurn": [
+    {
+     "n": 0,
+     "userChars": 900,
+     "shortFollowUp": false,
+     "assistantMsgs": 8,
+     "calls": 27,
+     "tools": "repo_read repo_read output_read output_read output_read output_read output_read output_read output_read output_read output_read output_read repo_read repo_read repo_read repo_read output_read output_read output_read output_read output_read repo_read output_read output_read output_read output_read output_read"
+    },
+    {
+     "n": 1,
+     "userChars": 23,
+     "shortFollowUp": true,
+     "assistantMsgs": 8,
+     "calls": 22,
+     "tools": "repo_read output_read output_read output_read output_read output_read repo_read output_read output_read output_read output_read repo_read repo_read output_read output_read output_read output_read output_read output_read output_read output_read output_read"
+    },
+    {
+     "n": 2,
+     "userChars": 324,
+     "shortFollowUp": false,
+     "assistantMsgs": 5,
+     "calls": 4,
+     "tools": "repo_commit repo_read repo_commit repo_read"
+    },
+    {
+     "n": 3,
+     "userChars": 728,
+     "shortFollowUp": false,
+     "assistantMsgs": 4,
+     "calls": 3,
+     "tools": "repo_read repo_commit repo_read"
+    }
+   ],
+   "flags": {
+    "output_read:repeated work: the same result": 12
+   },
+   "stem": null
+  },
+  {
+   "id": "smwnwaeohj38j",
+   "title": "issue 1: gh api allowlist",
+   "models": [
+    "anthropic/claude-sonnet-5.5",
+    "qwen/qwen3.7-flash"
+   ],
+   "strategies": [
+    "strat-stem-1.0"
+   ],
+   "slices": [
+    {
+     "group": "strat-stem-1.0 | anthropic/claude-sonnet-5.5",
+     "requests": 14,
+     "cost": 0.1735701,
+     "prompt": 158195,
+     "cached": 100671,
+     "out": 3975,
+     "reasoning": 680,
+     "costs": [
+      0.0132055,
+      0.0047268,
+      0.0050628,
+      0.0052688,
+      0.0128488,
+      0.0126308,
+      0.0151128,
+      0.0168748,
+      0.0195048,
+      0.0355248,
+      0.0071474,
+      0.011635,
+      0.014027,
+      0
+     ],
+     "firstHit": 1
+    },
+    {
+     "group": "helper:helper | tencent/hy4-flash",
+     "requests": 11,
+     "cost": 0.0086027525,
+     "prompt": 46865,
+     "cached": 0,
+     "out": 49555,
+     "reasoning": 47959,
+     "costs": [
+      0.0012219425,
+      0.001282412,
+      0.001409482,
+      0.0008471905,
+      0.0001129665,
+      0.000322572,
+      0.001302816,
+      0.0003944215,
+      0.00127911,
+      0.000339157,
+      0.0000906825
+     ],
+     "firstHit": null
+    },
+    {
+     "group": "strat-stem-1.0 | qwen/qwen3.7-flash",
+     "requests": 21,
+     "cost": 0.007076982000000001,
+     "prompt": 443249,
+     "cached": 405632,
+     "out": 27036,
+     "reasoning": 23262,
+     "costs": [
+      0.00063174,
+      0.000691896,
+      0.00054025,
+      0.000156156,
+      0.00013628,
+      0.000145296,
+      0.00043112,
+      0.00026403,
+      0.000445646,
+      0.00014995,
+      0.000160306,
+      0.000192056,
+      0.000326946,
+      0.00020207,
+      0.00017024,
+      0.00018176,
+      0.0002601,
+      0.00017962,
+      0.00123818,
+      0.00037203,
+      0.00020131
+     ],
+     "firstHit": 1
+    },
+    {
+     "group": "helper:watch | tencent/hy4-flash",
+     "requests": 25,
+     "cost": 0.0005561999999999999,
+     "prompt": 9870,
+     "cached": 0,
+     "out": 1500,
+     "reasoning": 1500,
+     "costs": [
+      0.000013295,
+      0.000026245,
+      0.0000162,
+      0.00002474,
+      0.000011755,
+      0.000021275,
+      0.000019525,
+      0.00002173,
+      0.000024985,
+      0.000027365,
+      0.000022885,
+      0.00002446,
+      0.000014975,
+      0.000026665,
+      0.00002551,
+      0.00001389,
+      0.000026455,
+      0.000025615,
+      0.000017215,
+      0.00002747,
+      0.00003265,
+      0.000013505,
+      0.00002887,
+      0.000019105,
+      0.000029815
+     ],
+     "firstHit": null
+    }
+   ],
+   "messages": 95,
+   "turns": 7,
+   "requests": {
+    "main": 35,
+    "helper": 36,
+    "helperKinds": {
+     "helper": 11,
+     "watch": 25
+    }
+   },
+   "tokens": {
+    "prompt": 601444,
+    "cached": 506303,
+    "write": 17410,
+    "out": 31011,
+    "reasoning": 23942
+   },
+   "cost": {
+    "total": 0.18980603449999991,
+    "main": 0.18064708199999996,
+    "helper": 0.009158952500000001,
+    "perRequestMedian": 0.000445646,
+    "helperMax": 0.001409482
+   },
+   "cache": {
+    "overallPct": 84,
+    "firstHitAtRequest": 1,
+    "curve": [
+     0,
+     96,
+     85,
+     82,
+     54,
+     51,
+     50,
+     44,
+     40,
+     32,
+     97,
+     88,
+     78,
+     null,
+     0,
+     93,
+     97,
+     96,
+     97,
+     96,
+     96,
+     94,
+     75,
+     98,
+     96,
+     97,
+     94,
+     90,
+     97,
+     97,
+     94,
+     97,
+     97,
+     99,
+     96
+    ]
+   },
+   "growth": {
+    "promptCurve": [
+     5267,
+     5472,
+     6411,
+     6699,
+     10159,
+     10670,
+     10901,
+     12442,
+     13757,
+     16848,
+     17414,
+     19787,
+     22368,
+     0,
+     15962,
+     16719,
+     17159,
+     17526,
+     17812,
+     18209,
+     18649,
+     19801,
+     20774,
+     21001,
+     21499,
+     21960,
+     22092,
+     22721,
+     23196,
+     23663,
+     23873,
+     24394,
+     25061,
+     25258,
+     25920
+    ],
+    "outCurve": [
+     4,
+     368,
+     263,
+     226,
+     292,
+     168,
+     370,
+     238,
+     238,
+     653,
+     404,
+     514,
+     237,
+     0,
+     1176,
+     4347,
+     3268,
+     276,
+     128,
+     153,
+     2321,
+     888,
+     1517,
+     88,
+     100,
+     356,
+     1245,
+     92,
+     92,
+     191,
+     627,
+     124,
+     8231,
+     1641,
+     175
+    ],
+    "reasoningShare": 0.77
+   },
+   "calls": {
+    "total": 54,
+    "byTool": {
+     "repo_read": 35,
+     "output_read": 15,
+     "run_js": 1,
+     "scratchpad_read": 1,
+     "repo_commit": 2
+    },
+    "byResultClass": {
+     "ok": 51,
+     "empty": 1,
+     "find-absent": 2
+    },
+    "repeats": 0,
+    "repeatRuns": 0,
+    "callsBeforeFirstWrite": 40,
+    "firstWriteTool": "repo_commit"
+   },
+   "perTurn": [
+    {
+     "n": 0,
+     "userChars": 47,
+     "shortFollowUp": false,
+     "assistantMsgs": 1,
+     "calls": 0,
+     "tools": ""
+    },
+    {
+     "n": 1,
+     "userChars": 586,
+     "shortFollowUp": false,
+     "assistantMsgs": 8,
+     "calls": 18,
+     "tools": "repo_read repo_read output_read output_read output_read output_read output_read output_read output_read output_read run_js repo_read repo_read output_read output_read output_read repo_read output_read"
+    },
+    {
+     "n": 2,
+     "userChars": 172,
+     "shortFollowUp": true,
+     "assistantMsgs": 1,
+     "calls": 0,
+     "tools": ""
+    },
+    {
+     "n": 3,
+     "userChars": 342,
+     "shortFollowUp": false,
+     "assistantMsgs": 3,
+     "calls": 8,
+     "tools": "repo_read repo_read repo_read output_read repo_read repo_read output_read output_read"
+    },
+    {
+     "n": 4,
+     "userChars": 219,
+     "shortFollowUp": true,
+     "assistantMsgs": 8,
+     "calls": 14,
+     "tools": "repo_read repo_read:empty repo_read repo_read scratchpad_read repo_read repo_read repo_read repo_read repo_read repo_read repo_read repo_read repo_read"
+    },
+    {
+     "n": 5,
+     "userChars": 215,
+     "shortFollowUp": true,
+     "assistantMsgs": 5,
+     "calls": 4,
+     "tools": "repo_commit:find-absent repo_read repo_read repo_read"
+    },
+    {
+     "n": 6,
+     "userChars": 238,
+     "shortFollowUp": true,
+     "assistantMsgs": 8,
+     "calls": 10,
+     "tools": "repo_read repo_read repo_read repo_read repo_read repo_read repo_read repo_commit:find-absent repo_read repo_read"
+    }
+   ],
+   "flags": {
+    "repo_read:repeated work: the same result": 1,
+    "repo_commit:failed: Tool error: app/vm.js ": 2
+   },
+   "stem": null
+  },
+  {
+   "id": "smwnw69tz60bz",
+   "title": "live evidence: concern_file (issue 4)",
+   "models": [
+    "qwen/qwen3.7-flash"
+   ],
+   "strategies": [
+    "strat-stem-1.0"
+   ],
+   "slices": [
+    {
+     "group": "strat-stem-1.0 | qwen/qwen3.7-flash",
+     "requests": 2,
+     "cost": 0.00030276,
+     "prompt": 8103,
+     "cached": 0,
+     "out": 459,
+     "reasoning": 264,
+     "costs": [
+      0.00014816,
+      0.0001546
+     ],
+     "firstHit": null
+    }
+   ],
+   "messages": 4,
+   "turns": 1,
+   "requests": {
+    "main": 2,
+    "helper": 0,
+    "helperKinds": {}
+   },
+   "tokens": {
+    "prompt": 8103,
+    "cached": 0,
+    "write": 0,
+    "out": 459,
+    "reasoning": 264
+   },
+   "cost": {
+    "total": 0.00030276,
+    "main": 0.00030276,
+    "helper": 0,
+    "perRequestMedian": 0.00015138,
+    "helperMax": 0
+   },
+   "cache": {
+    "overallPct": 0,
+    "firstHitAtRequest": null,
+    "curve": [
+     0,
+     0
+    ]
+   },
+   "growth": {
+    "promptCurve": [
+     3981,
+     4122
+    ],
+    "outCurve": [
+     221,
+     238
+    ],
+    "reasoningShare": 0.58
+   },
+   "calls": {
+    "total": 1,
+    "byTool": {
+     "concern_file": 1
+    },
+    "byResultClass": {
+     "ok": 1
+    },
+    "repeats": 0,
+    "repeatRuns": 0,
+    "callsBeforeFirstWrite": 0,
+    "firstWriteTool": "concern_file"
+   },
+   "perTurn": [
+    {
+     "n": 0,
+     "userChars": 231,
+     "shortFollowUp": false,
+     "assistantMsgs": 2,
+     "calls": 1,
+     "tools": "concern_file"
+    }
+   ],
+   "flags": {},
+   "stem": null
+  },
+  {
+   "id": "smwnw47k1a1l6",
+   "title": "live evidence run (issue 4)",
+   "models": [
+    "qwen/qwen3.7-flash"
+   ],
+   "strategies": [
+    "strat-stem-1.0"
+   ],
+   "slices": [
+    {
+     "group": "strat-stem-1.0 | qwen/qwen3.7-flash",
+     "requests": 10,
+     "cost": 0.001147456,
+     "prompt": 43667,
+     "cached": 17536,
+     "out": 1987,
+     "reasoning": 1338,
+     "costs": [
+      0.00014531,
+      0.00013102,
+      0.00013946,
+      0.00013416,
+      0.00016419,
+      0.0001417,
+      0.000120596,
+      0.00006035,
+      0.00005799,
+      0.00005268
+     ],
+     "firstHit": 6
+    }
+   ],
+   "messages": 20,
+   "turns": 4,
+   "requests": {
+    "main": 10,
+    "helper": 0,
+    "helperKinds": {}
+   },
+   "tokens": {
+    "prompt": 43667,
+    "cached": 17536,
+    "write": 0,
+    "out": 1987,
+    "reasoning": 1338
+   },
+   "cost": {
+    "total": 0.001147456,
+    "main": 0.001147456,
+    "helper": 0,
+    "perRequestMedian": 0.00013259,
+    "helperMax": 0
+   },
+   "cache": {
+    "overallPct": 40,
+    "firstHitAtRequest": 6,
+    "curve": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     91,
+     97,
+     96,
+     92
+    ]
+   },
+   "growth": {
+    "promptCurve": [
+     3951,
+     4051,
+     4094,
+     4199,
+     4264,
+     4446,
+     4506,
+     4625,
+     4685,
+     4846
+    ],
+    "outCurve": [
+     206,
+     73,
+     128,
+     63,
+     279,
+     64,
+     644,
+     224,
+     192,
+     114
+    ],
+    "reasoningShare": 0.67
+   },
+   "calls": {
+    "total": 6,
+    "byTool": {
+     "run_js": 2,
+     "repo_commit": 1,
+     "repo_create": 1,
+     "pattern_find": 1,
+     "concern_file": 1
+    },
+    "byResultClass": {
+     "ok": 6
+    },
+    "repeats": 0,
+    "repeatRuns": 0,
+    "callsBeforeFirstWrite": 2,
+    "firstWriteTool": "repo_commit"
+   },
+   "perTurn": [
+    {
+     "n": 0,
+     "userChars": 73,
+     "shortFollowUp": false,
+     "assistantMsgs": 2,
+     "calls": 1,
+     "tools": "run_js"
+    },
+    {
+     "n": 1,
+     "userChars": 68,
+     "shortFollowUp": true,
+     "assistantMsgs": 2,
+     "calls": 1,
+     "tools": "run_js"
+    },
+    {
+     "n": 2,
+     "userChars": 180,
+     "shortFollowUp": true,
+     "assistantMsgs": 2,
+     "calls": 1,
+     "tools": "repo_commit"
+    },
+    {
+     "n": 3,
+     "userChars": 120,
+     "shortFollowUp": true,
+     "assistantMsgs": 4,
+     "calls": 3,
+     "tools": "repo_create pattern_find concern_file"
+    }
+   ],
+   "flags": {},
+   "stem": null
+  },
+  {
+   "id": "smwnw1qm26zje",
+   "title": "live github read probe",
+   "models": [
+    "qwen/qwen3.7-flash"
+   ],
+   "strategies": [
+    "strat-stem-1.0"
+   ],
+   "slices": [
+    {
+     "group": "strat-stem-1.0 | qwen/qwen3.7-flash",
+     "requests": 4,
+     "cost": 0.00067304,
+     "prompt": 19033,
+     "cached": 0,
+     "out": 785,
+     "reasoning": 311,
+     "costs": [
+      0.00013738,
+      0.0001716,
+      0.0001838,
+      0.00018026
+     ],
+     "firstHit": null
+    }
+   ],
+   "messages": 9,
+   "turns": 2,
+   "requests": {
+    "main": 4,
+    "helper": 0,
+    "helperKinds": {}
+   },
+   "tokens": {
+    "prompt": 19033,
+    "cached": 0,
+    "write": 0,
+    "out": 785,
+    "reasoning": 311
+   },
+   "cost": {
+    "total": 0.00067304,
+    "main": 0.00067304,
+    "helper": 0,
+    "perRequestMedian": 0.00017593,
+    "helperMax": 0
+   },
+   "cache": {
+    "overallPct": 0,
+    "firstHitAtRequest": null,
+    "curve": [
+     0,
+     0,
+     0,
+     0
+    ]
+   },
+   "growth": {
+    "promptCurve": [
+     3964,
+     4810,
+     5039,
+     5220
+    ],
+    "outCurve": [
+     142,
+     210,
+     251,
+     182
+    ],
+    "reasoningShare": 0.4
+   },
+   "calls": {
+    "total": 3,
+    "byTool": {
+     "repo_read": 2,
+     "repo_commit": 1
+    },
+    "byResultClass": {
+     "ok": 3
+    },
+    "repeats": 0,
+    "repeatRuns": 0,
+    "callsBeforeFirstWrite": 2,
+    "firstWriteTool": "repo_commit"
+   },
+   "perTurn": [
+    {
+     "n": 0,
+     "userChars": 153,
+     "shortFollowUp": false,
+     "assistantMsgs": 2,
+     "calls": 2,
+     "tools": "repo_read repo_read"
+    },
+    {
+     "n": 1,
+     "userChars": 190,
+     "shortFollowUp": true,
+     "assistantMsgs": 2,
+     "calls": 1,
+     "tools": "repo_commit"
+    }
+   ],
+   "flags": {},
+   "stem": null
+  },
+  {
+   "id": "smwnvz2px254i",
+   "title": "local live smoke",
+   "models": [
+    "qwen/qwen3.7-flash"
+   ],
+   "strategies": [
+    "strat-stem-1.0"
+   ],
+   "slices": [
+    {
+     "group": "strat-stem-1.0 | qwen/qwen3.7-flash",
+     "requests": 7,
+     "cost": 0.0009961739999999998,
+     "prompt": 21676,
+     "cached": 14464,
+     "out": 5331,
+     "reasoning": 4860,
+     "costs": [
+      0.00010039,
+      0.000023336,
+      0.000549276,
+      0.000073056,
+      0.00013542,
+      0.000033236,
+      0.00008146
+     ],
+     "firstHit": 1
+    },
+    {
+     "group": "helper:watch | tencent/hy4-flash",
+     "requests": 2,
+     "cost": 0.000023825,
+     "prompt": 199,
+     "cached": 0,
+     "out": 120,
+     "reasoning": 120,
+     "costs": [
+      0.00001207,
+      0.000011755
+     ],
+     "firstHit": null
+    }
+   ],
+   "messages": 14,
+   "turns": 3,
+   "requests": {
+    "main": 7,
+    "helper": 2,
+    "helperKinds": {
+     "watch": 2
+    }
+   },
+   "tokens": {
+    "prompt": 21676,
+    "cached": 14464,
+    "write": 0,
+    "out": 5331,
+    "reasoning": 4860
+   },
+   "cost": {
+    "total": 0.001019999,
+    "main": 0.0009961739999999998,
+    "helper": 0.000023825,
+    "perRequestMedian": 0.00008146,
+    "helperMax": 0.00001207
+   },
+   "cache": {
+    "overallPct": 67,
+    "firstHitAtRequest": 1,
+    "curve": [
+     0,
+     95,
+     93,
+     91,
+     0,
+     87,
+     98
+    ]
+   },
+   "growth": {
+    "promptCurve": [
+     2913,
+     2970,
+     3012,
+     3089,
+     3188,
+     3235,
+     3269
+    ],
+    "outCurve": [
+     100,
+     14,
+     4050,
+     369,
+     306,
+     29,
+     463
+    ],
+    "reasoningShare": 0.91
+   },
+   "calls": {
+    "total": 4,
+    "byTool": {
+     "run_js": 2,
+     "pattern_find": 1,
+     "scratchpad_read": 1
+    },
+    "byResultClass": {
+     "ok": 3,
+     "error": 1
+    },
+    "repeats": 0,
+    "repeatRuns": 0,
+    "callsBeforeFirstWrite": null,
+    "firstWriteTool": null
+   },
+   "perTurn": [
+    {
+     "n": 0,
+     "userChars": 88,
+     "shortFollowUp": false,
+     "assistantMsgs": 2,
+     "calls": 1,
+     "tools": "run_js"
+    },
+    {
+     "n": 1,
+     "userChars": 153,
+     "shortFollowUp": true,
+     "assistantMsgs": 2,
+     "calls": 1,
+     "tools": "run_js:error"
+    },
+    {
+     "n": 2,
+     "userChars": 219,
+     "shortFollowUp": true,
+     "assistantMsgs": 3,
+     "calls": 2,
+     "tools": "pattern_find scratchpad_read"
+    }
+   ],
+   "flags": {},
+   "stem": null
+  }
+ ],
+ "groups": [
+  {
+   "group": "strat-stem-1.0 | tencent/hy4-flash",
+   "sessions": 1,
+   "requests": 25,
+   "costTotal": 0.001896183,
+   "costMedian": 0.000059907,
+   "costP95": 0.000152678,
+   "costMax": 0.0002289425,
+   "cachePct": 93,
+   "firstHitAtRequest": 1,
+   "outPerRequest": 248.48,
+   "reasoningShare": 0.41
+  },
+  {
+   "group": "helper:helper | tencent/hy4-flash",
+   "sessions": 2,
+   "requests": 20,
+   "costTotal": 0.012772684,
+   "costMedian": 0.00041454825,
+   "costP95": 0.001409482,
+   "costMax": 0.001409482,
+   "cachePct": 0,
+   "firstHitAtRequest": null,
+   "outPerRequest": 3586.9,
+   "reasoningShare": 0.95
+  },
+  {
+   "group": "helper:watch | qwen/qwen3.7-flash",
+   "sessions": 1,
+   "requests": 44,
+   "costTotal": 0.00069534,
+   "costMedian": 0.000012705000000000001,
+   "costP95": 0.00002421,
+   "costMax": 0.00003867,
+   "cachePct": 0,
+   "firstHitAtRequest": null,
+   "outPerRequest": 60,
+   "reasoningShare": 1
+  },
+  {
+   "group": "strat-stem-1.0 | anthropic/claude-sonnet-5.5",
+   "sessions": 1,
+   "requests": 14,
+   "costTotal": 0.1735701,
+   "costMedian": 0.012739799999999999,
+   "costP95": 0.0355248,
+   "costMax": 0.0355248,
+   "cachePct": 64,
+   "firstHitAtRequest": 1,
+   "outPerRequest": 283.92857142857144,
+   "reasoningShare": 0.17
+  },
+  {
+   "group": "strat-stem-1.0 | qwen/qwen3.7-flash",
+   "sessions": 5,
+   "requests": 44,
+   "costTotal": 0.010196412000000002,
+   "costMedian": 0.000158231,
+   "costP95": 0.00063174,
+   "costMax": 0.00123818,
+   "cachePct": 82,
+   "firstHitAtRequest": 1,
+   "outPerRequest": 809.0454545454545,
+   "reasoningShare": 0.84
+  },
+  {
+   "group": "helper:watch | tencent/hy4-flash",
+   "sessions": 2,
+   "requests": 27,
+   "costTotal": 0.0005800249999999999,
+   "costMedian": 0.000022885,
+   "costP95": 0.000029815,
+   "costMax": 0.00003265,
+   "cachePct": 0,
+   "firstHitAtRequest": null,
+   "outPerRequest": 60,
+   "reasoningShare": 1
+  }
+ ]
+}
