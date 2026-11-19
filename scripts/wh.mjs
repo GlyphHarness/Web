@@ -69,7 +69,7 @@ const { chromium } = createRequire(import.meta.url)('playwright');
 const up = async () => { try { return (await fetch(URL0)).ok; } catch { return false; } };
 if (!(await up())) { spawn(process.platform === 'win32' ? 'python' : 'python3', ['-m', 'http.server', new globalThis.URL(URL0).port || '8787'], { cwd: ROOT, detached: true, stdio: 'ignore' }).unref(); for (let i = 0; i < 40 && !(await up()); i++) await new Promise(s => setTimeout(s, 250)); }
 // WH_CHROME=1 drives the installed Google Chrome (channel "chrome") instead of bundled Chromium; WH_HEADED=1 shows it.
-const ctx = await chromium.launchPersistentContext(path.join(DIR, 'profile'), { headless: !process.env.WH_HEADED, viewport: { width: 1400, height: 900 }, ...(process.env.WH_CHROME ? { channel: 'chrome' } : {}) });
+const ctx = await chromium.launchPersistentContext(path.join(DIR, 'profile'), { headless: !process.env.WH_HEADED, ...(process.env.WH_HEADED ? { viewport: null, args: ['--start-maximized'] } : { viewport: { width: 1400, height: 900 } }), ...(process.env.WH_CHROME ? { channel: 'chrome' } : {}) });
 const tabs = new Map(); // session id -> page
 const ready = async p => { await p.waitForSelector('#app #composer', { state: 'attached', timeout: 30000 }); return p; };
 async function main() { const p = ctx.pages()[0] || await ctx.newPage(); if (!p.url().startsWith(URL0)) { await p.goto(URL0); await ready(p); } return p; }
