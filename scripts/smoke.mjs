@@ -782,15 +782,26 @@ function activeIdOk(a, b) { return a === b; }
   await say('shell: ls');
   await page.waitForTimeout(800);
   const ws = await page.evaluate(() => { const id = sessionStorage.getItem('wh:tab-active'); return JSON.parse(localStorage['wh:s:' + id]); });
-  check('watcher: every tool call gets one cheap check (helper rows "watch")', ws.ledger.filter(e => e.helper && e.kind === 'watch').length === 2, JSON.stringify(ws.ledger.map(e => e.kind || 'main')));
+  // spec change: the certain cases need no model (a failed call is flagged by the harness itself); the model checks the rest
+  check('watcher: each call is assessed once: failures by the harness, the rest by the small model', ws.ledger.filter(e => e.helper && e.kind === 'watch').length === 1 && Object.keys(ws.watched || {}).length === 2, JSON.stringify(ws.ledger.map(e => e.kind || 'main')));
   check('watcher: a clean call raises nothing; a failed one is flagged with a reason', (ws.flags || []).length === 1 && ws.flags[0].tool === 'shell' && /shell|machine|not available/i.test(ws.flags[0].why), JSON.stringify(ws.flags));
   check('watcher: a flag is also a smell, so it is tracked over time', await page.evaluate(() => JSON.parse(localStorage['wh:smells'] || '[]').some(r => r.kind === 'watch-flag' && r.tool === 'shell')));
   // checked off: a call already assessed is never assessed again (a backfill only takes new ones)
   const re = await page.evaluate(() => whDebug.rewatch(sessionStorage.getItem('wh:tab-active')));
   const ws2 = await page.evaluate(() => { const id = sessionStorage.getItem('wh:tab-active'); return JSON.parse(localStorage['wh:s:' + id]); });
-  check('watcher: assessed calls are checked off; a backfill skips them', re.checked === 0 && re.skipped === 2 && Object.keys(ws2.watched || {}).length === 2 && ws2.ledger.filter(e => e.kind === 'watch').length === 2, JSON.stringify(re));
+  check('watcher: assessed calls are checked off; a backfill skips them', re.checked === 0 && re.skipped === 2 && Object.keys(ws2.watched || {}).length === 2 && ws2.ledger.filter(e => e.kind === 'watch').length === 1, JSON.stringify(re));
+  // a call that repeats an earlier result is flagged without a model
+  await say('please use a tool');
+  await page.waitForTimeout(500);
+  const ws3 = await page.evaluate(() => { const id = sessionStorage.getItem('wh:tab-active'); return JSON.parse(localStorage['wh:s:' + id]); });
+  check('watcher: a call repeating an earlier call\'s result is flagged as repeated work', (ws3.flags || []).some(f => f.tool === 'run_js' && /repeat/i.test(f.why)), JSON.stringify(ws3.flags));
   await paste({ watchModel: '' });
 }
+
+// ---- run_js takes a bare function expression too (real models send one; seen in production, 2026-11-19) ----
+await page.click('[data-act=new]');
+await say('fn tool');
+check('run_js: a function expression is called, not rejected', /\b42\b/.test(await visible().locator('.msg[data-role=tool] pre').last().textContent()));
 
 check('layout: the page itself does not scroll', await page.evaluate(() => document.documentElement.scrollHeight <= innerHeight && scrollY === 0));
 if (shot) await page.screenshot({ path: shot });
