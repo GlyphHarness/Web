@@ -1275,14 +1275,21 @@ async function turnsInner(s, depth, onFirst) {
     }
     for (const tc of calls) {
       ctx.audit = null;
+      // a call streamed without a tool name (an upstream dropped it) is never guessed at: not run, said so
+      const nameless = !tc.function.name;
       // scope: a tool the profile does not allow never runs, even if the model names it
-      const scopeNo = !toolsFor(s).some(d => d.function.name === tc.function.name) && tools_known(tc.function.name);
-      const pol = scopeNo ? null : await enforce(s, tc);
+      const scopeNo = !nameless && !toolsFor(s).some(d => d.function.name === tc.function.name) && tools_known(tc.function.name);
+      const pol = scopeNo || nameless ? null : await enforce(s, tc);
       let content;
+      if (nameless) {
+        content = `Not run: the call arrived without a tool name (the stream from ${acc.upstream || 'the provider'} dropped it). Make the call again.`;
+        smell(s, { kind: 'malformed-call', upstream: acc.upstream || 'unknown', detail: String(tc.function.arguments || '').slice(0, 120) });
+      }
       // pacing: the call waits as it will run (after any policy repair)
-      if (!scopeNo && !pol?.refused && co?.halted()) await co.gate(s.id, 'tool');
-      const go = scopeNo || pol?.refused ? 'release' : await hold(s, 'tool', `${tc.function.name} ${pol ? pol.to : await fullArgs(tc)}`);
-      if (scopeNo) { content = `Not run: ${tc.function.name} is not available in this session.`; smell(s, { kind: 'scope-refused', tool: tc.function.name, detail: eff(s).path }); }
+      if (!nameless && !scopeNo && !pol?.refused && co?.halted()) await co.gate(s.id, 'tool');
+      const go = nameless || scopeNo || pol?.refused ? 'release' : await hold(s, 'tool', `${tc.function.name} ${pol ? pol.to : await fullArgs(tc)}`);
+      if (nameless) { /* content set above */ }
+      else if (scopeNo) { content = `Not run: ${tc.function.name} is not available in this session.`; smell(s, { kind: 'scope-refused', tool: tc.function.name, detail: eff(s).path }); }
       else if (go === 'skip') content = 'Not run: skipped by the user.';
       else if (pol?.refused) {
         content = `Not run: policy ${pol.id} (${pol.rule}): ${pol.refused}`;
