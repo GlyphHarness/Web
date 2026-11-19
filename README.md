@@ -330,8 +330,7 @@ Opening the page with `#bridge=<owner/repo>~<branch>~<key>` connects it to an ag
 The page is served from github.io, so it cannot see localhost by itself. `localbridge/wh-local.mjs` is a small no-dependency node server you run on your own machine; the page calls it, and it exposes only what you list. Off by default.
 
 ```
-node localbridge/wh-local.mjs --http app=http://127.0.0.1:3000 --dir notes=C:path	o
-otes
+node localbridge/wh-local.mjs --http app=http://127.0.0.1:3000 --dir notes=C:\Users\you\notes
 ```
 
 It prints a URL (default `http://127.0.0.1:8791`) and a random token for this run (`--token` or `WH_BRIDGE_TOKEN` to fix it). In Settings, "Local bridge": the URL, the token, then "check". Turn on "Local bridge tools" for a session (System prompt) to give the model `local_info`, `local_http` (GET/POST to a listed service) and `local_read` (read a file or list a folder, read-only). A profile can switch the capability off (`local`).
