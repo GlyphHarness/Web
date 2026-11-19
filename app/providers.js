@@ -74,6 +74,7 @@ function openaiCompatible({ label, base }) {
 // prefix cache (64-token units, ~4 chars per token) so the ledger can be exercised.
 const mockSeen = []; // recent flattened requests, standing in for a provider-side prefix cache
 const bpSeen = new Set(); // prefixes written at explicit breakpoints
+let mockStalled = false;
 const mock = {
   label: 'Mock (offline)', needsKey: false,
   async models() {
@@ -114,6 +115,8 @@ const mock = {
       if (signal?.aborted) return no(new DOMException('Aborted', 'AbortError'));
       setTimeout(ok, 15);
     });
+    // stalls once: sends nothing for 3 s (an upstream that stopped mid-stream), then behaves
+    if (/\bstall once\b/.test(last.content || '') && !mockStalled) { mockStalled = true; for (let i = 0; i < 200; i++) await tick(); }
     let text = '';
     if (String(body.messages[0]?.content).startsWith('You condense')) {
       const said = [...last.content.matchAll(/^#(\d+) (title|reply)$/gm)].map(m => `#${m[1]}\n${m[2] === 'title' ? 'Mock Title ' + m[1] : 'condensed item ' + m[1]}`).join('\n');

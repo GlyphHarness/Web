@@ -825,6 +825,17 @@ await say('hello reasoning');
   check('ledger: reasoning tokens are kept with each request', row.reasoning === 5, JSON.stringify(row));
 }
 
+// ---- a stalled stream is aborted and asked again once (seen live: an upstream stopped sending mid-turn) ----
+{
+  const paste = settings => page.evaluate(() => document.querySelector('[data-act=cfgpaste]').click()).then(() => page.fill('.modal textarea', JSON.stringify({ settings }))).then(() => page.click('.modal .primary'));
+  await paste({ streamIdle: 1 });
+  await page.click('[data-act=new]');
+  await say('stall once');
+  const txt = await visible().textContent();
+  check('stall: the request is aborted after the idle time, asked again, and the turn ends normally', /stopped sending for 1 s; asking again/.test(txt) && await visible().locator('.msg[data-role=assistant]').count() >= 1 && await page.evaluate(() => JSON.parse(localStorage['wh:smells'] || '[]').some(r => r.kind === 'stream-stall')), txt.slice(-300));
+  await paste({ streamIdle: 90 });
+}
+
 check('layout: the page itself does not scroll', await page.evaluate(() => document.documentElement.scrollHeight <= innerHeight && scrollY === 0));
 if (shot) await page.screenshot({ path: shot });
 check('no page errors', errors.filter(e => !/schema 99|ERR_TUNNEL|Failed to load resource/.test(e)).length === 0, errors.join(' | '));

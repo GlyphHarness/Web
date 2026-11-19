@@ -44,7 +44,12 @@ async function runOne(strategy, MODEL, tail) {
   await page.fill('.modal textarea', JSON.stringify({ settings: { strategy } }));
   await page.click('.modal .primary');
   const active = () => page.evaluate(() => sessionStorage.getItem('wh:tab-active'));
-  const say = async text => { await page.fill('#input', text); await page.click('#send'); await page.waitForSelector('#app[data-busy]', { state: 'attached', timeout: 5000 }).catch(() => {}); await page.waitForSelector('#app:not([data-busy])', { state: 'attached', timeout: LIVE ? 300000 : 60000 }); };
+  const say = async text => { await page.fill('#input', text); await page.click('#send'); await page.waitForSelector('#app[data-busy]', { state: 'attached', timeout: 5000 }).catch(() => {}); await page.waitForSelector('#app:not([data-busy])', { state: 'attached', timeout: LIVE ? 300000 : 60000 }).catch(async e => {
+    // what the page was doing when a turn did not end (a hold, a question, an error, a long stream)
+    const st = await page.evaluate(() => ({ held: document.querySelectorAll('.msg[data-role=held]:not([data-done])').length, ask: document.querySelectorAll('.msg[data-role=ask]').length, last: [...document.querySelectorAll('.thread:not([style*="display: none"]) .msg')].slice(-2).map(m => m.dataset.role + ': ' + m.textContent.slice(0, 200)), events: (document.querySelector('#events')?.textContent || '').split('\n').filter(Boolean).slice(-3).map(l => l.slice(0, 300)) }));
+    console.error('turn did not end:', JSON.stringify(st, null, 1));
+    throw e;
+  }); };
   const sess = id => page.evaluate(id => JSON.parse(localStorage['wh:s:' + id]), id);
 
   await page.click('[data-act=new]');
