@@ -26,6 +26,9 @@ Status: working skeleton (v0.44.0). The OpenRouter path (streaming, tools, cache
 | `app/store.js` | localStorage layout, `.session` export and import. |
 | `app/migrate.js` | Schema number and forward migrations. |
 | `app/styles.js` | Dynamic style tags for cosmetic state. |
+| `app/profile.js` | Turn profile from stored records (counts, sizes, costs, cache); shared by the CLI and the metrics panel. |
+| `app/panels.js` | Metrics widget registry, built-in widgets and the slot layout (`panels.register`). See `docs/METRICS-PANEL.md`. |
+| `app/metrics.js` | Mounts the metrics slots and dashboard overlay with its layout editor. |
 
 ### Versions: the repo is the release channel
 
