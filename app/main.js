@@ -33,7 +33,7 @@ import * as pat from './patterns.js';
 import { put, get, handlesIn, setFallback } from './outstore.js';
 import { buildRequest, measure, report, padAttachment, inherit, imitatesNote, keptLines, corePrompt, EDGE_MIN, markedOnly, edgeReplies, turnOf, KINDS } from './context.js';
 
-export const VERSION = '0.51.0';
+export const VERSION = '0.52.0';
 // This tab: an id kept for the tab's life (sessionStorage survives its reloads).
 const TAB = (() => { const mk = () => 't' + Math.random().toString(36).slice(2, 8); try { let t = sessionStorage.getItem('wh:tab'); if (!t) sessionStorage.setItem('wh:tab', t = mk()); return t; } catch { return mk(); } })();
 const QS = new URLSearchParams(location.search);
@@ -1667,18 +1667,26 @@ function watchCall(s, tc, content) {
   const m = cfg(s).watchModel, key = tc.id || '';
   if (!m || !key) return Promise.resolve('off');
   if ((s.watched ??= {})[key]) return Promise.resolve('skip');
-  s.watched[key] = 'pending';
-  const text = `TOOL: ${tc.function.name}\nARGS: ${String(tc.function.arguments || '').slice(0, 600)}\nRESULT:\n${String(content).slice(0, 2500)}`;
-  return aux(s, m, WATCH_SYSTEM, text, 'watch', 60).then(r => {
-    const flagged = /^\s*FLAG:/i.test(r);
-    s.watched[key] = flagged ? 'flag' : 'ok';
-    if (flagged) {
-      const f = { t: Date.now(), tool: tc.function.name, why: r.replace(/^\s*FLAG:\s*/i, '').split('\n')[0].slice(0, 200), at: s.messages.length, call: key };
-      (s.flags ??= []).push(f);
-      smell(s, { kind: 'watch-flag', tool: f.tool, detail: f.why });
-    }
+  const res = String(content ?? '');
+  const flag = why => {
+    s.watched[key] = 'flag';
+    const f = { t: Date.now(), tool: tc.function.name, why: why.split('\n')[0].slice(0, 200), at: s.messages.length, call: key };
+    (s.flags ??= []).push(f);
     saveSession(s);
-    return s.watched[key];
+    smell(s, { kind: 'watch-flag', tool: f.tool, detail: f.why });
+    return 'flag';
+  };
+  // the certain cases need no model: a failed call, or one that repeats an earlier call's result
+  if (/^(Tool error|Error:|Not run)/.test(res)) return Promise.resolve(flag('failed: ' + res));
+  const names = new Map(s.messages.flatMap(x => x.tool_calls || []).map(t => [t.id, t.function.name]));
+  const prev = s.messages.findIndex(x => x.role === 'tool' && x.tool_call_id !== key && names.get(x.tool_call_id) === tc.function.name && res.length > 0 && String(x.content) === res);
+  if (prev >= 0) return Promise.resolve(flag(`repeated work: the same result as #${prev}`));
+  s.watched[key] = 'pending';
+  const text = `TOOL: ${tc.function.name}\nARGS: ${String(tc.function.arguments || '').slice(0, 600)}\nRESULT:\n${res.slice(0, 2500)}`;
+  return aux(s, m, WATCH_SYSTEM, text, 'watch', 60).then(r => {
+    if (/^\s*FLAG:/i.test(r)) return flag(r.replace(/^\s*FLAG:\s*/i, ''));
+    s.watched[key] = 'ok'; saveSession(s);
+    return 'ok';
   }).catch(() => { delete s.watched[key]; return 'error'; });
 }
 // backfill: assess the calls of a session not checked off yet (for sessions run before the watcher was on)

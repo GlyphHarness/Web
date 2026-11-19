@@ -77,7 +77,15 @@ const asText = o => {
   return o.logs?.length ? `${r}\n[console]\n${o.logs.join('\n')}` : r;
 };
 
+// Models often send a whole function rather than its body: `async function () {…}`,
+// `function name() {…}` or `() => …` on its own. Such code is called, not rejected.
+export function asBody(code) {
+  const c = String(code ?? '').trim();
+  if (/^(async\s+)?function\b[^(]*\([^)]*\)\s*\{[\s\S]*\}\s*;?$/.test(c) || /^(async\s*)?(\([^)]*\)|[\w$]+)\s*=>[\s\S]+$/.test(c)) return `return await (${c.replace(/;\s*$/, '')})();`;
+  return code;
+}
 export async function runJs({ code }, _ctx, timeout = 5000) {
+  code = asBody(code);
   const r = getRunner();
   await Promise.race([r.ready, new Promise(ok => setTimeout(ok, 3000))]);
   const id = Math.random().toString(36).slice(2);
