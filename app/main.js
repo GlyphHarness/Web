@@ -33,7 +33,7 @@ import * as pat from './patterns.js';
 import { put, get, handlesIn, setFallback } from './outstore.js';
 import { buildRequest, measure, report, padAttachment, inherit, imitatesNote, keptLines, corePrompt, EDGE_MIN, markedOnly, edgeReplies, turnOf, KINDS } from './context.js';
 
-export const VERSION = '0.52.0';
+export const VERSION = '0.53.0';
 // This tab: an id kept for the tab's life (sessionStorage survives its reloads).
 const TAB = (() => { const mk = () => 't' + Math.random().toString(36).slice(2, 8); try { let t = sessionStorage.getItem('wh:tab'); if (!t) sessionStorage.setItem('wh:tab', t = mk()); return t; } catch { return mk(); } })();
 const QS = new URLSearchParams(location.search);
@@ -1213,9 +1213,20 @@ async function turnsInner(s, depth, onFirst) {
     live.append(think, txt);
     thread(s).append(live);
     const acc = { content: '', reasoning: '', calls: [], usage: null, t0: performance.now() };
-    let failure = null;
+    let failure = null, stalled = false;
+    // idle watchdog: a stream that sends nothing for streamIdle seconds is aborted and asked
+    // again once (seen live: an upstream stopped mid-stream and the turn waited forever)
+    const IDLE = Number(state.meta.settings.streamIdle) || 90;
+    for (let attempt = 0; attempt < 2; attempt++) {
+    Object.assign(acc, { content: '', reasoning: '', calls: [], usage: null }); think.textContent = ''; txt.textContent = '';
+    const req = new AbortController(), stop = () => req.abort();
+    ctl?.signal.addEventListener('abort', stop);
+    let idle = null;
+    const arm = () => { clearTimeout(idle); idle = setTimeout(() => { stalled = true; req.abort(); }, IDLE * 1000); };
+    stalled = false; failure = null; arm();
     try {
-      for await (const ev of p.stream(wire, key, ctl?.signal, opt())) {
+      for await (const ev of p.stream(wire, key, req.signal, opt())) {
+        arm();
         if (onFirst) { onFirst(); onFirst = null; }
         if (shown()) $('#events').append(JSON.stringify(ev) + '\n');
         if (ev.error) throw new Error(ev.error.message || JSON.stringify(ev.error));
@@ -1233,6 +1244,12 @@ async function turnsInner(s, depth, onFirst) {
         }
       }
     } catch (e) { failure = e; }
+    finally { clearTimeout(idle); ctl?.signal.removeEventListener('abort', stop); }
+    if (!stalled) break;
+    smell(s, { kind: 'stream-stall', upstream: acc.upstream || 'unknown', detail: `no data for ${IDLE} s (attempt ${attempt + 1})` });
+    notice(s, `The provider stopped sending for ${IDLE} s; ${attempt ? 'stopped the turn' : 'asking again'}.`);
+    }
+    if (stalled) failure = new Error(`the provider stopped sending for ${IDLE} s, twice`);
     live.remove();
     slot($('#tracen'), trace.length + ' requests');
 

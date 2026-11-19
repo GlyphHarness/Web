@@ -18,6 +18,8 @@ const url = flag('url', 'http://localhost:8787/'), outDir = flag('out', 'docs/ca
 // --live: production run on real OpenRouter models (the key is added by the network proxy).
 // Never part of the test suites; it spends real (small) money and its turns are real model turns.
 const LIVE = args.includes('--live') && !!args.splice(args.indexOf('--live'), 1);
+// real models vary a lot from run to run (seen: 168 to 4,755 output tokens on similar turns): repeat, report median and range
+const REPEAT = Math.max(1, Number(flag('repeat', '1')));
 const STRATS = flag('strategies', 'strat-serial-1.0,strat-checkpoint-1.0,strat-stem-1.0').split(',');
 const MODELS = flag('models', LIVE ? 'qwen/qwen3.7-flash' : 'mock-bp,mock-1').split(','), TAILS = flag('tails', LIVE ? '2' : '2,8').split(',').map(Number);
 // $/token from the mock's model list (providers.js): input, output, cache read, cache write
@@ -107,10 +109,20 @@ async function runOne(strategy, MODEL, tail) {
 }
 
 const results = [];
+const runs = [];
 for (const m of MODELS) for (const t of TAILS) for (const st of STRATS) {
-  process.stdout.write(`running ${m} tail ${t} ${st} ... `);
-  const r = await runOne(st, m, t); results.push(r);
-  console.log(`${r.requests} requests, $${r.cost.toFixed(5)}, coherent ${r.coherent}`);
+  const mine = [];
+  for (let n = 0; n < REPEAT; n++) {
+    process.stdout.write(`running ${m} tail ${t} ${st}${REPEAT > 1 ? ` #${n + 1}` : ''} ... `);
+    const r = await runOne(st, m, t).catch(e => ({ strategy: st, model: m, tail: t, failed: String(e.message || e).split('\n')[0] }));
+    runs.push(r); if (!r.failed) mine.push(r);
+    console.log(r.failed ? 'FAILED ' + r.failed : `${r.requests} requests, $${r.cost.toFixed(5)}, out ${r.completion}, coherent ${r.coherent}`);
+  }
+  if (!mine.length) continue;
+  // the median run by cost stands for the configuration; the spread is kept alongside
+  const byCost = [...mine].sort((a, b) => a.cost - b.cost), med = byCost[Math.floor((byCost.length - 1) / 2)];
+  const span = f => [Math.min(...mine.map(x => x[f])), Math.max(...mine.map(x => x[f]))];
+  results.push({ ...med, n: mine.length, costRange: span('cost'), outRange: span('completion'), coherentRuns: mine.filter(x => x.coherent).length });
 }
 await browser.close();
 const baseOf = r => results.find(x => x.strategy === 'strat-serial-1.0' && x.model === r.model && x.tail === r.tail);
@@ -119,12 +131,12 @@ const k = n => n >= 1000 ? (n / 1000).toFixed(1) + 'k' : String(n);
 const table = [
   '| model | core tail | strategy | requests | input (uncached) | cache read | cache write | output (reasoning) | cost | vs serial | core context | coherent |',
   '|---|---|---|---|---|---|---|---|---|---|---|---|',
-  ...results.map(r => `| ${r.model} | ${r.tail} | ${r.strategy} | ${r.requests} | ${k(r.uncached)} | ${k(r.cached)} | ${k(r.write)} | ${k(r.completion)} (${k(r.reasoning)}) | $${r.cost.toFixed(5)} | ${r.strategy === 'strat-serial-1.0' ? '-' : pct(r.cost, baseOf(r)?.cost)} | ${k(r.coreChars)} chars | ${r.coherent ? 'yes' : '**no**'} |`),
+  ...results.map(r => `| ${r.model} | ${r.tail} | ${r.strategy} | ${r.requests} | ${k(r.uncached)} | ${k(r.cached)} | ${k(r.write)} | ${k(r.completion)} (${k(r.reasoning)})${r.n > 1 ? ` [${k(r.outRange[0])}–${k(r.outRange[1])}]` : ''} | $${r.cost.toFixed(5)}${r.n > 1 ? ` [${r.costRange[0].toFixed(5)}–${r.costRange[1].toFixed(5)}]` : ''} | ${r.strategy === 'strat-serial-1.0' ? '-' : pct(r.cost, baseOf(r)?.cost)} | ${k(r.coreChars)} chars | ${r.n > 1 ? `${r.coherentRuns}/${r.n}` : r.coherent ? 'yes' : '**no**'} |`),
 ].join('\n');
 const date = new Date().toISOString().slice(0, 10) + (LIVE ? '-live' : '');
 fs.mkdirSync(outDir, { recursive: true });
-const rec = { scenario: 'side goal', prices: PRICES, date, url, results };
+const rec = { scenario: 'side goal', prices: PRICES, date, url, repeat: REPEAT, results, runs };
 fs.writeFileSync(path.join(outDir, `side-goal-${date}.json`), JSON.stringify(rec, null, 1));
 fs.writeFileSync(path.join(outDir, `side-goal-${date}.md`), `# Case study: side goal (${date})\n\nMock models: \`mock-bp\` caches only at explicit breakpoints (writes 1.25x input, reads 0.1x); \`mock-1\` caches prefixes automatically (reads 0.02x input). Prices per token: ${JSON.stringify(PRICES)}.\n\nThe core works 3 turns; a side goal needs 3 turns of bulky work and a wrap-up; the core goes on (the tail: ${TAILS.join(' or ')} turns); then it needs the side goal's result. Serial and checkpoint do the side goal inline; stem works it in a stem from the turn it came up, and the core pulls the fold by handle.\n\n${table}\n\nCoherent: the side goal's result is in what the core holds at the end.\n`);
 console.log('\n' + table);
-process.exitCode = results.every(r => r.coherent && !r.errors) ? 0 : 1;
+process.exitCode = runs.every(r => !r.failed && r.coherent && !r.errors) ? 0 : 1;
