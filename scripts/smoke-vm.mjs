@@ -95,13 +95,13 @@ check('tabs: the second tab\'s command shows in the machine\'s terminal', true);
 await page2.close();
 // ---- the person's commands: hooks in, history, send again, scratch helper; secrets masked out ----
 await page.click('[data-pane=machine]');
-await page.fill('#machine .vmin', 'Echo typed-$((2+3))’s');
+await page.fill('#machine .vmin', 'Echo “typed-$((2+3))”');
 await page.press('#machine .vmin', 'Enter');
-await page.waitForFunction(() => /typed-5's/.test(document.querySelector('#machine .vmout').textContent), null, { timeout: 60000 });
-check('input hooks: a phone keyboard\'s capital and curly quote are undone before it is sent', /\$ echo typed-\$\(\(2\+3\)\)'s/.test(await page.textContent('#machine .vmout')) && /your input changed by: autocap, smartquotes/.test(await page.textContent('#machine .vmacts')));
+await page.waitForFunction(() => /^typed-5$/m.test(document.querySelector('#machine .vmout').innerText), null, { timeout: 60000 });
+check('input hooks: a phone keyboard\'s capital and curly quote are undone before it is sent', /\$ echo "typed-\$\(\(2\+3\)\)"/.test(await page.textContent('#machine .vmout')) && /your input changed by: autocap, smartquotes/.test(await page.textContent('#machine .vmacts')));
 check('send again: the bar offers the last command you typed', /↻ echo typed-/.test(await slotOf('#machine .vmlast')));
 await page.click('#machine .vmlast');
-await page.waitForFunction(() => (document.querySelector('#machine .vmout').textContent.match(/typed-5's/g) || []).length >= 2, null, { timeout: 60000 });
+await page.waitForFunction(() => (document.querySelector('#machine .vmout').innerText.match(/^typed-5$/gm) || []).length >= 2, null, { timeout: 60000 });
 check('send again: it runs the typed command once more', true);
 await page.click('#machine [data-cmd=hist]');
 check('history: what you typed is listed, with send / pin / forget', await page.locator('#machine .vmhist .hrow').count() >= 1 && /echo typed-/.test(await page.textContent('#machine .vmhist')));
