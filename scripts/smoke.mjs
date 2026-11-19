@@ -609,6 +609,36 @@ await page.reload();
   await page.waitForTimeout(300);
 }
 
+// ---- handles: opaque ids re-pointed under a fixed context (docs/STEMS.md §1) ----
+{
+  const hr = await page.evaluate(async () => {
+    const H = await import('./app/handles.js');
+    const a = await H.mint({ kind: 'test', text: 'state one' }), b = await H.mint({ kind: 'test', text: 'x' });
+    const r1 = await H.resolve(a, 's1');
+    await H.point(a, { text: 'state two' });
+    const r2 = await H.resolve(a, 's1');
+    await H.point(a, { text: 'only for s2' }, 's2');
+    const r3 = await H.resolve(a, 's2'), r4 = await H.resolve(a, 's1'), none = await H.resolve('zzzzzz', 's1');
+    return { a, b, r1, r2, r3, r4, none, audit: H.audit().filter(x => x.id === a).map(x => ({ reader: x.reader, h: x.h })) };
+  }).catch(e => ({ error: String(e) }));
+  check('handles: opaque short ids (6 characters, no prefix, no order)', /^[a-z][a-z0-9]{5}$/.test(hr.a || '') && hr.a !== hr.b, JSON.stringify(hr).slice(0, 200));
+  check('handles: re-pointing changes what an id resolves to, never the id', hr.r1 === 'state one' && hr.r2 === 'state two');
+  check('handles: a reader can have its own view; others keep the shared one', hr.r3 === 'only for s2' && hr.r4 === 'state two' && hr.none == null);
+  check('handles: every resolution is audited outside the model, with a content hash', hr.audit?.length === 4 && hr.audit.every(x => /^[a-z0-9]{6,}$/.test(x.h)) && hr.audit[0].h !== hr.audit[1].h);
+  // the model pulls: it is handed an id, and output_read resolves it as it stands now
+  await page.click('[data-act=new]');
+  const id = await page.evaluate(async () => (await import('./app/handles.js')).mint({ kind: 'test', text: 'pulled-state-A' }));
+  await say('pull ' + id);
+  const first = await visible().locator('.msg[data-role=tool] pre').last().textContent();
+  await page.evaluate(async id => (await import('./app/handles.js')).point(id, { text: 'pulled-state-B' }), id);
+  await say('pull ' + id);
+  const second = await visible().locator('.msg[data-role=tool] pre').last().textContent();
+  const sess = await page.evaluate(() => { const m = JSON.parse(localStorage['wh:meta']); const id = sessionStorage.getItem('wh:tab-active') || m.active; return JSON.parse(localStorage['wh:s:' + id]); });
+  check('handles: the model pulls an id with output_read and gets its current state', /pulled-state-A/.test(first) && /pulled-state-B/.test(second), JSON.stringify([first, second]).slice(0, 200));
+  check('handles: the turns keep only the id (the context bytes do not change when it is re-pointed)', sess.messages.filter(m => m.role === 'user').every(m => !/pulled-state/.test(m.content)) && sess.messages.some(m => m.role === 'user' && m.content.includes(id)));
+  check('handles: the session records which ids it resolved, with hashes', (sess.resolved || []).filter(r => r.id === id).length === 2 && new Set(sess.resolved.filter(r => r.id === id).map(r => r.h)).size === 2);
+}
+
 check('layout: the page itself does not scroll', await page.evaluate(() => document.documentElement.scrollHeight <= innerHeight && scrollY === 0));
 if (shot) await page.screenshot({ path: shot });
 check('no page errors', errors.filter(e => !/schema 99|ERR_TUNNEL|Failed to load resource/.test(e)).length === 0, errors.join(' | '));

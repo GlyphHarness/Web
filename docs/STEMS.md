@@ -7,7 +7,8 @@ Goal: keep the core context terse and coherent while work runs elsewhere and res
 - **Opaque short ids** (`k7fq2x`): random base32, no order, no revision suffix, no type prefix. Nothing in an id tells the model what came before, what kind of thing it is, or how often it changed.
 - **Re-pointed in the store, never edited in the context.** The id's bytes stay fixed in the cached prefix; what it resolves to changes under it (a stem's progress, its fold, a debugging view, a sealed redaction), per reader and per moment. The model sees state, not that it changed.
 - **Pulled, not pushed.** The model is handed ids and resolves what it needs with the read tool it already uses for stored outputs. Its steering point is generic ("what do these hold now?"), not a narrative written for it.
-- **One mechanism** for stored outputs, wake points, stem points and folds: id + resolver.
+- **Steps stay in the turns.** Ids replace only what is bulky or changes (results, progress, folds, logs). Each turn keeps its pertinent step in plain text, tersely: asked, decided, done, open, with ids standing for what is behind it. Without the steps the chain is a bag of ids with nothing to reason along.
+- **One mechanism** for wake points, stem points and folds: id + resolver. Stored outputs keep their content-hash handles (`os:`): they never change, so there is nothing to re-point.
 - **Audit outside the model.** Per turn the harness logs which ids were resolved and a hash of what each returned, so a review reconstructs exactly what was seen.
 
 ## 2. Stems (git branch + context branch)
@@ -51,7 +52,7 @@ Per variant, from the ledger: uncached input, cache write, cache read, output to
 
 ## Build order
 
-1. Opaque ids and per-reader resolution in the store (stored outputs migrate to them).
+1. Opaque ids and per-reader resolution in the store; output_read pulls them.
 2. Stems: anchor branching, re-pointed handle, fold, catch-up.
 3. Selective checkpoints with paid-off accounting.
 4. CI workflow, records, coverage map, ci-failure handling.
