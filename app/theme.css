@@ -1,0 +1,31 @@
+/* Colour tokens: the only place colour values live. Contract and override rules: docs/THEME.md.
+   Dark is the base set. Light applies when data-theme="light", or when the mode is not "dark"
+   and the OS prefers light ("system", or no attribute yet). Keep the two light blocks identical. */
+:root {
+  --bg: #14161a; --fg: #e6e8ec; --muted: #8b93a1;
+  --card: #1b1e24; --border: #2c313a; --sel: #263246;
+  --accent: #7fb4ff; --ok: #6fd08c; --danger: #ff8a80; --warn: #e0a040;
+  --scrim: #00000088; --shadow: #00000066;
+  --term-bg: #0b0c0e; --term-fg: #d8dde6; --paper: #ffffff;
+  color-scheme: dark;
+}
+:root[data-theme="light"] {
+  --bg: #f6f7f9; --fg: #1c2026; --muted: #667080;
+  --card: #ffffff; --border: #d9dde3; --sel: #dfeaff;
+  --accent: #1f6fd6; --ok: #167a34; --danger: #c62828; --warn: #8a5a00;
+  --scrim: #14181e66; --shadow: #00000030;
+  --term-bg: #eef0f4; --term-fg: #1c2026; --paper: #ffffff;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]):not([data-theme="light"]) {
+    --bg: #f6f7f9; --fg: #1c2026; --muted: #667080;
+    --card: #ffffff; --border: #d9dde3; --sel: #dfeaff;
+    --accent: #1f6fd6; --ok: #167a34; --danger: #c62828; --warn: #8a5a00;
+    --scrim: #14181e66; --shadow: #00000030;
+    --term-bg: #eef0f4; --term-fg: #1c2026; --paper: #ffffff;
+    color-scheme: light;
+  }
+}
+/* Legacy names (first stylesheet), kept as aliases of the role tokens. */
+:root { --panel: var(--card); --line: var(--border); --dim: var(--muted); --bad: var(--danger); }

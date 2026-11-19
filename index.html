@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>WebHarness</title>
+<script>try { const t = localStorage.getItem('wh:theme'); document.documentElement.dataset.theme = t === 'light' || t === 'dark' ? t : 'system'; } catch {}</script>
 </head>
 <body>
 <div id="app"></div>
@@ -42,10 +43,7 @@ let build = '';
 if (!ref) { try { const v = await fetch('./version.json', { cache: 'no-store' }).then(r => r.ok ? r.json() : null); if (/^[0-9a-f]{40}$/.test(v?.build || '')) build = v.build; } catch {} }
 const base = ref ? `https://cdn.jsdelivr.net/gh/${REPO}@${ref}/app/` : new URL(build ? `./b/${build}/` : './app/', location.href).href;
 
-const css = document.createElement('link');
-css.rel = 'stylesheet';
-css.href = base + 'app.css';
-document.head.append(css);
+for (const f of ['theme.css', 'app.css']) { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = base + f; document.head.append(l); } // colour tokens beside the layout sheet (docs/THEME.md)
 
 import(base + 'main.js').then(m => m.boot({ base, ref, repo: REPO, build })).catch(err => {
   const el = document.getElementById('app');

@@ -9,7 +9,7 @@ Status: working skeleton (v0.44.0). The OpenRouter path is written from the Open
 - Hosted: enable Pages (Settings > Pages > Source > GitHub Actions); every push to `main` deploys to `https://<owner>.github.io/<repo>/` (paths are case-sensitive).
 - Local: `python3 -m http.server 8787` in the repo root, then open `http://localhost:8787/`.
 - No key needed to try it: choose the provider "Mock (offline)" and model `mock-1`. Say "tool", "big", "widget", "form", "chart" or "fan out" to see a tool round trip.
-- Smoke tests (need Playwright): `node scripts/smoke.mjs`, `node scripts/smoke-git.mjs` (fake GitHub API), `node scripts/smoke-vm.mjs` (the Linux machine)
+- Smoke tests (need Playwright): `node scripts/smoke.mjs`, `node scripts/smoke-git.mjs` (fake GitHub API), `node scripts/smoke-vm.mjs` (the Linux machine), `node scripts/smoke-theme.mjs` (colour modes)
 
 ## How it fits together
 
@@ -26,6 +26,7 @@ Status: working skeleton (v0.44.0). The OpenRouter path is written from the Open
 | `app/store.js` | localStorage layout, `.session` export and import. |
 | `app/migrate.js` | Schema number and forward migrations. |
 | `app/styles.js` | Dynamic style tags for cosmetic state. |
+| `app/theme.js`, `app/theme.css` | Dark / light / system mode and its colour tokens ([docs/THEME.md](docs/THEME.md)). |
 
 ### Versions: the repo is the release channel
 
