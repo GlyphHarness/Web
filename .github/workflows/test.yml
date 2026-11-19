@@ -1,0 +1,62 @@
+name: Tests
+
+# Every push to main runs the main and git suites; the machine suite runs nightly, on
+# demand, and on pushes that touch the machine. Passes are silent; a failing suite opens
+# one concern issue with its break window, and the next pass closes it (scripts/ci-report.mjs).
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '23 7 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+  actions: read
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Playwright and Chromium
+        run: npm i --no-save --no-package-lock playwright@1.49.1 && npx playwright install --with-deps chromium
+      - id: pick
+        name: Which suites
+        run: |
+          s="main git"
+          if [ "${{ github.event_name }}" != "push" ] || git diff --name-only HEAD^ HEAD | grep -qE '^(app/vm|app/vmhost\.js|vm/)'; then s="$s vm"; fi
+          echo "suites=$s" >> "$GITHUB_OUTPUT"
+          echo "suites: $s"
+      - name: Machine image
+        if: contains(steps.pick.outputs.suites, 'vm')
+        run: |
+          git fetch --depth 1 origin vm-image
+          mkdir -p app/vm/image
+          git --work-tree=app/vm/image checkout FETCH_HEAD -- .
+          git reset -q
+      - name: Serve
+        run: (python3 -m http.server 8787 >/dev/null 2>&1 &) && sleep 1
+      - name: Run
+        run: node scripts/ci.mjs ${{ steps.pick.outputs.suites }}
+      - name: Report
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/ci-report.mjs ci-record.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ci-record
+          path: ci-record.json
