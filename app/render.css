@@ -1,0 +1,23 @@
+/* Render plugins: styles for what the harness's own text helpers draw and for the
+   Look dialog. Colors come from the app's custom properties with the current
+   values as fallbacks, so a theme can restyle them. app.css is not touched. */
+
+.rp-ref { color: var(--accent, #7fb4ff); text-decoration: underline dotted; }
+.rp-ref:hover { text-decoration: underline; }
+.rp-handle { font: 11px ui-monospace, monospace; padding: 0 4px; border: 1px solid var(--border, var(--line, #2c313a)); border-radius: 3px; color: var(--muted, var(--dim, #8b93a1)); }
+details.rp-collapse { display: block; margin-top: 4px; }
+details.rp-collapse > summary { cursor: pointer; color: var(--muted, var(--dim, #8b93a1)); }
+.rp-copy { font-size: 11px; padding: 0 6px; }
+
+.rp-look { display: flex; flex-direction: column; gap: 10px; max-width: 560px; }
+.rp-look .rp-plugin { border: 1px solid var(--border, var(--line, #2c313a)); border-radius: 6px; padding: 6px 8px; background: var(--card, var(--panel, #1b1e24)); }
+.rp-look .rp-plugin > label { display: flex; gap: 6px; align-items: center; font-weight: 600; }
+.rp-look .rp-plugin .rp-sub { margin: 4px 0 0 22px; display: flex; flex-direction: column; gap: 2px; font-size: 12px; }
+.rp-look .rp-sub label { display: flex; gap: 6px; align-items: center; }
+.rp-look .rp-tier { font: 10px ui-monospace, monospace; color: var(--muted, var(--dim, #8b93a1)); margin-left: auto; }
+.rp-look .rp-mv { display: inline-flex; gap: 2px; margin-left: 6px; }
+.rp-look .rp-mv button { padding: 0 6px; font-size: 11px; }
+.rp-look textarea { min-height: 120px; }
+.rp-look .rp-err { color: var(--danger, var(--bad, #ff8a80)); font-size: 12px; white-space: pre-wrap; }
+.rp-look .rp-ok { color: var(--ok, #6fd08c); font-size: 12px; }
+.rp-look .rp-note { color: var(--muted, var(--dim, #8b93a1)); font-size: 12px; margin: 0; }

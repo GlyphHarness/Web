@@ -5,6 +5,9 @@
 import { state, load, saveMeta, saveSession, saveKeys, newSession, dropSession, children, family, exportBundle, importBundle, uid } from './store.js';
 import { SCHEMA } from './migrate.js';
 import { rule, slot, slotText } from './styles.js';
+import * as R from './render.js';
+import './render-defaults.js';
+import * as lookui from './render-ui.js';
 import { providers } from './providers.js';
 import { defsFor, execTool, SWAPPABLE, ARG_MAX, runJs } from './tools.js';
 import { client as gitClient } from './git.js';
@@ -244,7 +247,7 @@ function blocks(text, opt = {}) {
   const re = /```([^\n`]*)\n([\s\S]*?)(?:```|$)/g;
   let i = 0, m;
   while ((m = re.exec(text))) {
-    if (m.index > i) out.push(h('div', { class: 'txt', text: text.slice(i, m.index).trim() }));
+    if (m.index > i) out.push(h('div', { class: 'txt' }, R.text(text.slice(i, m.index).trim(), { part: opt.part, session: opt.sid })));
     const body = m[2].replace(/\n$/, ''), ho = handoff.parse(m[1]) || (opt.promote ? { kind: 'copy', arg: '', title: m[1].trim(), promoted: true } : null);
     if (ho) out.push(handoffCard(ho, body, opt.s));
     else out.push(h('figure', { class: 'code' },
@@ -253,7 +256,7 @@ function blocks(text, opt = {}) {
     i = re.lastIndex;
   }
   const rest = text.slice(i).trim();
-  if (rest) out.push(h('div', { class: 'txt', text: rest }));
+  if (rest) out.push(h('div', { class: 'txt' }, R.text(rest, { part: opt.part, session: opt.sid })));
   return out;
 }
 
@@ -380,36 +383,49 @@ function metrics(m) {
   return out;
 }
 
+// A message is drawn by the render plugins (render.js): the harness builds the
+// pieces (header, body, calls, copy button) and a template for the part
+// arranges them. The default templates are in render-defaults.js.
 function messageNode(m, s) {
-  const el = h('article', { class: 'msg', 'data-role': m.role });
-  el.append(h('header', { class: 'mhead' }, h('span', { class: 'role', text: m.role }),
-    ...metrics(m).map(([a, b, f]) => h('span', { class: 'mx' + (b === 'failed' ? ' bad' : ''), ...(f ? { 'data-full': f } : {}), text: a && a !== '$' ? `${a} ${b}` : a + b }))));
-  if (m.x?.reasoning) el.append(h('div', { class: 'think', text: m.x.reasoning }));
+  const part = m.role === 'tool' ? 'tool-result' : m.role === 'user' ? 'user' : 'assistant', sid = s?.id;
+  const metric = metrics(m).map(([a, b, f]) => h('span', { class: 'mx' + (b === 'failed' ? ' bad' : ''), ...(f ? { 'data-full': f } : {}), text: a && a !== '$' ? `${a} ${b}` : a + b }));
+  const slots = { head: [h('header', { class: 'mhead' }, h('span', { class: 'role', text: m.role }), ...metric)], reasoning: [], body: [], calls: [], extras: [], copy: [] };
+  if (m.x?.reasoning) slots.reasoning.push(R.part('reasoning', { text: m.x.reasoning }, { session: sid }));
   if (m.role === 'tool') {
-    el.append(h('details', { class: 'call' }, h('summary', { text: 'result ' + m.tool_call_id }), h('pre', { text: m.content })));
-    if (m.x?.audit) el.append(auditTable(m.x.audit));
-    if (m.x?.policy) { const p = m.x.policy; el.append(h('details', { class: 'call policy' }, h('summary', { text: `policy ${p.id} ${p.refused ? 'refused the call' : 'rewrote the call'} (${p.model})` }), h('pre', { text: `${p.rule}\n\nfrom: ${p.from}${p.to ? '\nto:   ' + p.to : ''}${p.refused ? '\nwhy:  ' + p.refused : ''}` }))); }
+    slots.body.push(h('details', { class: 'call' }, h('summary', { text: 'result ' + m.tool_call_id }), h('pre', {}, R.text(m.content, { part: 'tool-result', session: sid }))));
+    if (m.x?.audit) slots.extras.push(auditTable(m.x.audit));
+    if (m.x?.policy) { const p = m.x.policy; slots.extras.push(h('details', { class: 'call policy' }, h('summary', { text: `policy ${p.id} ${p.refused ? 'refused the call' : 'rewrote the call'} (${p.model})` }), h('pre', { text: `${p.rule}\n\nfrom: ${p.from}${p.to ? '\nto:   ' + p.to : ''}${p.refused ? '\nwhy:  ' + p.refused : ''}` }))); }
   } else if (m.content) {
     let promote = false;
     if (m.role === 'assistant' && s) { const i = s.messages.indexOf(m); const u = s.messages.slice(0, i < 0 ? s.messages.length : i).findLast(x => x.role === 'user'); promote = handoff.wants(u?.content); }
-    el.append(...blocks(m.content, { s: m.role === 'assistant' ? s : null, promote }));
+    slots.body.push(...blocks(m.content, { s: m.role === 'assistant' ? s : null, promote, part, sid }));
   }
   for (const tc of m.tool_calls || []) {
-    const d = h('details', { class: 'call' }, h('summary', { text: `call ${tc.function.name} (${tc.id})` }), h('pre', { text: tc.function.arguments }));
     const ref = /^\{"ref":"(os:[a-z0-9]+)"/.exec(tc.function.arguments)?.[1];
-    if (ref) d.addEventListener('toggle', async () => { // show the stored arguments on first open
-      if (!d.open || d._full) return;
-      d._full = true;
-      d.append(h('pre', { class: 'full', text: await get(ref).catch(() => null) ?? 'Stored arguments are not in this browser.' }));
-    });
-    el.append(d);
-    if (tc.function.name === 'show_widget') el.append(showWidget(s, tc));
+    slots.calls.push(R.part('tool-call', { id: tc.id, name: tc.function.name, args: tc.function.arguments, ref: ref || '', hasRef: !!ref, load: () => get(ref).catch(() => null) }, { session: sid }));
+    if (tc.function.name === 'show_widget') slots.calls.push(showWidget(s, tc));
   }
-  if (m.content) el.append(h('button', { class: 'copy', 'data-copy': 'msg', type: 'button', text: 'copy' }));
+  if (m.content) slots.copy.push(h('button', { class: 'copy', 'data-copy': 'msg', type: 'button', text: 'copy' }));
+  const el = R.part(part, { role: m.role, text: typeof m.content === 'string' ? m.content : '', reasoning: m.x?.reasoning || '', calls: (m.tool_calls || []).length, slots }, { session: sid });
   el._raw = m.content || '';
   el._m = m;
   if (m.x?.wire != null) wireNote(el, m);
   return el;
+}
+
+// A render plugin was added, removed, reordered or switched: turns already drawn are
+// drawn again from the log, in place. Cards that are not from the log (held steps,
+// approvals, notices) stay. Not while a turn runs; it happens when the turn ends.
+let lookStale = false;
+function redrawLook() {
+  if (busy) { lookStale = true; return; }
+  lookStale = false;
+  for (const s of Object.values(state.sessions)) {
+    const t = $(`.thread[data-session="${s.id}"]`);
+    if (!t) continue;
+    for (const n of $$(`.stagebox[data-session="${s.id}"] .handoffs`)) n.remove(); // drawing the messages lists them again
+    for (const n of [...t.children]) if (n._m) n.replaceWith(messageNode(n._m, s));
+  }
 }
 
 // What each branch literally did, from the harness's own records (never from the model's account).
@@ -1065,7 +1081,7 @@ async function runInner(s) {
   if (p.needsKey && !state.keys[set.provider]) return notice(s, 'Add an API key in Settings first.');
   busy = true; runningId = s.id; app.setAttribute('data-busy', ''); ctl = new AbortController();
   try { return await turns(s, 0); }
-  finally { await stemProgress(s).catch(() => {}); busy = false; runningId = null; app.removeAttribute('data-busy'); ctl = null; queueSteward(); }
+  finally { await stemProgress(s).catch(() => {}); busy = false; runningId = null; app.removeAttribute('data-busy'); ctl = null; queueSteward(); if (lookStale) redrawLook(); }
 }
 
 // ---------- edge folding and the steward ----------
@@ -1493,11 +1509,13 @@ function hold(s, kind, detail) {
   if (p === 'run' || (p === 'requests' && kind !== 'request') || (p === 'tools' && kind !== 'tool')) return Promise.resolve('release');
   return new Promise(ok => {
     const id = uid('h');
-    const card = h('article', { class: 'msg', 'data-role': 'held', 'data-held': id });
-    const done = (v, by = 'you') => { if (!held.has(id)) return; held.delete(id); card.dataset.done = v === 'skip' ? 'skipped' : 'released'; slot(card.querySelector('.mhead .mx'), `${card.dataset.done} by ${by}`); for (const b of card.querySelectorAll('button')) b.disabled = true; link?.emit('held-done', { id, by, v }); ok(v); };
-    card.append(h('header', { class: 'mhead' }, h('span', { class: 'role', text: 'held ' + (kind === 'request' ? 'model request' : 'tool call') }), h('span', { class: 'mx', text: 'waiting' })),
-      h('pre', { text: detail.length > 3000 ? detail.slice(0, 3000) + '…' : detail }),
-      h('div', { class: 'actions' }, btn('release', { 'data-hold': 'release', class: 'primary' }), btn('release all', { 'data-hold': 'all' }), btn('skip', { 'data-hold': 'skip' })));
+    const status = h('span', { class: 'mx', text: 'waiting' }); // the card's status text: a template places it, done() writes it
+    const shown = detail.length > 3000 ? detail.slice(0, 3000) + '…' : detail;
+    const card = R.part('held', { title: 'held ' + (kind === 'request' ? 'model request' : 'tool call'), kind, status: 'waiting', text: shown, slots: {
+      status: [status], what: [h('pre', { text: shown })],
+      controls: [h('div', { class: 'actions' }, btn('release', { 'data-hold': 'release', class: 'primary' }), btn('release all', { 'data-hold': 'all' }), btn('skip', { 'data-hold': 'skip' }))] } }, { session: s.id });
+    card.setAttribute('data-held', id);
+    const done = (v, by = 'you') => { if (!held.has(id)) return; held.delete(id); card.dataset.done = v === 'skip' ? 'skipped' : 'released'; slot(status, `${card.dataset.done} by ${by}`); for (const b of card.querySelectorAll('button')) b.disabled = true; link?.emit('held-done', { id, by, v }); ok(v); };
     card.addEventListener('click', e => { const a = e.target.dataset?.hold; if (!a) return; if (a === 'all') letLoose(); else done(a); });
     held.set(id, { done, kind, s: s.id, detail });
     thread(s).append(card);
@@ -1660,9 +1678,8 @@ function renderSmells() {
     h('div', { class: 'items' }, ...props.filter(p => p.status === 'pending').map(p => item({ kind: 'proposal', name: p.id, meta: p.model, tone: 'warn', open: true, attrs: { 'data-kind': 'proposal' },
       body: [h('pre', { text: p.text })],
       actions: [btn('adopt', { 'data-act': 'propose', 'data-id': p.id, 'data-to': 'adopted' }), btn('dismiss', { 'data-act': 'propose', 'data-id': p.id, 'data-to': 'dismissed' })] }))),
-    h('div', { class: 'items' }, ...list.slice(-20).reverse().map(r => item({ kind: r.kind, name: r.policy || r.tool || '', meta: new Date(r.t).toLocaleTimeString(),
-      tone: /refused|error|failed/.test(r.kind) ? 'bad' : r.kind === 'policy-rewritten' ? 'warn' : '', attrs: { 'data-kind': r.kind },
-      body: [h('p', { class: 'note', text: (r.why || r.detail || r.rule || '').slice(0, 300) }), r.from ? h('pre', { text: 'from: ' + r.from + (r.to ? '\nto:   ' + r.to : '') }) : null] }))));
+    h('div', { class: 'items' }, ...list.slice(-20).reverse().map(r => R.part('flag', { kind: r.kind, name: r.policy || r.tool || '', meta: new Date(r.t).toLocaleTimeString(),
+      tone: /refused|error|failed/.test(r.kind) ? 'bad' : r.kind === 'policy-rewritten' ? 'warn' : '', note: (r.why || r.detail || r.rule || '').slice(0, 300), from: r.from || '', to: r.to || '' }))));
   slot($('#smellcount'), list.length || '');
 }
 
@@ -2346,6 +2363,8 @@ export function boot(env) {
   renderSmells();
   applyInspector();
   bind();
+  lookui.mount({ modal, after: $('#side [data-act=import]') });
+  R.onChange(() => { redrawLook(); renderSmells(); });
   metricsPanel.mount(); // metrics panel (docs/METRICS-PANEL.md)
   uptext();
   { let ta = ''; try { ta = sessionStorage.getItem('wh:tab-active') || ''; } catch {} const want = QS.get('s') || ta; if (state.sessions[want]) state.meta.active = want; }
@@ -3229,20 +3248,16 @@ async function concernForm() {
 function approve(s, what) {
   link?.emit('approve', { session: s.id, what: { ...what, preview: undefined } });
   return new Promise(ok => {
-    const card = h('article', { class: 'msg approve', 'data-role': 'approve' });
     const head = what.what === 'commit'
       ? `${what.repo} ${what.branch}${what.newBranchFrom ? ' (new, from ' + what.newBranchFrom + ')' : ''}\n${what.message}\n\n${what.files.join('\n')}`
       : `${what.repo} ${what.head} -> ${what.base}\n${what.title}\n\n${what.body}`;
     const ask = { commit: 'Commit to GitHub?', 'pull request': 'Open a pull request?', repository: 'Create a GitHub repository?', issue: 'File this concern as an issue?' }[what.what];
-    card.append(h('b', { text: ask }), h('pre', { text: what.what === 'repository' ? `${what.repo} (${what.title})\n${what.body}` : what.what === 'issue' ? `${what.repo}\n${what.title}\n\n${what.body}` : head }));
-    for (const f of what.preview || []) {
-      const d = h('details', {}, h('summary', { text: f.path }), h('pre', { class: 'full', text: f.text.length > 20000 ? f.text.slice(0, 20000) + '\n…' : f.text }));
-      card.append(d);
-    }
+    const detail = what.what === 'repository' ? `${what.repo} (${what.title})\n${what.body}` : what.what === 'issue' ? `${what.repo}\n${what.title}\n\n${what.body}` : head;
+    const files = (what.preview || []).map(f => h('details', {}, h('summary', { text: f.path }), h('pre', { class: 'full', text: f.text.length > 20000 ? f.text.slice(0, 20000) + '\n…' : f.text })));
     const yes = h('button', { text: 'allow' }), no = h('button', { text: 'deny' });
+    const card = R.part('approval', { ask, kind: what.what, repo: what.repo || '', text: detail, files: files.length, slots: { ask: [h('b', { text: ask })], what: [h('pre', { text: detail })], files, controls: [h('div', { class: 'row' }, yes, no)] } }, { session: s.id });
     const done = v => { yes.disabled = no.disabled = true; card.dataset.done = v ? 'allowed' : 'denied'; ok(v); };
     yes.onclick = () => done(true); no.onclick = () => done(false);
-    card.append(h('div', { class: 'row' }, yes, no));
     thread(s).append(card);
     scrollDown();
   });
