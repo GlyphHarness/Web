@@ -27,6 +27,15 @@ if (typeof window === 'undefined') {
             return;
         }
 
+        // WebHarness local change: leave requests to a service on this computer (the opt-in local
+        // bridge) to the page itself. A worker-made fetch to a loopback address cannot raise
+        // Chrome's "local network access" prompt, so it fails; the page's own fetch can.
+        // The bridge answers with CORS, which is enough under the page's COEP.
+        try {
+            const u = new URL(r.url);
+            if (u.origin !== self.location.origin && /^(localhost|127\.0\.0\.1|\[::1\])$/.test(u.hostname)) return;
+        } catch (e) { /* fall through to the normal path */ }
+
         const request = (coepCredentialless && r.mode === "no-cors")
             ? new Request(r, {
                 credentials: "omit",
