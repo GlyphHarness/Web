@@ -22,6 +22,7 @@ export const FIELDS = {
   machineUser: { check: v => v === 'session' || v === 'root', hint: 'session (a unix user per session) or root' },
   machineGh: { check: v => v === 'inject' || v === 'env', hint: 'inject (the page adds the credential; none in the machine) or env (GH_TOKEN for the session\'s user)' },
   strategy: { check: v => typeof v === 'string' && knownStrategy(v), hint: 'a strategy id, e.g. strat-stem-1.0' },
+  watchModel: { check: v => typeof v === 'string', hint: 'a small model that checks each tool call and flags; blank = off' },
   bpKinds: { check: v => Array.isArray(v) && v.every(k => ['system', 'tail', 'stem'].includes(k)), hint: 'cache checkpoint kinds: system, tail, stem' },
   machineQuota: { check: v => Number.isInteger(v) && v >= 0, hint: 'MB per session home; 0 = none' },
   newProfile: { check: v => typeof v === 'string', hint: 'a profile name' },

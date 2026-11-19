@@ -33,7 +33,7 @@ import * as pat from './patterns.js';
 import { put, get, handlesIn, setFallback } from './outstore.js';
 import { buildRequest, measure, report, padAttachment, inherit, imitatesNote, keptLines, corePrompt, EDGE_MIN, markedOnly, edgeReplies, turnOf, KINDS } from './context.js';
 
-export const VERSION = '0.50.0';
+export const VERSION = '0.51.0';
 // This tab: an id kept for the tab's life (sessionStorage survives its reloads).
 const TAB = (() => { const mk = () => 't' + Math.random().toString(36).slice(2, 8); try { let t = sessionStorage.getItem('wh:tab'); if (!t) sessionStorage.setItem('wh:tab', t = mk()); return t; } catch { return mk(); } })();
 const QS = new URLSearchParams(location.search);
@@ -705,7 +705,7 @@ function inlineEdit(head, edit, input, { label, show = v => v, save }) {
 // ---------- this session's scope, attribute by attribute ----------
 
 const SCOPE_ROWS = [...prof.SETTING_KEYS.map(k => ({ k, kind: 'set' })), ...prof.CAP_KEYS.map(k => ({ k, kind: 'cap' }))];
-const SCOPE_LABEL = { strategy: 'strategy', machineGh: 'machine GitHub auth', machineUser: 'machine user', machineQuota: 'machine quota (MB)', logRepo: 'log repo', logTranscripts: 'transcripts', model: 'model', helper: 'helper model', policyModel: 'policy model', pace: 'pace', branchBudget: 'branch budget', run_js: 'run code', fanout: 'fan out', ask: 'ask and values', vm: 'machine', repo: 'repositories' };
+const SCOPE_LABEL = { watchModel: 'watcher model', strategy: 'strategy', machineGh: 'machine GitHub auth', machineUser: 'machine user', machineQuota: 'machine quota (MB)', logRepo: 'log repo', logTranscripts: 'transcripts', model: 'model', helper: 'helper model', policyModel: 'policy model', pace: 'pace', branchBudget: 'branch budget', run_js: 'run code', fanout: 'fan out', ask: 'ask and values', vm: 'machine', repo: 'repositories' };
 // levels from this session up: session, each profile leaf to root, defaults
 function scopeLevels(s) {
   const ch = eff(s).chain;
@@ -1298,6 +1298,7 @@ async function turnsInner(s, depth, onFirst) {
       }
       if (pol) smell(s, { kind: pol.refused ? 'policy-refused' : 'policy-rewritten', tool: tc.function.name, policy: pol.id, rule: pol.rule, model: pol.model, from: pol.from.slice(0, 300), to: pol.to?.slice(0, 300), why: pol.refused });
       else if (/^(Tool error|Error:)/.test(content)) smell(s, { kind: 'tool-error', tool: tc.function.name, detail: content.split('\n')[0].slice(0, 200) });
+      watchCall(s, tc, content); // on-hook check by a small model, for every call (not awaited; flags only)
       if (/\n\[timed out after/.test(content)) smell(s, { kind: 'tool-timeout', tool: tc.function.name, detail: content.slice(-120) });
       const m = { role: 'tool', tool_call_id: tc.id, content };
       m.x = { tool: tc.function.name, ms: tc._t0 ? Math.round(performance.now() - tc._t0) : 0, ...(tc._used ? { values: tc._used } : {}), ok: !/^(Tool error|Error:|Not run:|Unknown tool|Invalid JSON)/.test(content), ...(ctx.audit ? { audit: ctx.audit } : {}), ...(pol ? { policy: pol } : {}) };
@@ -1656,6 +1657,42 @@ async function aux(s, model, system, content, kind, maxOut) {
 // ---------- helper model ----------
 // A small model that reads a long tool output and returns only what the caller
 // said it wanted. Its requests are traced and get their own ledger rows.
+
+// Watcher: a small (free or cheap) model checks each tool call as it completes and
+// raises a flag only when something needs attention; flags are smells too, so they
+// are tracked over time and reach whoever oversees the session (wh flags, the log repo).
+const WATCH_SYSTEM = 'WATCH. You check one tool call made by an agent, for the harness that runs it. Reply exactly "ok", or "FLAG: <one short line>" when the call failed, repeated earlier work, wasted effort, broke a rule, or its result needs a person. Nothing else.';
+// Each call is assessed once: s.watched[callId] = 'ok' | 'flag' (or 'pending' while it runs).
+function watchCall(s, tc, content) {
+  const m = cfg(s).watchModel, key = tc.id || '';
+  if (!m || !key) return Promise.resolve('off');
+  if ((s.watched ??= {})[key]) return Promise.resolve('skip');
+  s.watched[key] = 'pending';
+  const text = `TOOL: ${tc.function.name}\nARGS: ${String(tc.function.arguments || '').slice(0, 600)}\nRESULT:\n${String(content).slice(0, 2500)}`;
+  return aux(s, m, WATCH_SYSTEM, text, 'watch', 60).then(r => {
+    const flagged = /^\s*FLAG:/i.test(r);
+    s.watched[key] = flagged ? 'flag' : 'ok';
+    if (flagged) {
+      const f = { t: Date.now(), tool: tc.function.name, why: r.replace(/^\s*FLAG:\s*/i, '').split('\n')[0].slice(0, 200), at: s.messages.length, call: key };
+      (s.flags ??= []).push(f);
+      smell(s, { kind: 'watch-flag', tool: f.tool, detail: f.why });
+    }
+    saveSession(s);
+    return s.watched[key];
+  }).catch(() => { delete s.watched[key]; return 'error'; });
+}
+// backfill: assess the calls of a session not checked off yet (for sessions run before the watcher was on)
+async function rewatch(id) {
+  const s = state.sessions[id];
+  if (!s) return { checked: 0, skipped: 0 };
+  const res = new Map(s.messages.filter(m => m.role === 'tool').map(m => [m.tool_call_id, m.content]));
+  let checked = 0, skipped = 0;
+  for (const m of s.messages) for (const tc of m.tool_calls || []) {
+    const r = await watchCall(s, tc, res.get(tc.id) ?? '');
+    if (r === 'skip') skipped++; else if (r === 'ok' || r === 'flag') checked++;
+  }
+  return { checked, skipped };
+}
 
 const HELPER_SYSTEM = 'You filter tool output for another program. You are given WANT and OUTPUT. Reply with only the parts of OUTPUT that answer WANT: at most 12 short lines, values copied exactly, no commentary. If OUTPUT does not contain it, reply exactly: not found';
 
@@ -2131,7 +2168,7 @@ function bind() {
   if (MACHINE_TAB) { document.title = 'WebHarness · machine'; app.setAttribute('data-machine-tab', ''); setPane('machine'); }
   checkPublished(); setInterval(checkPublished, 5 * 60e3); addEventListener('visibilitychange', () => { if (!document.hidden) checkPublished(); });
   setTimeout(finishUpdate, 1200);
-  globalThis.whDebug = { vm, co: () => co, checkpoints: () => ck.stats(), strategyStats, tab: TAB, owns, userOf: id => userOf(state.sessions[id]) }; // scripted checks (smoke suites, drive.mjs)
+  globalThis.whDebug = { vm, co: () => co, checkpoints: () => ck.stats(), strategyStats, rewatch, tab: TAB, owns, userOf: id => userOf(state.sessions[id]) }; // scripted checks (smoke suites, drive.mjs)
   renderCoord();
   // conditions checked at start: a credential never checked, or not for a week
   if ((state.keys.github || state.keys.ghapp) && Date.now() - (state.meta.settings.ghScopeAt || 0) > 7 * 864e5) enqueue({ type: 'scope-check', targets: [{ kind: 'credential', id: gh.mode() || 'github', label: 'GitHub credential' }], reason: { kind: state.meta.settings.ghScopeAt ? 'stale' : 'never checked', detail: state.meta.settings.ghScopeAt ? 'last checked over a week ago' : 'the credential has not been checked against its intended use' } });

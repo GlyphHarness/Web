@@ -9,6 +9,10 @@ const url = process.argv[2] || 'http://localhost:8787/';
 const shot = process.argv[3];
 const browser = await chromium.launch();
 const bctx = await browser.newContext({ viewport: { width: 1400, height: 900 }, acceptDownloads: true });
+// Tests never use OpenRouter models: every request to it is blocked here, and the suite
+// fails if a model request was attempted (real models run only in production sessions).
+const orCalls = [];
+await bctx.route(/^https:\/\/openrouter\.ai\//, r => { orCalls.push(r.request().url()); r.abort(); });
 await bctx.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: new URL(url).origin });
 const page = await bctx.newPage();
 const errors = [];
@@ -779,12 +783,17 @@ function activeIdOk(a, b) { return a === b; }
   await page.waitForTimeout(800);
   const ws = await page.evaluate(() => { const id = sessionStorage.getItem('wh:tab-active'); return JSON.parse(localStorage['wh:s:' + id]); });
   check('watcher: every tool call gets one cheap check (helper rows "watch")', ws.ledger.filter(e => e.helper && e.kind === 'watch').length === 2, JSON.stringify(ws.ledger.map(e => e.kind || 'main')));
-  check('watcher: a clean call raises nothing; a failed one is flagged with a reason', (ws.flags || []).length === 1 && ws.flags[0].tool === 'shell' && /machine/i.test(ws.flags[0].why), JSON.stringify(ws.flags));
+  check('watcher: a clean call raises nothing; a failed one is flagged with a reason', (ws.flags || []).length === 1 && ws.flags[0].tool === 'shell' && /shell|machine|not available/i.test(ws.flags[0].why), JSON.stringify(ws.flags));
   check('watcher: a flag is also a smell, so it is tracked over time', await page.evaluate(() => JSON.parse(localStorage['wh:smells'] || '[]').some(r => r.kind === 'watch-flag' && r.tool === 'shell')));
+  // checked off: a call already assessed is never assessed again (a backfill only takes new ones)
+  const re = await page.evaluate(() => whDebug.rewatch(sessionStorage.getItem('wh:tab-active')));
+  const ws2 = await page.evaluate(() => { const id = sessionStorage.getItem('wh:tab-active'); return JSON.parse(localStorage['wh:s:' + id]); });
+  check('watcher: assessed calls are checked off; a backfill skips them', re.checked === 0 && re.skipped === 2 && Object.keys(ws2.watched || {}).length === 2 && ws2.ledger.filter(e => e.kind === 'watch').length === 2, JSON.stringify(re));
   await paste({ watchModel: '' });
 }
 
 check('layout: the page itself does not scroll', await page.evaluate(() => document.documentElement.scrollHeight <= innerHeight && scrollY === 0));
 if (shot) await page.screenshot({ path: shot });
 check('no page errors', errors.filter(e => !/schema 99|ERR_TUNNEL|Failed to load resource/.test(e)).length === 0, errors.join(' | '));
+check('tests: no OpenRouter model request was made (mock only)', !orCalls.some(u => /chat\/completions|completions|responses/.test(u)), orCalls.join(' '));
 await browser.close();

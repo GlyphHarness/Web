@@ -12,6 +12,10 @@ const check = (name, ok, extra = '') => { console.log(`${ok ? 'PASS' : 'FAIL'} $
 const TOKEN = 'github_pat_VMTEST_' + 'y'.repeat(24);
 const browser = await chromium.launch();
 const ctx = await browser.newContext({ viewport: { width: 1400, height: 900 } });
+// Tests never use OpenRouter models: every request to it is blocked here, and the suite
+// fails if a model request was attempted (real models run only in production sessions).
+const orCalls = [];
+await ctx.route(/^https:\/\/openrouter\.ai\//, r => { orCalls.push(r.request().url()); r.abort(); });
 const page = await ctx.newPage();
 const errors = [], seen = [];
 page.on('pageerror', e => errors.push(String(e)));
@@ -210,4 +214,5 @@ check('terminal: no harness events, markers, base64 reads or listings in it', !/
 check('harness activity: its own list, with each harness command and the policy refusal', /machine ready/.test(actText) && /read \/root\/proj\/a\.txt\s*\d+ ms · \d+ chars/.test(actText) && /policy bounded-waits: refused sleep 30/.test(actText), actText.slice(-400));
 check('terminal: commands typed by you are shown as input', /\$ echo old > \/root\/old\.txt/.test(termText));
 check('no page errors', errors.length === 0, errors.join(' | '));
+check('tests: no OpenRouter model request was made (mock only)', !orCalls.some(u => /chat\/completions|completions|responses/.test(u)), orCalls.join(' '));
 await browser.close();

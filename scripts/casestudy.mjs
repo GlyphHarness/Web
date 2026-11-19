@@ -25,7 +25,11 @@ const PRICES = { 'mock-bp': { in: 3e-6, out: 15e-6, read: 0.3e-6, write: 3.75e-6
 const browser = await chromium.launch();
 async function runOne(strategy, MODEL, tail) {
   const PRICE = PRICES[MODEL];
-  const page = await (await browser.newContext({ viewport: { width: 1400, height: 900 } })).newPage();
+  const bctx = await browser.newContext({ viewport: { width: 1400, height: 900 } });
+  // mock only: OpenRouter is blocked, and a model request to it fails the run
+  const orCalls = [];
+  await bctx.route(/^https:\/\/openrouter\.ai\//, r => { orCalls.push(r.request().url()); r.abort(); });
+  const page = await bctx.newPage();
   const errors = [];
   page.on('pageerror', e => errors.push(String(e)));
   await page.goto(url);
@@ -83,6 +87,7 @@ async function runOne(strategy, MODEL, tail) {
   const lastTool = [...coreS.messages].reverse().find(m => m.role === 'tool' || m.role === 'assistant');
   // the side goal's result (from its wrap-up) is in what the core holds at the end
   const coherent = /line 399 is the worst case/.test(JSON.stringify(coreS.messages));
+  if (orCalls.some(u => /completions|responses/.test(u))) throw new Error('a case study made an OpenRouter model request: ' + orCalls.join(' '));
   await page.context().close();
   return { strategy, model: MODEL, tail, requests: rows.filter(e => !e.helper).length, coreRequests: rows.filter(e => !e.helper && e.session === 'core').length, prompt, uncached, cached, write, completion, cost, coreChars, coherent, errors: errors.length };
 }

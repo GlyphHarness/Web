@@ -122,6 +122,12 @@ const mock = {
       return;
     }
     const sys0 = String(body.messages[0]?.content || '');
+    if (sys0.startsWith('WATCH.')) {
+      const said = /No machine|Tool error|Error:|Not run/i.test(last.content) ? 'FLAG: the call failed: ' + (/RESULT:\n(.*)/.exec(last.content)?.[1] || '').slice(0, 80) : 'ok';
+      yield { choices: [{ delta: { content: said } }] };
+      yield { choices: [{ delta: {}, finish_reason: 'stop' }], usage: { prompt_tokens: prompt, completion_tokens: 6, prompt_tokens_details: { cached_tokens: 0 }, cost: 0 } };
+      return;
+    }
     if (sys0.startsWith('TERMINAL SCRATCH')) {
       // first a test in the scratch account, then the commands (with a "why" line)
       const said = /TRIED:/.test(last.content) ? '```sh\nls -la ~\n# list the home folder\necho drafted-$((6*7))\n```' : 'TRY: echo scratch-test-$((40+2)); id -un';

@@ -100,6 +100,10 @@ function api(method, path, q, body, headers) {
 
 const browser = await chromium.launch();
 const ctx = await browser.newContext({ viewport: { width: 1400, height: 900 } });
+// Tests never use OpenRouter models: every request to it is blocked here, and the suite
+// fails if a model request was attempted (real models run only in production sessions).
+const orCalls = [];
+await ctx.route(/^https:\/\/openrouter\.ai\//, r => { orCalls.push(r.request().url()); r.abort(); });
 const page = await ctx.newPage();
 const errors = [];
 page.on('pageerror', e => errors.push(String(e)));
@@ -384,4 +388,5 @@ const allUp = JSON.stringify(await upEvents());
 check('app: neither the key nor a minted token leaves the page', !allUp.includes('BEGIN RSA') && !Object.keys(minted).some(t => allUp.includes(t)));
 
 check('no page errors', errors.filter(e => !/Failed to load resource|ERR_/.test(e)).length === 0, errors.join(' | '));
+check('tests: no OpenRouter model request was made (mock only)', !orCalls.some(u => /chat\/completions|completions|responses/.test(u)), orCalls.join(' '));
 await browser.close();

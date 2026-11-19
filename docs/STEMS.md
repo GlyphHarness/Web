@@ -84,6 +84,13 @@ Orchestration is chosen, not hard-wired: a strategy is a named, versioned spec t
 - Results by strategy and model (requests, cache rate, $/request, smells/request), shown under Smells. This is what routing will read: models slotted into the verticals (stems, resolvers, confers, cores) by measured proficiency under each strategy.
 - The case studies (§7) are strategies run on the same scenarios; your own approach becomes one more strategy id in the same comparison.
 
+## 9. Watcher and operators (v0.51.0)
+
+- **Watcher** (`watchModel`, per session group): a small free or cheap model checks each tool call as it completes, refusals included, and answers `ok` or `FLAG: <reason>`. A flag goes on the session (`s.flags`) and is a smell, so it is tracked over time and reaches whoever oversees the session. Helper rows `watch` carry its cost.
+- **Checked off**: every assessed call is marked (`s.watched[callId] = ok | flag`) and never assessed again; a backfill (`rewatch`) takes only unmarked calls. The operators' CLI follows the same rule: an assessment shows what is new since the last one.
+- **Tests never use real models**: every suite and the case-study runner block OpenRouter and fail on any model request. Real models run only in production sessions, driven by operators with turns held and stepped.
+- **Operators**: Claude Code sessions on Haiku drive harness sessions (cheap OpenRouter models) through a terse CLI (`scripts/wh.mjs`), assess them, keep them going, and bubble what the harness cannot resolve up to the main session. The OpenRouter key is a credential of the cloud environment: the network proxy adds it, so no session or transcript holds it.
+
 ## Build order
 
 1. Opaque ids and per-reader resolution in the store; output_read pulls them.
