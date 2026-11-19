@@ -258,6 +258,21 @@ const CMDS = {
       out.calls.length ? 'calls ' + out.calls.join(' ') : 'no tool calls', out.errors ? `${out.errors} failed calls` : '', ...out.flags.map(f => 'FLAG ' + f)].filter(Boolean).join('\n');
     return { text: msgs.length || all ? text : `${id}: nothing new since the last assess`, data: out };
   },
+  // turn profile: shape, sizes, repeats and costs of every session's turns, metadata only (no judgement; see docs/concepts/TURN-ANALYSIS.md)
+  //   wh profile                    one block per session, then the spread by (strategy | model)
+  //   wh profile -i <id>            one session
+  //   wh profile -o <file>          also write the profiles as JSON (no message content in it)
+  //   wh profile -i <id> -m <n>     DRILL: show message n (content, truncated); -r <n> shows ledger row n
+  async profile(a) {
+    const T = await import('./turn-profile.mjs');
+    const id = flagOf(a, 'i'), out = flagOf(a, 'o'), msg = flagOf(a, 'm'), req = flagOf(a, 'r');
+    const p = await main(), m = await meta(p);
+    const all = (await Promise.all((id ? [id] : m.order).map(i => sess(p, i)))).filter(Boolean);
+    if (msg != null || req != null) { if (!all[0]) return { ok: false, text: 'no session ' + id }; return { text: T.drill(all[0], { msg: msg != null ? Number(msg) : null, req: req != null ? Number(req) : null }) }; }
+    const ps = all.map(T.profile), rows = T.across(ps);
+    if (out) fs.writeFileSync(out, JSON.stringify({ at: new Date().toISOString(), sessions: ps, groups: rows }, null, 1));
+    return { text: [...ps.map(T.render), '', 'by strategy | model (helper requests as helper:kind)', T.renderAcross(rows), '', 'per session behaviour', T.renderBehaviour(T.behaviour(ps))].join('\n'), data: { sessions: ps, groups: rows } };
+  },
   async flags(a) {
     const id = flagOf(a, 'i') || readState().current, p = await main(), s = await sess(p, id);
     const f = (s?.flags || []).map((x, i) => ({ n: i, ...x })).filter(x => !x.handled);
