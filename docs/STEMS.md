@@ -74,6 +74,16 @@ Each case is a scripted scenario (for example: a CI break fixed while the core k
 
 Per variant, from the ledger: uncached input, cache write, cache read, output tokens, cost, turns, final core size, and **coherence** (scenario assertions that the core acted on the right state: a cheaper variant that loses track fails). Mock provider first (it models a prefix cache), then one cheap and one frontier model. Results as one table per scenario plus totals, published as a page and kept as a regression baseline.
 
+## 8. Strategies (built, v0.50.0)
+
+Orchestration is chosen, not hard-wired: a strategy is a named, versioned spec the turn loop reads at fixed seams, picked per session group (the `strategy` setting, through profiles), and recorded on every ledger row.
+
+- Id: `strat-<name>-<major>.<minor>`. A major version changes what the model sees (turns, handles, tools); a minor one is harness-side tuning only. A changed spec gets a new version; ids are never reused (`register()` refuses).
+- Built-ins: `strat-serial-1.0` (the baseline: no explicit checkpoints, no stems), `strat-checkpoint-1.0` (system and tail checkpoints), `strat-stem-1.0` (checkpoints, stems with an anchor checkpoint, pulled handles; the default).
+- Seams today: which checkpoint kinds may be set, whether stems may open, handles. Seams to come: confer, the micro resolver, how stems spawn and fold, and per-turn wrappers (a strategy as a handler around the turn).
+- Results by strategy and model (requests, cache rate, $/request, smells/request), shown under Smells. This is what routing will read: models slotted into the verticals (stems, resolvers, confers, cores) by measured proficiency under each strategy.
+- The case studies (§7) are strategies run on the same scenarios; your own approach becomes one more strategy id in the same comparison.
+
 ## Build order
 
 1. Opaque ids and per-reader resolution in the store; output_read pulls them.

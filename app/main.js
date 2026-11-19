@@ -18,6 +18,7 @@ import { coordinator, published } from './coord.js';
 import * as termx from './term.js';
 import * as H from './handles.js';
 import * as ck from './checkpoints.js';
+import * as strategies from './strategies.js';
 import * as policy from './policy.js';
 import * as smells from './smells.js';
 import { logRepo } from './logrepo.js';
@@ -32,7 +33,7 @@ import * as pat from './patterns.js';
 import { put, get, handlesIn, setFallback } from './outstore.js';
 import { buildRequest, measure, report, padAttachment, inherit, imitatesNote, keptLines, corePrompt, EDGE_MIN, markedOnly, edgeReplies, turnOf, KINDS } from './context.js';
 
-export const VERSION = '0.49.0';
+export const VERSION = '0.50.0';
 // This tab: an id kept for the tab's life (sessionStorage survives its reloads).
 const TAB = (() => { const mk = () => 't' + Math.random().toString(36).slice(2, 8); try { let t = sessionStorage.getItem('wh:tab'); if (!t) sessionStorage.setItem('wh:tab', t = mk()); return t; } catch { return mk(); } })();
 const QS = new URLSearchParams(location.search);
@@ -704,7 +705,7 @@ function inlineEdit(head, edit, input, { label, show = v => v, save }) {
 // ---------- this session's scope, attribute by attribute ----------
 
 const SCOPE_ROWS = [...prof.SETTING_KEYS.map(k => ({ k, kind: 'set' })), ...prof.CAP_KEYS.map(k => ({ k, kind: 'cap' }))];
-const SCOPE_LABEL = { machineGh: 'machine GitHub auth', machineUser: 'machine user', machineQuota: 'machine quota (MB)', logRepo: 'log repo', logTranscripts: 'transcripts', model: 'model', helper: 'helper model', policyModel: 'policy model', pace: 'pace', branchBudget: 'branch budget', run_js: 'run code', fanout: 'fan out', ask: 'ask and values', vm: 'machine', repo: 'repositories' };
+const SCOPE_LABEL = { strategy: 'strategy', machineGh: 'machine GitHub auth', machineUser: 'machine user', machineQuota: 'machine quota (MB)', logRepo: 'log repo', logTranscripts: 'transcripts', model: 'model', helper: 'helper model', policyModel: 'policy model', pace: 'pace', branchBudget: 'branch budget', run_js: 'run code', fanout: 'fan out', ask: 'ask and values', vm: 'machine', repo: 'repositories' };
 // levels from this session up: session, each profile leaf to root, defaults
 function scopeLevels(s) {
   const ch = eff(s).chain;
@@ -1201,7 +1202,9 @@ async function turnsInner(s, depth, onFirst) {
     s.sent = s.messages.length; // everything in the log has now gone out; its wire form is fixed
     const entry = measure(s.id, body);
     // explicit cache breakpoints, only where reuse is expected (checkpoints.js); the stored log is unchanged
-    const bps = ck.supports(set.model) ? ck.choose(s, body, state.meta.settings.bpKinds || ck.KINDS) : [];
+    // the session group's strategy decides which kinds it may set; bpKinds narrows them further
+    const strat = strategies.spec(set.strategy), kinds = strat.checkpoints.filter(k => (state.meta.settings.bpKinds || ck.KINDS).includes(k));
+    const bps = ck.supports(set.model) && kinds.length ? ck.choose(s, body, kinds) : [];
     const wire = ck.apply(body, bps);
     if (shown()) { $('#req').textContent = JSON.stringify(wire, null, 2); $('#events').textContent = ''; }
 
@@ -1251,7 +1254,7 @@ async function turnsInner(s, depth, onFirst) {
       if (acc.reasoning) m.x.reasoning = acc.reasoning;
       push(s, m);
     }
-    s.ledger.push({ ...report(entry, acc.usage), ...(acc.upstream ? { upstream: acc.upstream } : {}), ...(bps.length ? { bp: bps.map(b => b.kind) } : {}) });
+    s.ledger.push({ ...report(entry, acc.usage), ...(acc.upstream ? { upstream: acc.upstream } : {}), ...(bps.length ? { bp: bps.map(b => b.kind) } : {}), strat: strat.id });
     if (bps.length && acc.usage) ck.credit(body, bps, { prompt: acc.usage.prompt_tokens || 0, cached: acc.usage.prompt_tokens_details?.cached_tokens || 0, cacheWrite: acc.usage.prompt_tokens_details?.cache_write_tokens || acc.usage.cache_creation_input_tokens || 0 }, s.id);
     saveSession(s);
     if (shown()) $('#ledger tbody').append(ledgerRow(entry, s.ledger.length - 1));
@@ -1590,6 +1593,19 @@ function steerStats() {
 const meets = (k, v) => v == null ? null : TARGETS[k].better === 'higher' ? v >= targetOf(k) : v <= targetOf(k);
 const missedTargets = () => steerStats().flatMap(o => [['cache', o.cache], ['smells', o.smellRate], ['cost', o.costRate]].filter(([k, v]) => meets(k, v) === false).map(([k, v]) => `${o.steer}: ${TARGETS[k].label} ${TARGETS[k].fmt(v)} (target ${TARGETS[k].better === 'higher' ? '≥' : '≤'} ${TARGETS[k].fmt(targetOf(k))})`));
 
+// results by strategy and model (main requests; helper rows are separate)
+function strategyStats() {
+  const by = {};
+  for (const x of state.meta.order.map(id => state.sessions[id]).filter(Boolean)) {
+    for (const e of x.ledger.filter(e => !e.helper && e.strat)) {
+      const o = by[e.strat + '|' + e.model] ||= { strat: e.strat, model: e.model, requests: 0, prompt: 0, cached: 0, cost: 0, smells: 0, sessions: new Set() };
+      o.requests++; o.prompt += e.prompt || 0; o.cached += e.cached || 0; o.cost += Number(e.cost) || 0; o.sessions.add(x.id);
+    }
+  }
+  for (const r of smells.all()) for (const o of Object.values(by)) if (o.sessions.has(r.session)) o.smells++;
+  return Object.values(by).map(({ sessions, ...o }) => ({ ...o, cache: o.prompt ? o.cached / o.prompt : null, costRate: o.cost / o.requests, smellRate: o.smells / o.requests }));
+}
+
 function renderSmells() {
   const box = $('#smells');
   if (!box) return;
@@ -1602,6 +1618,10 @@ function renderSmells() {
     (() => { const st = steerStats(); if (!st.length) return ''; const cell = (k, v) => h('td', { 'data-met': String(meets(k, v)), text: v == null ? '-' : TARGETS[k].fmt(v) });
       return h('table', { class: 'audit targets-t' }, h('tr', {}, ...['steering', 'requests', 'cache', 'smells/req', '$/req'].map(t => h('th', { text: t }))),
         ...st.map(o => h('tr', {}, h('td', { text: o.steer + (o.steer === steerOf(cur()) ? ' (this session)' : '') }), h('td', { text: String(o.requests) }), cell('cache', o.cache), cell('smells', o.smellRate), cell('cost', o.costRate)))); })(),
+    // by strategy and model: what routing by tested proficiency will read
+    (() => { const r = strategyStats(); if (!r.length) return '';
+      return h('table', { class: 'audit strat-t' }, h('tr', {}, ...['strategy', 'model', 'requests', 'cache', '$/req', 'smells/req'].map(t => h('th', { text: t }))),
+        ...r.map(o => h('tr', {}, h('td', { text: o.strat }), h('td', { text: o.model }), h('td', { text: String(o.requests) }), h('td', { text: o.cache == null ? '-' : Math.round(o.cache * 100) + '%' }), h('td', { text: '$' + o.costRate.toFixed(4) }), h('td', { text: o.smellRate.toFixed(3) })))); })(),
     // cache checkpoints by kind: written once, then read (paid) or never read (a kind to switch off)
     (() => { const c = ck.stats(), kinds = Object.keys(c); if (!kinds.length) return '';
       return h('table', { class: 'audit ckpt-t' }, h('tr', {}, ...['checkpoint', 'set', 'paid', 'written tok', 'reads', 'read tok'].map(t => h('th', { text: t }))),
@@ -1964,6 +1984,8 @@ const actions = {
     const src = cur(), goal = $('#input').value.trim();
     if (busy || !src) return;
     if (!goal) return notice(src, 'Type the goal for the stem in the message box first.');
+    const strat = strategies.spec(cfg(src).strategy);
+    if (!strat.stems) return notice(src, `This session's strategy ${strat.id} has no stems (${strat.describe}).`);
     const ups = src.messages.map((m, i) => [m, i]).filter(([m]) => m.role === 'user');
     const sel = h('select', {}, ...ups.map(([m, i]) => h('option', { value: String(i), text: String(m.content).split('\n')[0].slice(0, 70) })), h('option', { value: String(src.messages.length), text: '(the end: after everything so far)' }));
     sel.value = String(ups.at(-1)?.[1] ?? src.messages.length);
@@ -2109,7 +2131,7 @@ function bind() {
   if (MACHINE_TAB) { document.title = 'WebHarness · machine'; app.setAttribute('data-machine-tab', ''); setPane('machine'); }
   checkPublished(); setInterval(checkPublished, 5 * 60e3); addEventListener('visibilitychange', () => { if (!document.hidden) checkPublished(); });
   setTimeout(finishUpdate, 1200);
-  globalThis.whDebug = { vm, co: () => co, checkpoints: () => ck.stats(), tab: TAB, owns, userOf: id => userOf(state.sessions[id]) }; // scripted checks (smoke suites, drive.mjs)
+  globalThis.whDebug = { vm, co: () => co, checkpoints: () => ck.stats(), strategyStats, tab: TAB, owns, userOf: id => userOf(state.sessions[id]) }; // scripted checks (smoke suites, drive.mjs)
   renderCoord();
   // conditions checked at start: a credential never checked, or not for a week
   if ((state.keys.github || state.keys.ghapp) && Date.now() - (state.meta.settings.ghScopeAt || 0) > 7 * 864e5) enqueue({ type: 'scope-check', targets: [{ kind: 'credential', id: gh.mode() || 'github', label: 'GitHub credential' }], reason: { kind: state.meta.settings.ghScopeAt ? 'stale' : 'never checked', detail: state.meta.settings.ghScopeAt ? 'last checked over a week ago' : 'the credential has not been checked against its intended use' } });

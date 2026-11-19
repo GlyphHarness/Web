@@ -1,3 +1,4 @@
+import { known as knownStrategy } from './strategies.js';
 // Paste-to-configure: a JSON block (from a reply, a note, another browser) merged
 // into the settings. Only the fields below are accepted; anything that looks like
 // a credential is refused and never applied. Policies merge by name: a known name
@@ -20,6 +21,7 @@ export const FIELDS = {
   logTranscripts: { check: v => typeof v === 'boolean' },
   machineUser: { check: v => v === 'session' || v === 'root', hint: 'session (a unix user per session) or root' },
   machineGh: { check: v => v === 'inject' || v === 'env', hint: 'inject (the page adds the credential; none in the machine) or env (GH_TOKEN for the session\'s user)' },
+  strategy: { check: v => typeof v === 'string' && knownStrategy(v), hint: 'a strategy id, e.g. strat-stem-1.0' },
   bpKinds: { check: v => Array.isArray(v) && v.every(k => ['system', 'tail', 'stem'].includes(k)), hint: 'cache checkpoint kinds: system, tail, stem' },
   machineQuota: { check: v => Number.isInteger(v) && v >= 0, hint: 'MB per session home; 0 = none' },
   newProfile: { check: v => typeof v === 'string', hint: 'a profile name' },

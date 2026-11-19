@@ -179,6 +179,9 @@ await page.waitForFunction(n => document.querySelectorAll('#sessions [data-id]')
 check('import: restored session shows the same messages', await visible().locator(LOGMSG).count() === before, `${before}`);
 
 await page.reload();
+// wait for the app to render after the reload (reading at once raced it: CI run 1, issue #10)
+await page.waitForFunction(n => document.querySelectorAll('#sessions [data-id]').length === n, rowsBefore + 4, { timeout: 10000 }).catch(() => {});
+await page.waitForFunction(n => [...document.querySelectorAll('.thread')].some(t => getComputedStyle(t).display !== 'none' && t.querySelectorAll('.msg').length >= n), Math.min(before, 1), { timeout: 10000 }).catch(() => {});
 check('import: stored output came with the file', file.blobs && Object.keys(file.blobs).length >= 2);
 check('reload: state restored from localStorage', await page.locator('#sessions [data-id]').count() === rowsBefore + 4 && await visible().locator(LOGMSG).count() === before);
 
