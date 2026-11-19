@@ -12,12 +12,18 @@
 //   handles      'pull' (ids resolved by the model) | 'none'
 //   confer       confer turns at stem checkpoints (not built yet: false everywhere)
 //   resolver     a micro resolver picks what to materialize (not built yet: false everywhere)
+//   stemFraming  'concern' (default: the concern line with the fold shape) | 'plain' (the goal only)
+//   stemReasoning  null | 'low' | 'medium' | 'high': reasoning effort asked for on stem turns (OpenRouter)
 // register() adds more (experiments, other verticals), with the same shape.
 
 const BUILT_IN = [
   { id: 'strat-serial-1.0', name: 'serial', describe: 'Plain serial turns: no explicit checkpoints, no stems. The baseline every other strategy is measured against.', checkpoints: [], stems: false, handles: 'none', confer: false, resolver: false },
   { id: 'strat-checkpoint-1.0', name: 'checkpoint', describe: 'Serial turns with cache checkpoints at the system prompt and the tail.', checkpoints: ['system', 'tail'], stems: false, handles: 'none', confer: false, resolver: false },
   { id: 'strat-stem-1.0', name: 'stem', describe: 'Checkpoints, stems with an anchor checkpoint, and opaque handles the model pulls.', checkpoints: ['system', 'tail', 'stem'], stems: true, handles: 'pull', confer: false, resolver: false },
+  // 2.0 (what the model sees changes): the stem opens with the goal in plain words instead of the
+  // "concern …" framing with the fold shape, and stem turns ask for low reasoning effort.
+  // Live on qwen3.7-flash, 1.0's stems produced 4.8k-22k output tokens of mostly reasoning (issue #11).
+  { id: 'strat-stem-2.0', name: 'stem', describe: 'Stems opened with the plain goal and low reasoning effort on stem turns; otherwise as strat-stem-1.0.', checkpoints: ['system', 'tail', 'stem'], stems: true, handles: 'pull', confer: false, resolver: false, stemFraming: 'plain', stemReasoning: 'low' },
 ];
 export const DEFAULT = 'strat-stem-1.0';
 export const ID = /^strat-[a-z]+-\d+\.\d+$/;

@@ -33,7 +33,7 @@ import * as pat from './patterns.js';
 import { put, get, handlesIn, setFallback } from './outstore.js';
 import { buildRequest, measure, report, padAttachment, inherit, imitatesNote, keptLines, corePrompt, EDGE_MIN, markedOnly, edgeReplies, turnOf, KINDS } from './context.js';
 
-export const VERSION = '0.53.0';
+export const VERSION = '0.54.0';
 // This tab: an id kept for the tab's life (sessionStorage survives its reloads).
 const TAB = (() => { const mk = () => 't' + Math.random().toString(36).slice(2, 8); try { let t = sessionStorage.getItem('wh:tab'); if (!t) sessionStorage.setItem('wh:tab', t = mk()); return t; } catch { return mk(); } })();
 const QS = new URLSearchParams(location.search);
@@ -1193,6 +1193,8 @@ async function turnsInner(s, depth, onFirst) {
     // Cache affinity: ask OpenRouter for the upstream that served this session last, so
     // its prefix cache is warm. Fallbacks stay allowed. Outside the messages, so the prefix is unchanged.
     if (set.provider === 'openrouter' && s.upstream && s.pin !== false) body.provider = { order: [s.upstream], allow_fallbacks: true };
+    // a strategy may ask for a reasoning effort on stem turns (outside the messages: the prefix is unchanged)
+    { const sp = strategies.spec(set.strategy); if (s.stem && sp.stemReasoning && set.provider === 'openrouter') body.reasoning = { effort: sp.stemReasoning }; }
     // halt gate: every tool result is recorded and nothing is in flight, so the turn
     // can be continued from storage alone (s.resume marks it for after a reload)
     if (co?.halted()) { s.resume = 'request'; saveSession(s); await co.gate(s.id, 'request'); delete s.resume; saveSession(s); }
@@ -2065,7 +2067,7 @@ const actions = {
     $('#input').value = '';
     const b = await openStem(src, goal, Number(sel.value));
     activate(b.id);
-    push(b, { role: 'user', content: concernMessage(b.stem.handle, goal) });
+    push(b, { role: 'user', content: strat.stemFraming === 'plain' ? goal : concernMessage(b.stem.handle, goal) });
     await run(b);
   },
   async foldback() {
