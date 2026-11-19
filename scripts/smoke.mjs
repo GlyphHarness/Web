@@ -667,6 +667,7 @@ await page.reload();
   check('stem: a branch forked at the chosen turn, carrying the goal and an opaque handle', stemId !== coreId && st.parent?.id === coreId && st.parent?.at === anchorAt && /^[a-z][a-z0-9]{5}$/.test(st.stem?.handle || '') && st.stem.goal === 'make the widget faster' && st.messages.length > anchorAt, JSON.stringify(st.stem));
   const h = st.stem.handle;
   const prog = await page.evaluate(async h => (await import('./app/handles.js')).resolve(h, 'check'), h);
+  check('stem: it goes to the same upstream as its core (to read the core\'s cached prefix)', !!core0.upstream && st.upstream === core0.upstream, JSON.stringify([core0.upstream, st.upstream]));
   check('stem: its handle resolves to its progress while it works', /open/.test(prog) && /make the widget faster/.test(prog) && /OUTCOME|RESULT|turn/.test(prog), JSON.stringify(prog));
   await page.click(`#sessions [data-id="${coreId}"]`);
   await say('core keeps going');
