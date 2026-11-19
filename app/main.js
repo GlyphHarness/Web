@@ -701,7 +701,7 @@ function inlineEdit(head, edit, input, { label, show = v => v, save }) {
 // ---------- this session's scope, attribute by attribute ----------
 
 const SCOPE_ROWS = [...prof.SETTING_KEYS.map(k => ({ k, kind: 'set' })), ...prof.CAP_KEYS.map(k => ({ k, kind: 'cap' }))];
-const SCOPE_LABEL = { machineAuth: 'machine GitHub auth', machineUser: 'machine user', machineQuota: 'machine quota (MB)', logRepo: 'log repo', logTranscripts: 'transcripts', model: 'model', helper: 'helper model', policyModel: 'policy model', pace: 'pace', branchBudget: 'branch budget', run_js: 'run code', fanout: 'fan out', ask: 'ask and values', vm: 'machine', repo: 'repositories' };
+const SCOPE_LABEL = { machineGh: 'machine GitHub auth', machineUser: 'machine user', machineQuota: 'machine quota (MB)', logRepo: 'log repo', logTranscripts: 'transcripts', model: 'model', helper: 'helper model', policyModel: 'policy model', pace: 'pace', branchBudget: 'branch budget', run_js: 'run code', fanout: 'fan out', ask: 'ask and values', vm: 'machine', repo: 'repositories' };
 // levels from this session up: session, each profile leaf to root, defaults
 function scopeLevels(s) {
   const ch = eff(s).chain;
@@ -2347,7 +2347,7 @@ async function agentRun(cmd, timeoutS, o = {}) {
   const r = await vm().run(script, timeoutS + 30, { ...o, display: cmd });
   return { ...r, timedOut: /\[timed out after \d+s; interrupted\]/.test(r.out) || r.timedOut };
 }
-// The guest's GitHub credential, added by the page (machineAuth "inject", the default):
+// The guest's GitHub credential, added by the page (machineGh "inject", the default):
 // a repository call gets that repository's token (App: minted for it; else the PAT),
 // a call that names no repository (gh api user, gh auth status) gets the PAT.
 async function vmToken(repo, level) {
@@ -2356,15 +2356,15 @@ async function vmToken(repo, level) {
   if (gh.mode() === 'app') throw new Error(repo ? 'the App could not mint a token for ' + repo : 'App tokens are minted per repository and this call names none; add a personal access token in GitHub settings for account-level calls');
   return '';
 }
-// machineAuth "env": the conventional way. The session's own user gets GH_TOKEN = the
+// machineGh "env": the conventional way. The session's own user gets GH_TOKEN = the
 // PAT in its environment (a 600 file in its 700 home); the model can read it then.
 const ghFile = new Map(); // user -> 'env' | 'inject' (this boot)
 async function syncGhFile(s) {
-  const u = userOf(s), mode = cfg(s).machineAuth === 'env' ? 'env' : 'inject';
+  const u = userOf(s), mode = cfg(s).machineGh === 'env' ? 'env' : 'inject';
   if (!u || ghFile.get(u) === mode) return;
   if (mode === 'env') {
-    if (!state.keys.github) throw new Error('machineAuth "env" needs a personal access token in GitHub settings');
-    await vm().run(`id ${u} >/dev/null 2>&1 || adduser -D -s /bin/bash ${u} >/dev/null 2>&1; mkdir -p /home/${u}/.wh; umask 077; printf %s ${shq(state.keys.github)} > /home/${u}/.wh/gh; chown -R ${u}:${u} /home/${u}/.wh; chmod 600 /home/${u}/.wh/gh`, 60, { quiet: true, label: `give ${u} the GitHub token (machineAuth env)`, display: '' });
+    if (!state.keys.github) throw new Error('machineGh "env" needs a personal access token in GitHub settings');
+    await vm().run(`id ${u} >/dev/null 2>&1 || adduser -D -s /bin/bash ${u} >/dev/null 2>&1; mkdir -p /home/${u}/.wh; umask 077; printf %s ${shq(state.keys.github)} > /home/${u}/.wh/gh; chown -R ${u}:${u} /home/${u}/.wh; chmod 600 /home/${u}/.wh/gh`, 60, { quiet: true, label: `give ${u} the GitHub token (machineGh env)`, display: '' });
   } else if (ghFile.has(u)) await vm().run(`rm -f /home/${u}/.wh/gh`, 30, { quiet: true, label: `take the GitHub token from ${u}` });
   ghFile.set(u, mode);
 }
@@ -2612,7 +2612,7 @@ function mountMachine() {
         if (which === 'pty' && !ptyTimer) ptyPoll();
       };
       tabT.onclick = () => pick('term'); tabH.onclick = () => pick('acts'); tabP.onclick = () => pick('pty');
-      const line = h('input', { class: 'vmin', placeholder: 'type a command for the machine and press Enter (↑ ↓: your history)' });
+      const line = h('input', { class: 'vmin', placeholder: 'a command for the machine (root); Enter runs it, ↑ ↓ your history; interactive programs: agent pty' });
       const raw = Object.assign(h('input', { type: 'checkbox', id: 'vmraw' }), { checked: !!state.meta.settings.vmShowHarness });
       raw.addEventListener('change', () => { state.meta.settings.vmShowHarness = raw.checked; saveMeta(); });
       // ---- the person's commands: "up" hooks, history, send again, keys a phone keyboard lacks ----
@@ -2633,12 +2633,15 @@ function mountMachine() {
         termx.remember(cmd, tg); showLast(); if (!hist.hidden) renderHist();
         await ensureOn();
         if (tg === 'pty') { const o = shellOpt(cur()); await ensureTmux(o); await vm().run(`tmux send-keys -t ${TMUX} -l ${shq(cmd)}; tmux send-keys -t ${TMUX} Enter`, 20, { ...o, quiet: true, label: 'typed into the agent pty' }); }
-        else { vmInst.typed(cmd); type(cmd + '\r'); }
+        // as a job, like every other command: free-form text never reaches the console the
+        // harness writes its jobs to (an open quote there would stall every session)
+        else await vm().run(cmd, 900, { by: 'you', display: cmd });
       }
       async function sendKey(tg, raw, tm) {
         await ensureOn();
         if (tg === 'pty') { const o = shellOpt(cur()); await ensureTmux(o); await vm().run(`tmux send-keys -t ${TMUX} ${tm}`, 20, { ...o, quiet: true, label: 'sent ' + tm + ' to the agent pty' }); }
-        else type(raw);
+        else if (tm === 'C-c') { for (const j of await vmInst.jobs()) if (j.by === 'you') await vmInst.cancel(j.id); addAct('Ctrl-C: stopped your running commands', '', 'hook'); }
+        else if (tm === 'Up') line.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp' }));
       }
       const showLast = () => { const l = termx.lastTyped(target()); lastBtn.hidden = !l; if (l) { slot(lastBtn, '↻ ' + (l.cmd.length > 42 ? l.cmd.slice(0, 42) + '…' : l.cmd)); lastBtn.dataset.full = l.cmd; } };
       const renderHist = () => {

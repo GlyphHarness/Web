@@ -309,7 +309,7 @@ Open a session in a tab of its own (↗ on its row) to run sessions in parallel;
 
 ### Terminal commands, scratch helper, stdio hooks, GitHub auth in the machine
 
-Under the terminal: send again the last command you typed, your history (pins, ↑ / ↓), keys a phone keyboard hides, and a scratch helper that drafts commands and tests them in a scratch account first. Inbound and outbound text passes named hooks (smart punctuation and phone capitals undone on the way in, secrets masked on the way out; `register()` adds more). GitHub calls from the machine get your PAT for account-level calls and the repository's token otherwise (`machineAuth: inject`), or the session's user gets a real `GH_TOKEN` (`machineAuth: env`). Details: [docs/TABS.md](docs/TABS.md).
+Under the terminal: send again the last command you typed, your history (pins, ↑ / ↓), keys a phone keyboard hides, and a scratch helper that drafts commands and tests them in a scratch account first. Inbound and outbound text passes named hooks (smart punctuation and phone capitals undone on the way in, secrets masked on the way out; `register()` adds more). GitHub calls from the machine get your PAT for account-level calls and the repository's token otherwise (`machineGh: inject`), or the session's user gets a real `GH_TOKEN` (`machineGh: env`). Details: [docs/TABS.md](docs/TABS.md).
 
 ### Debug bridge
 

@@ -64,7 +64,7 @@ No project found shares one in-browser VM across tabs or isolates agents as unix
 
 ## GitHub from the machine
 
-`machineAuth` (defaults, a profile or a session):
+`machineGh` (defaults, a profile or a session):
 
 | Mode | What the guest has | Who adds the credential |
 |---|---|---|

@@ -253,11 +253,11 @@ export function machine(env) {
     if (u) {
       pre = `id ${u} >/dev/null 2>&1 || adduser -D -s /bin/bash ${u} >/dev/null 2>&1; chmod 700 /home/${u}; mkdir -p /home/${u}/.wh; chown ${u}:${u} /home/${u}/.wh; install -o ${u} -g ${u} -m 600 ${J}.sh /home/${u}/.wh/${id}.sh; `
         + (q ? `if [ "$(du -sm /home/${u} | cut -f1)" -gt ${q} ]; then echo "quota: /home/${u} is over ${q} MB; delete files to go on" > ${J}.out; echo "__WH_D_${id}_122__"; exit; fi; ` : '');
-      // machineAuth env: the user's own GitHub token file (written by the harness, 600) becomes GH_TOKEN
+      // machineGh env: the user's own GitHub token file (written by the harness, 600) becomes GH_TOKEN
       run = `su -s /bin/bash ${u} -c 'cd; export SSL_CERT_FILE=${CA} GIT_SSL_CAINFO=${CA}; [ -r ~/.wh/gh ] && export GH_TOKEN=$(cat ~/.wh/gh); ${q ? `ulimit -f ${q * 1024}; ` : ''}bash ~/.wh/${id}.sh; s=$?; rm -f ~/.wh/${id}.sh; exit $s'`;
     }
     lines.push(`[ -e ${J}.go ] || { : > ${J}.go; cat ${J}.b64.* | base64 -d > ${J}.sh; rm -f ${J}.b64.*; ( ( ${pre}timeout -k 5 -s INT ${timeoutS} ${run} </dev/null > ${J}.out 2>&1; echo "__WH_D_${id}_$?__" ) & ); }`);
-    running.set(id, { cmd: opt.display ?? cmd, user: u, t0: Date.now(), label: opt.label, session: opt.session });
+    running.set(id, { cmd: opt.display ?? cmd, user: u, t0: Date.now(), label: opt.label, session: opt.session, by: opt.by || (opt.quiet ? 'harness' : 'model') });
     let code = null, timedOut = false;
     try {
       const done = waitFor(new RegExp(`__WH_D_${id}_(\\d+)__`), (timeoutS + 20) * 1000);
