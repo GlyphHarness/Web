@@ -30,12 +30,12 @@ const LOGMSG = '.msg:is([data-role=user],[data-role=assistant],[data-role=tool])
 
 await page.goto(url);
 await page.selectOption('#provider', 'mock');
-await page.waitForFunction(() => /3 models/.test(document.querySelector('#modelsn').getAttribute('data-v')));
+await page.waitForFunction(() => /4 models/.test(document.querySelector('#modelsn').getAttribute('data-v')));
 await page.fill('#model', 'free');
 const freeRows = await page.locator('#picker .row[data-model]').allTextContents();
 check('picker: "free" filters, and no-cost prices show as --', freeRows.length === 1 && /^mock-free:free ⚠262k------$/.test(freeRows[0]), freeRows.join('|'));
 await page.fill('#model', 'cheap tools');
-check('picker: "cheap tools" sorts by input price among tool-capable models', (await page.locator('#picker .row[data-model] span:first-child').allTextContents()).join() === 'mock-1,mock-pro');
+check('picker: "cheap tools" sorts by input price among tool-capable models', (await page.locator('#picker .row[data-model] span:first-child').allTextContents()).join() === 'mock-1,mock-pro,mock-bp');
 await page.fill('#model', 'mock <1');
 await page.locator('#picker .row[data-model]').first().dispatchEvent('mousedown');
 check('picker: choosing a row sets the model and its price panel', await page.inputValue('#model') === 'mock-1' && /cached input\$0.003/.test(await page.locator('#price').textContent()) && await slotOf('#pricesum') === 'Models · main $0.15 / $0.003 / $0.6' && !(await page.locator('#price').isVisible()));
@@ -687,14 +687,22 @@ function activeIdOk(a, b) { return a === b; }
   await page.fill('#model', 'mock-bp'); await page.dispatchEvent('#model', 'change');
   await page.click('[data-act=new]');
   await say('bp one'); await say('bp two'); await say('bp three');
+  const bpCore = await page.evaluate(() => sessionStorage.getItem('wh:tab-active'));
   const r = await lastReq(), at = bpsOf(r);
   check('checkpoints: a breakpoint model gets them at the system prompt and the tail only', at.length === 2 && at[0] === 0 && at[1] === r.messages.length - 1 && r.messages[0].role === 'system', JSON.stringify(at));
   const st1 = await stats();
-  check('checkpoints: each is accounted: written, then read by later requests', st1.tail?.writeTokens > 0 && st1.tail.reads >= 2 && st1.system?.reads >= 1, JSON.stringify(st1));
+  check('checkpoints: each is accounted: written, then read by later requests', st1.tail?.writeTokens > 0 && st1.tail.reads >= 2, JSON.stringify(st1));
+  // spec change: a read is credited to the deepest checkpoint that hit, so the system one pays when
+  // the deeper ones miss: a new session's first request (same system prompt and tools)
+  await page.click('[data-act=new]');
+  await say('bp elsewhere');
+  const stSys = await stats();
+  check('checkpoints: the system one pays when a new session starts on the same prefix', stSys.system?.reads >= 1, JSON.stringify(stSys.system));
+  await page.click(`#sessions [data-id="${bpCore}"]`);
   const led = await page.evaluate(() => { const id = sessionStorage.getItem('wh:tab-active'); return JSON.parse(localStorage['wh:s:' + id]).ledger.at(-1); });
   check('checkpoints: the ledger row says which were sent', Array.isArray(led.bp) && led.bp.includes('tail') && led.bp.includes('system'), JSON.stringify(led.bp));
   // two stems from the same turn: the second reads the anchor checkpoint the first wrote
-  const coreId = await page.evaluate(() => sessionStorage.getItem('wh:tab-active'));
+  const coreId = bpCore;
   const core = await page.evaluate(id => JSON.parse(localStorage['wh:s:' + id]), coreId);
   const anchorAt = core.messages.findIndex(m => m.role === 'user' && /bp two/.test(m.content));
   const openStem = async goal => {

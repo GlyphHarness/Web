@@ -17,6 +17,7 @@ import { sharedMachine, MPROTO, stashed } from './vmhost.js';
 import { coordinator, published } from './coord.js';
 import * as termx from './term.js';
 import * as H from './handles.js';
+import * as ck from './checkpoints.js';
 import * as policy from './policy.js';
 import * as smells from './smells.js';
 import { logRepo } from './logrepo.js';
@@ -31,7 +32,7 @@ import * as pat from './patterns.js';
 import { put, get, handlesIn, setFallback } from './outstore.js';
 import { buildRequest, measure, report, padAttachment, inherit, imitatesNote, keptLines, corePrompt, EDGE_MIN, markedOnly, edgeReplies, turnOf, KINDS } from './context.js';
 
-export const VERSION = '0.48.0';
+export const VERSION = '0.49.0';
 // This tab: an id kept for the tab's life (sessionStorage survives its reloads).
 const TAB = (() => { const mk = () => 't' + Math.random().toString(36).slice(2, 8); try { let t = sessionStorage.getItem('wh:tab'); if (!t) sessionStorage.setItem('wh:tab', t = mk()); return t; } catch { return mk(); } })();
 const QS = new URLSearchParams(location.search);
@@ -1199,7 +1200,10 @@ async function turnsInner(s, depth, onFirst) {
     if (go === 'skip') { notice(s, 'Model request skipped; the turn stopped here.'); return 'held'; }
     s.sent = s.messages.length; // everything in the log has now gone out; its wire form is fixed
     const entry = measure(s.id, body);
-    if (shown()) { $('#req').textContent = JSON.stringify(body, null, 2); $('#events').textContent = ''; }
+    // explicit cache breakpoints, only where reuse is expected (checkpoints.js); the stored log is unchanged
+    const bps = ck.supports(set.model) ? ck.choose(s, body, state.meta.settings.bpKinds || ck.KINDS) : [];
+    const wire = ck.apply(body, bps);
+    if (shown()) { $('#req').textContent = JSON.stringify(wire, null, 2); $('#events').textContent = ''; }
 
     const live = h('article', { class: 'msg', 'data-role': 'assistant', 'data-live': '' });
     const think = h('div', { class: 'think' }), txt = h('div', { class: 'txt' });
@@ -1208,7 +1212,7 @@ async function turnsInner(s, depth, onFirst) {
     const acc = { content: '', reasoning: '', calls: [], usage: null, t0: performance.now() };
     let failure = null;
     try {
-      for await (const ev of p.stream(body, key, ctl?.signal, opt())) {
+      for await (const ev of p.stream(wire, key, ctl?.signal, opt())) {
         if (onFirst) { onFirst(); onFirst = null; }
         if (shown()) $('#events').append(JSON.stringify(ev) + '\n');
         if (ev.error) throw new Error(ev.error.message || JSON.stringify(ev.error));
@@ -1247,7 +1251,8 @@ async function turnsInner(s, depth, onFirst) {
       if (acc.reasoning) m.x.reasoning = acc.reasoning;
       push(s, m);
     }
-    s.ledger.push({ ...report(entry, acc.usage), ...(acc.upstream ? { upstream: acc.upstream } : {}) });
+    s.ledger.push({ ...report(entry, acc.usage), ...(acc.upstream ? { upstream: acc.upstream } : {}), ...(bps.length ? { bp: bps.map(b => b.kind) } : {}) });
+    if (bps.length && acc.usage) ck.credit(body, bps, { prompt: acc.usage.prompt_tokens || 0, cached: acc.usage.prompt_tokens_details?.cached_tokens || 0, cacheWrite: acc.usage.prompt_tokens_details?.cache_write_tokens || acc.usage.cache_creation_input_tokens || 0 }, s.id);
     saveSession(s);
     if (shown()) $('#ledger tbody').append(ledgerRow(entry, s.ledger.length - 1));
     ledgerSum();
@@ -1597,6 +1602,10 @@ function renderSmells() {
     (() => { const st = steerStats(); if (!st.length) return ''; const cell = (k, v) => h('td', { 'data-met': String(meets(k, v)), text: v == null ? '-' : TARGETS[k].fmt(v) });
       return h('table', { class: 'audit targets-t' }, h('tr', {}, ...['steering', 'requests', 'cache', 'smells/req', '$/req'].map(t => h('th', { text: t }))),
         ...st.map(o => h('tr', {}, h('td', { text: o.steer + (o.steer === steerOf(cur()) ? ' (this session)' : '') }), h('td', { text: String(o.requests) }), cell('cache', o.cache), cell('smells', o.smellRate), cell('cost', o.costRate)))); })(),
+    // cache checkpoints by kind: written once, then read (paid) or never read (a kind to switch off)
+    (() => { const c = ck.stats(), kinds = Object.keys(c); if (!kinds.length) return '';
+      return h('table', { class: 'audit ckpt-t' }, h('tr', {}, ...['checkpoint', 'set', 'paid', 'written tok', 'reads', 'read tok'].map(t => h('th', { text: t }))),
+        ...kinds.map(k => h('tr', {}, h('td', { text: k + (state.meta.settings.bpKinds && !state.meta.settings.bpKinds.includes(k) ? ' (off)' : '') }), h('td', { text: String(c[k].set) }), h('td', { 'data-met': String(c[k].paid > 0), text: `${c[k].paid}/${c[k].set}` }), h('td', { text: String(c[k].writeTokens) }), h('td', { text: String(c[k].reads) }), h('td', { text: String(c[k].readTokens) })))); })(),
     h('div', { class: 'items' }, ...props.filter(p => p.status === 'pending').map(p => item({ kind: 'proposal', name: p.id, meta: p.model, tone: 'warn', open: true, attrs: { 'data-kind': 'proposal' },
       body: [h('pre', { text: p.text })],
       actions: [btn('adopt', { 'data-act': 'propose', 'data-id': p.id, 'data-to': 'adopted' }), btn('dismiss', { 'data-act': 'propose', 'data-id': p.id, 'data-to': 'dismissed' })] }))),
@@ -2100,7 +2109,7 @@ function bind() {
   if (MACHINE_TAB) { document.title = 'WebHarness · machine'; app.setAttribute('data-machine-tab', ''); setPane('machine'); }
   checkPublished(); setInterval(checkPublished, 5 * 60e3); addEventListener('visibilitychange', () => { if (!document.hidden) checkPublished(); });
   setTimeout(finishUpdate, 1200);
-  globalThis.whDebug = { vm, co: () => co, tab: TAB, owns, userOf: id => userOf(state.sessions[id]) }; // scripted checks (smoke suites, drive.mjs)
+  globalThis.whDebug = { vm, co: () => co, checkpoints: () => ck.stats(), tab: TAB, owns, userOf: id => userOf(state.sessions[id]) }; // scripted checks (smoke suites, drive.mjs)
   renderCoord();
   // conditions checked at start: a credential never checked, or not for a week
   if ((state.keys.github || state.keys.ghapp) && Date.now() - (state.meta.settings.ghScopeAt || 0) > 7 * 864e5) enqueue({ type: 'scope-check', targets: [{ kind: 'credential', id: gh.mode() || 'github', label: 'GitHub credential' }], reason: { kind: state.meta.settings.ghScopeAt ? 'stale' : 'never checked', detail: state.meta.settings.ghScopeAt ? 'last checked over a week ago' : 'the credential has not been checked against its intended use' } });

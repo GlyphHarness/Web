@@ -23,6 +23,13 @@ Goal: keep the core context terse and coherent while work runs elsewhere and res
 
 A handle point is a candidate cache breakpoint, not an obligation. The harness sets a real breakpoint only where reuse is likely (a stem expected to fold back, a long resolver thread, a hook that will fire again). Each checkpoint's ledger shows its cache write, later reads and net; kinds that never pay are dropped by the steering review.
 
+### Built (v0.49.0)
+
+- Kinds: `system` (end of the system prompt and tools), `tail` (the last message), `stem` (a stem's anchor). `settings.bpKinds` switches kinds on and off. Models with explicit breakpoints get them (Claude/Anthropic ids, and the mock's `mock-bp`); others get none and are measured from their reported usage as before.
+- The stored log is unchanged; only the request as sent carries `cache_control` parts.
+- Accounting (`app/checkpoints.js`, shown under Smells next to the targets): a record per checkpoint, keyed by a hash of the prefix it ends, shared across sessions. A read goes to the deepest known checkpoint the request starts with, so a shallow one pays only when the deeper ones miss (the system checkpoint pays when a new session starts on the same prefix). Writes are split: each new checkpoint owns its own segment. Characters per token are calibrated from each request's own prompt count.
+- The mock models breakpoint caching (entries written only at marked points; a request reads the longest written prefix it starts with), so the case studies can run offline.
+
 ## 4. CI records
 
 On each push: main and git suites always; the machine suite on a schedule or when `app/vm*` changes. Each run posts a commit status and a record (commit, suite, per-check result, failing checks, log tail, modules each check exercised via Playwright coverage). A failure becomes a `ci-failure` concern whose handle the handler re-points as it works: rerun on head first, then the break window filtered by coverage, then bisect; fix forward on main.
