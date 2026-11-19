@@ -728,7 +728,7 @@ function inlineEdit(head, edit, input, { label, show = v => v, save }) {
 // ---------- this session's scope, attribute by attribute ----------
 
 const SCOPE_ROWS = [...prof.SETTING_KEYS.map(k => ({ k, kind: 'set' })), ...prof.CAP_KEYS.map(k => ({ k, kind: 'cap' }))];
-const SCOPE_LABEL = { watchModel: 'watcher model', strategy: 'strategy', machineGh: 'machine GitHub auth', machineUser: 'machine user', machineQuota: 'machine quota (MB)', logRepo: 'log repo', logTranscripts: 'transcripts', model: 'model', helper: 'helper model', policyModel: 'policy model', pace: 'pace', branchBudget: 'branch budget', run_js: 'run code', fanout: 'fan out', ask: 'ask and values', vm: 'machine', repo: 'repositories' };
+const SCOPE_LABEL = { watchModel: 'watcher model', strategy: 'strategy', machineGh: 'machine GitHub auth', machineUser: 'machine user', machineQuota: 'machine quota (MB)', machineCpu: 'machine CPU shares', logRepo: 'log repo', logTranscripts: 'transcripts', model: 'model', helper: 'helper model', policyModel: 'policy model', pace: 'pace', branchBudget: 'branch budget', run_js: 'run code', fanout: 'fan out', ask: 'ask and values', vm: 'machine', repo: 'repositories' };
 // levels from this session up: session, each profile leaf to root, defaults
 function scopeLevels(s) {
   const ch = eff(s).chain;
@@ -2392,7 +2392,7 @@ const userOf = s => {
   return 'u' + r.id.slice(-8).toLowerCase().replace(/[^a-z0-9]/g, '');
 };
 const homeOf = s => userOf(s) ? '/home/' + userOf(s) : '/root';
-const shellOpt = s => s ? { user: userOf(s), quotaMB: Number(cfg(s).machineQuota ?? 200) || 0, session: s.id } : {};
+const shellOpt = s => s ? { user: userOf(s), quotaMB: Number(cfg(s).machineQuota ?? 200) || 0, cpuShares: Number(cfg(s).machineCpu ?? 1024) || 1024, session: s.id } : {};
 const pinsOf = s => s?.pins?.length ? s.pins : [homeOf(s)];
 async function fsMark(s) {
   if (fsState.has(s.id)) return fsState.get(s.id);
@@ -2611,7 +2611,7 @@ async function machineDiag() {
     ['its scope allows the machine', !!e?.caps.vm, e?.caps.vm ? 'yes' : `no: denied by ${e?.capFrom.vm || 'its profile'}`],
     ['machine started', !!vmInst && /ready/.test(vmInst.status()), vmInst ? vmInst.status() : 'not yet: it starts when a session first uses it, or with "start now"'],
     ['runs in', true, !vmInst || vmInst.role() === 'idle' ? 'whichever tab needs it first (or open a machine tab)' : vmInst.role() === 'host' ? (MACHINE_TAB ? 'this machine tab' : 'this tab: closing or reloading it stops the machine (homes are saved for an update)') : `another tab (${vmInst.host()?.dedicated ? 'the machine tab' : 'tab ' + vmInst.host()?.tab}, build ${vmInst.host()?.version || '?'})`],
-    ['this session’s user', true, s ? (userOf(s) ? `${userOf(s)} (home ${homeOf(s)}, quota ${shellOpt(s).quotaMB || 'none'} MB)` : 'root (/root)') : '-'],
+    ['this session’s user', true, s ? (userOf(s) ? `${userOf(s)} (home ${homeOf(s)}, quota ${shellOpt(s).quotaMB || 'none'} MB, cpu ${shellOpt(s).cpuShares} shares)` : 'root (/root)') : '-'],
   ];
   const box = $('#vmdiag');
   const start = btn('start now', { class: 'primary' });

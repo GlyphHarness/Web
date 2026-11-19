@@ -18,6 +18,9 @@ const IMAGE = ROOT + 'image/out.parts.json';
 const NET = ROOT + 'image/c2w-net-proxy.wasm';
 const PLACEHOLDER = 'wh-placeholder-token';
 export const RUNTIME_MARK = /__WH_RUNTIME_POLICY (\S+) ([^\n]*?)__\n?/g;
+// CPU shares are a weight against other jobs (1024 = a normal share, the default). They become a nice level
+// on the scheduler's own curve (each nice step is a factor of 1.25). 1024 or more, or unset, adds nothing.
+export const niceFor = shares => { const s = Number(shares); return s > 0 && s < 1024 ? Math.min(19, Math.round(Math.log(1024 / Math.max(2, s)) / Math.log(1.25))) : 0; };
 export const SLEEP_LIMIT = 20; // seconds; matches the bounded-waits policy
 // The package shelf: Alpine packages kept next to the image on the page's own site
 // (same origin, so the machine can fetch them; Alpine's mirrors do not allow
@@ -249,12 +252,13 @@ export function machine(env) {
     const b64 = btoa(String.fromCharCode(...new TextEncoder().encode(cmd)));
     const lines = chunks(b64, J + '.b64');
     const u = opt.user, q = Math.max(0, Math.floor(Number(opt.quotaMB) || 0));
-    let pre = '', run = `bash ${J}.sh`;
+    const nn = niceFor(opt.cpuShares), nice = nn ? `nice -n ${nn} ` : '';
+    let pre = '', run = `${nice}bash ${J}.sh`;
     if (u) {
       pre = `id ${u} >/dev/null 2>&1 || adduser -D -s /bin/bash ${u} >/dev/null 2>&1; chmod 700 /home/${u}; mkdir -p /home/${u}/.wh; chown ${u}:${u} /home/${u}/.wh; install -o ${u} -g ${u} -m 600 ${J}.sh /home/${u}/.wh/${id}.sh; `
         + (q ? `if [ "$(du -sm /home/${u} | cut -f1)" -gt ${q} ]; then echo "quota: /home/${u} is over ${q} MB; delete files to go on" > ${J}.out; echo "__WH_D_${id}_122__"; exit; fi; ` : '');
       // machineGh env: the user's own GitHub token file (written by the harness, 600) becomes GH_TOKEN
-      run = `su -s /bin/bash ${u} -c 'cd; export SSL_CERT_FILE=${CA} GIT_SSL_CAINFO=${CA}; [ -r ~/.wh/gh ] && export GH_TOKEN=$(cat ~/.wh/gh); ${q ? `ulimit -f ${q * 1024}; ` : ''}bash ~/.wh/${id}.sh; s=$?; rm -f ~/.wh/${id}.sh; exit $s'`;
+      run = `su -s /bin/bash ${u} -c 'cd; export SSL_CERT_FILE=${CA} GIT_SSL_CAINFO=${CA}; [ -r ~/.wh/gh ] && export GH_TOKEN=$(cat ~/.wh/gh); ${q ? `ulimit -f ${q * 1024}; ` : ''}${nice}bash ~/.wh/${id}.sh; s=$?; rm -f ~/.wh/${id}.sh; exit $s'`;
     }
     lines.push(`[ -e ${J}.go ] || { : > ${J}.go; cat ${J}.b64.* | base64 -d > ${J}.sh; rm -f ${J}.b64.*; ( ( ${pre}timeout -k 5 -s INT ${timeoutS} ${run} </dev/null > ${J}.out 2>&1; echo "__WH_D_${id}_$?__" ) & ); }`);
     running.set(id, { cmd: opt.display ?? cmd, user: u, t0: Date.now(), label: opt.label, session: opt.session, by: opt.by || (opt.quiet ? 'harness' : 'model') });
