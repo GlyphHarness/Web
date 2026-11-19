@@ -331,7 +331,7 @@ await page.mouse.move(700, 450);
 // ---- import: loose labels and values matched to what exists ----
 await page.evaluate(() => document.querySelector('[data-act=cfgimport]').click());
 await page.waitForSelector('.modal textarea');
-await page.fill('.modal textarea', ['| Role | Model | Price |', '|---|---|---|', '| main | `mock-pro` | x |', '| helper (filters output) | `mock-1` | y |', '- Log repo: someone/logs2', 'deploy region = eu-west-1', 'GitHub token: github_pat_' + 'q'.repeat(20), 'pace: fast'].join('\n'));
+await page.fill('.modal textarea', ['| Role | Model | Price |', '|---|---|---|', '| main | `mock-pro` | x |', '| helper (filters output) | `mock-1` | y |', '- Log repo: someone/logs2', 'deploy region = eu-west-1', 'client secret: github_pat_' + 'q'.repeat(20), 'pace: fast'].join('\n'));
 const iplan = await page.textContent('.modal .cfgplan');
 check('import: lines are matched to settings, values or new values, with a preview', /main→ model[^]*"mock-pro"/.test(iplan.replace(/\s+/g, ' ').replace(/ → /g, '→ ')) || (/model/.test(iplan) && /mock-pro/.test(iplan) && /new value/.test(iplan) && /logRepo \(defaults\)/.test(iplan)), iplan.slice(0, 300));
 check('import: credentials and invalid values are refused, the token is not shown', /refused: looks like a credential/.test(iplan) && !iplan.includes('github_pat_') && /pace is run, requests, tools or both/.test(iplan));

@@ -8,6 +8,13 @@ import { validate as validLayout } from './panels.js';
 //   {"webharness": "config", "settings": {"model": "...", "logRepo": "owner/name"},
 //    "policies": [{"name": "bounded-waits", "on": false}]}
 // A bare object is read as settings (plus "policies" if present).
+//
+// Credentials have one door: a "keys" block, {"keys": {"openrouter": "...", "github": "..."}}
+// (a provider id, or "github"; "" removes one). They are shown masked in the plan, go to
+// this browser's key store on Apply, and are never part of settings, "copy config" or any
+// export. A credential anywhere else in the block is still refused.
+//   {"webharness": "config", "keys": {"openrouter": "sk-or-...", "github": "github_pat_..."},
+//    "settings": {"logRepo": "owner/name", "concernRepo": "owner/name"}}
 
 const S = v => typeof v === 'string';
 export const FIELDS = {
@@ -15,6 +22,7 @@ export const FIELDS = {
   model: { check: S }, helper: { check: S }, policyModel: { check: S },
   ghlabel: { check: S, hint: 'label told to the model' },
   logRepo: { check: v => v === '' || (S(v) && /^[\w.-]+\/[\w.-]+$/.test(v)), hint: 'owner/name' },
+  concernRepo: { check: v => v === '' || (S(v) && /^[\w.-]+\/[\w.-]+$/.test(v)), hint: 'owner/name; blank = the repo this page is served from' },
   branchBudget: { check: v => Number.isInteger(v) && v >= 1000 },
   pace: { check: v => ['run', 'requests', 'tools', 'both'].includes(v) },
   base: { check: v => v && typeof v === 'object' && Object.values(v).every(x => S(x) && (x === '' || /^https?:\/\//.test(x))), hint: '{provider: url}' },
@@ -32,6 +40,9 @@ export const FIELDS = {
   metricsLayout: { check: v => validLayout(v).ok, hint: 'a metrics layout: {slots: {slot: [{id}]}} (docs/METRICS-PANEL.md)' },
 };
 const SECRET = /token|key|pem|secret|passw|credential|auth|bearer/i;
+// first and last four of a credential, never the whole of it
+export const mask = v => { v = String(v ?? ''); return !v ? '(none)' : v.length > 12 ? v.slice(0, 4) + '…' + v.slice(-4) + ' (' + v.length + ' chars)' : '•'.repeat(v.length); };
+const KEY_OK = v => S(v) && (v === '' || (v.length >= 8 && v.length <= 400 && !/\s/.test(v)));
 const POLICY_FIELDS = ['name', 'tool', 'pattern', 'flags', 'rule', 'on'];
 
 // -> {changes: [{path, from, to}], refused: [{path, why}], next: {settings, policies, machine}}
@@ -39,11 +50,11 @@ export function plan(text, current) {
   let j;
   try { j = JSON.parse(String(text).trim()); } catch (e) { return { error: 'Not JSON: ' + e.message }; }
   if (!j || typeof j !== 'object' || Array.isArray(j)) return { error: 'Expected a JSON object.' };
-  const src = j.settings && typeof j.settings === 'object' ? j.settings : Object.fromEntries(Object.entries(j).filter(([k]) => !['policies', 'profiles', 'webharness', 'v'].includes(k)));
+  const src = j.settings && typeof j.settings === 'object' ? j.settings : Object.fromEntries(Object.entries(j).filter(([k]) => !['policies', 'profiles', 'webharness', 'v', 'keys', 'values'].includes(k)));
   const changes = [], refused = [], settings = {}, ctx = { providers: current.providers };
   let machine = null;
   for (const [k, v] of Object.entries(src)) {
-    if (SECRET.test(k)) { refused.push({ path: k, why: 'looks like a credential; enter those by hand' }); continue; }
+    if (SECRET.test(k)) { refused.push({ path: k, why: 'looks like a credential; put it in a "keys" block, or enter it by hand' }); continue; }
     const f = FIELDS[k];
     if (!f) { refused.push({ path: k, why: 'not a configurable field' }); continue; }
     if (!f.check(v, ctx)) { refused.push({ path: k, why: 'invalid value' + (f.hint ? ' (' + f.hint + ')' : '') }); continue; }
@@ -57,6 +68,21 @@ export function plan(text, current) {
     }
     if (k === 'metricsLayout') { const a = validLayout(v).layout; if (JSON.stringify(current.settings[k]) !== JSON.stringify(a)) { settings[k] = a; changes.push({ path: k, from: current.settings[k] ?? '', to: a }); } continue; }
     if (current.settings[k] !== v) { settings[k] = v; changes.push({ path: k, from: current.settings[k] ?? '', to: v }); }
+  }
+  let keys = null;
+  if (j.keys != null) {
+    if (!j.keys || typeof j.keys !== 'object' || Array.isArray(j.keys)) refused.push({ path: 'keys', why: 'must be an object: {"openrouter": "...", "github": "..."}' });
+    else {
+      for (const [id, v] of Object.entries(j.keys)) {
+        const path = 'key ' + id;
+        if (id !== 'github' && !current.providers.includes(id)) { refused.push({ path, why: 'a provider id or "github"' }); continue; }
+        if (!KEY_OK(v)) { refused.push({ path, why: 'a single string of 8 or more characters, no spaces ("" removes it)' }); continue; }
+        const now = current.keys?.[id] || '';
+        if (now === v) continue;
+        (keys ??= {})[id] = v;
+        changes.push({ path, from: mask(now), to: v === '' ? '(removed)' : mask(v), secret: true });
+      }
+    }
   }
   let policies = null;
   if (j.policies != null) {
@@ -131,7 +157,7 @@ export function plan(text, current) {
     const ok = [...(current.profiles || []), ...(profiles || [])].some(p => p.name === settings.newProfile);
     if (!ok) { refused.push({ path: 'newProfile', why: 'no profile named ' + settings.newProfile }); changes.splice(changes.findIndex(x => x.path === 'newProfile'), 1); delete settings.newProfile; }
   }
-  return { changes, refused, next: { settings, policies, machine, profiles, values } };
+  return { changes, refused, next: { settings, policies, machine, profiles, values, keys } };
 }
 
 // The current non-secret configuration, in the same shape plan() reads.
@@ -160,10 +186,21 @@ export const ALIASES = {
   pace: ['pace'],
   branchBudget: ['branch budget', 'budget', 'branchbudget', 'token budget'],
   logRepo: ['log repo', 'logrepo', 'log repository', 'audit repo', 'logs repo'],
+  concernRepo: ['concerns repo', 'concern repo', 'concerns repository', 'concernrepo', 'concerns'],
   ghlabel: ['github access', 'access label', 'ghlabel', 'github label', 'token label'],
   provider: ['provider'],
 };
 // settings a session's scope can hold; the others exist only as defaults
+// Credential lines: "github token: ...", "openrouter key: ...", "api key: ..." (the current provider's).
+// They go to the key store, masked in the plan, and are never written as values or settings.
+const GH_KEY = ['github token', 'gh token', 'github pat', 'gh pat', 'github key', 'github access token', 'github personal access token', 'pat', 'token'];
+export function keyFor(label, ctx = {}) {
+  const n = norm(label);
+  if (GH_KEY.includes(n)) return 'github';
+  for (const p of ctx.providers || []) if ([p + ' key', p + ' api key', p + ' token', p + ' secret key'].includes(n)) return p;
+  if (['api key', 'apikey', 'key', 'provider key', 'llm key', 'model key'].includes(n)) return ctx.settings?.provider || null;
+  return null;
+}
 export const SCOPED = ['model', 'helper', 'policyModel', 'pace', 'branchBudget', 'logRepo'];
 const LOOKS_SECRET = /^(ghp_|gho_|ghs_|github_pat_|sk-|xox[abp]-|AKIA)[\w-]{8,}|-----BEGIN [A-Z ]*PRIVATE KEY/;
 const norm = t => String(t).toLowerCase().replace(/[`*_]/g, '').replace(/\(.*?\)/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
@@ -198,13 +235,20 @@ export function planImport(text, ctx) {
   const rows = [];
   for (const x of lines(text)) {
     const n = norm(x.label);
+    const kid = keyFor(x.label, ctx);
+    if (kid) {
+      const v = x.value, now = ctx.keys?.[kid] || '';
+      if (v.length < 8 || v.length > 400 || /\s/.test(v)) rows.push({ ...x, value: mask(v), action: 'refused', why: 'a credential is one string of 8 or more characters, no spaces' });
+      else rows.push({ ...x, target: { kind: 'key', id: kid }, secret: v, value: mask(v), from: mask(now), action: now === v ? 'unchanged' : 'update' });
+      continue;
+    }
     if (/token|secret|password|passwd|api key|apikey|private key|\bpem\b|credential/.test(n) || LOOKS_SECRET.test(x.value)) { rows.push({ ...x, action: 'refused', why: 'looks like a credential; type those into their own field' }); continue; }
     const key = Object.entries(ALIASES).find(([, al]) => al.includes(n))?.[0];
     if (key) {
       let v = x.value;
       if (key === 'branchBudget') { v = Number(String(v).replace(/[,_\s]/g, '')); if (!Number.isInteger(v) || v < 1000) { rows.push({ ...x, action: 'refused', why: 'budget must be a whole number of tokens' }); continue; } }
       if (key === 'pace' && !['run', 'requests', 'tools', 'both'].includes(v)) { rows.push({ ...x, action: 'refused', why: 'pace is run, requests, tools or both' }); continue; }
-      if (key === 'logRepo' && !/^[\w.-]+\/[\w.-]+$/.test(v)) { rows.push({ ...x, action: 'refused', why: 'log repo is owner/name' }); continue; }
+      if ((key === 'logRepo' || key === 'concernRepo') && !/^[\w.-]+\/[\w.-]+$/.test(v)) { rows.push({ ...x, action: 'refused', why: 'a repository is owner/name' }); continue; }
       if (key === 'provider' && !(ctx.providers || []).includes(v)) { rows.push({ ...x, action: 'refused', why: 'unknown provider' }); continue; }
       const scoped = SCOPED.includes(key);
       const now = scoped ? ctx.current?.(key) : ctx.settings[key];
