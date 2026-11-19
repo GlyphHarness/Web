@@ -27,9 +27,25 @@ A handle point is a candidate cache breakpoint, not an obligation. The harness s
 
 On each push: main and git suites always; the machine suite on a schedule or when `app/vm*` changes. Each run posts a commit status and a record (commit, suite, per-check result, failing checks, log tail, modules each check exercised via Playwright coverage). A failure becomes a `ci-failure` concern whose handle the handler re-points as it works: rerun on head first, then the break window filtered by coverage, then bisect; fix forward on main.
 
+### Passes are silent; failures wait until they matter
+
+- A check that passes needs no wake: its handle resolves as passed as if it had passed when it ran. No turn is spent on it.
+- Until a result exists the handle resolves as pending, never as passed.
+- A failure is not delivered as a past event to reason backwards from. It is held behind its handle and addressed when the work in hand touches it (its files, its goal) or when nothing else is running, not as an interruption.
+
 ## 5. Specs first
 
 Checks are written from the goal before the implementation, assert on state (whDebug, data attributes), not display text, one acceptance check per sentence of the goal. Changing a spec check during implementation is its own commit with a reason.
+
+## 5b. Confer at checkpoints (cross-causal)
+
+A stem's continue point is a checkpoint that looks like any other turn but is kept for reuse: its prefix stays cached, so the model can be asked again *as it was then*.
+
+- **A, ahead (the edge):** the model at the latest turn states what it plans to do next. Terse by default (a few lines); verbose only past a threshold (when B found a divergence, or the plan touches more than one goal).
+- **B, look-back (the checkpoint):** the model at the stem's checkpoint, with its own goal in its context, is given the edge turns since then (their step lines and handles, not their bulk) and asked to compare: what the edge did against what it set out to do, and what it would do between.
+- **Consult:** A and B together give the intermediate range: drift, skipped steps, goals met by accident, plans that no longer fit. A short consult turn (either side, or a small model) turns that into one correction or "no change".
+- **A graph, not a pair:** any two checkpoints can confer (an earlier self checks a later one; a later self revisits an earlier goal). Edges are recorded as handles; nothing enters the core line unless the consult changes the plan, and then as one step line.
+- **Cost:** B is a cache read of a prefix that already exists plus a small delta; confers are side requests with their own ledger rows, measured like everything else.
 
 ## 6. Micro-context resolver (after 1–5)
 
@@ -47,6 +63,7 @@ Each case is a scripted scenario (for example: a CI break fixed while the core k
 | C, + selective checkpoints | B with breakpoints only where reuse is expected |
 | D, + stems | C with work in stems, progress and folds behind handles |
 | E, + micro resolver | D with the helper choosing what to materialize |
+| F, + confer | E with A/B confers at stem checkpoints (cost against drift caught) |
 
 Per variant, from the ledger: uncached input, cache write, cache read, output tokens, cost, turns, final core size, and **coherence** (scenario assertions that the core acted on the right state: a cheaper variant that loses track fails). Mock provider first (it models a prefix cache), then one cheap and one frontier model. Results as one table per scenario plus totals, published as a page and kept as a regression baseline.
 
@@ -55,8 +72,9 @@ Per variant, from the ledger: uncached input, cache write, cache read, output to
 1. Opaque ids and per-reader resolution in the store; output_read pulls them.
 2. Stems: anchor branching, re-pointed handle, fold, catch-up.
 3. Selective checkpoints with paid-off accounting.
-4. CI workflow, records, coverage map, ci-failure handling.
+4. CI workflow, records, coverage map, ci-failure handling; passes resolve silently.
 5. Case-study runner (S, A–D).
 6. Micro resolver (E), measured against the rest.
+7. Confer at checkpoints (F): A/B pairs first, then the graph.
 
 Each step lands spec first.
