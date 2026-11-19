@@ -275,7 +275,10 @@ async function exec(call, ctx) {
   if (typeof args.ref === 'string' && Object.keys(args).every(k => k === 'ref' || k === 'name' || k === 'want')) {
     const stored = await get(args.ref).catch(() => null);
     if (stored == null) return `No stored call "${args.ref}".`;
-    try { args = JSON.parse(stored); } catch { return `Stored call "${args.ref}" is not valid JSON.`; }
+    // a stored call is an arguments object; anything else under the handle is an output (seen: a model passed one)
+    let parsed; try { parsed = JSON.parse(stored); } catch { parsed = undefined; }
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return `"${args.ref}" holds an output, not a stored call: read it with output_read, or make the call with its arguments.`;
+    args = parsed;
   }
   try {
     const out = String(await t.run(args, ctx));
