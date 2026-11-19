@@ -54,6 +54,19 @@ A stem's continue point is a checkpoint that looks like any other turn but is ke
 - **A graph, not a pair:** any two checkpoints can confer (an earlier self checks a later one; a later self revisits an earlier goal). Edges are recorded as handles; nothing enters the core line unless the consult changes the plan, and then as one step line.
 - **Cost:** B is a cache read of a prefix that already exists plus a small delta; confers are side requests with their own ledger rows, measured like everything else.
 
+## 5c. Policy-based steering and probe checkpoints (design, not built)
+
+Steering is policy, not nudges. An operator (person or agent) states a goal once; the strategy decides when to remind, what to materialize, and when to checkpoint. A nudge typed mid-run is a missing directive, so each one is worth recording as a concern.
+
+- **Directives live in the strategy**: a system-prompt base plus hooked turn wrappers, versioned with the strategy id (§8), so a change to steering is a new strategy and is measured like any other.
+- **Probe turn**: at the end of a *group* (a run of turns that belong together), the harness sends the context so far plus a closing marker `[label · tag, tag, tag]`, asks for a minimal reply (one word), and **throws the reply away**. It is not stored in the log, not shown, and not billed to the core line; it has its own ledger row (kind `probe`). Its only product is a provider cache entry for the prefix up to that boundary.
+- **Ambiguous on purpose**: the label and tags are short and do not say what to do. They sit in the cached prefix as opaque markers, like handles (§1). Meaning is supplied later: when a request is built, a resolver (step warp / crafting, §6) may materialize a label or tag into whatever the policy wants (a reasoning hint, goal framing, which handles to open) *after* the cached prefix. The cached bytes never carry a concrete steer, so the conversation can be shaped differently per request without losing the cache or baking in a steer that cannot be undone.
+- **Why**: on models with automatic caching and no explicit breakpoints, a probe puts an entry where we choose instead of where the provider happens to (live, qwen3.7-flash got no cache hits on its first six requests: `docs/live-evidence/2026-11-19-windows-chrome.md`); on explicit-breakpoint models a probe is a breakpoint written once; and the ambiguity keeps room to steer.
+- **Accounting**: a probe pays when later reads of its prefix save more than its write cost (its output is one token); kinds that never pay are dropped by the steering review (§3). The probe must share the real requests' exact prefix bytes and upstream (`provider.order`), or it warms nothing.
+- **Seams**: strategy fields `directive`, `probes` (where a group ends: turn count, token threshold, stem anchor, bulky tool result) and `tags`; a resolver hook that maps markers to materialized context.
+- **Open, to settle by a live run first**: whether a small `max_tokens` request writes a cache entry on each provider; how many tokens a group needs before a probe pays; the tag vocabulary; whether resolver output is appended after the prefix or rewrites the tail.
+- **Measurement**: variant G in §7 (F plus probes) against serial and C on the same scenarios: uncached input per request, cache-read rate, and the probes' added cost. Live first: one probe at about 4k tokens on qwen3.7-flash, then compare `cached_tokens` on the next three requests.
+
 ## 6. Micro-context resolver (after 1–5)
 
 A small helper model takes hints (the core's next question, its recent turns, the handles in view) and chooses, case by case, which handles to materialize at the leading edge of the request and to what. The leading edge reveals the pertinent context; new handles are embedded along the way, so the same approach continues into stems and their own resolution. Its picks are logged with the audit, and it can be switched off per case to compare.
