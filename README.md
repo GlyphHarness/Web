@@ -2,7 +2,7 @@
 
 A client-side LLM chat harness served straight from this repo with GitHub Pages. No server, no build step: the browser holds the API key, the sessions and the tools.
 
-Status: working skeleton (v0.44.0). The OpenRouter path is written from the OpenAI-compatible conventions and has not yet been run against the live API.
+Status: working skeleton (v0.44.0). The OpenRouter path (streaming, tools, cached tokens, upstream pinning) and the GitHub paths (commit, branch, issue, repository creation) have been run live; see [docs/live-evidence](docs/live-evidence/2026-11-19-windows-chrome.md). GitHub App token minting has not.
 
 ## Run
 
@@ -27,6 +27,9 @@ Status: working skeleton (v0.44.0). The OpenRouter path is written from the Open
 | `app/migrate.js` | Schema number and forward migrations. |
 | `app/styles.js` | Dynamic style tags for cosmetic state. |
 | `app/theme.js`, `app/theme.css` | Dark / light / system mode and its colour tokens ([docs/THEME.md](docs/THEME.md)). |
+| `app/profile.js` | Turn profile from stored records (counts, sizes, costs, cache); shared by the CLI and the metrics panel. |
+| `app/panels.js` | Metrics widget registry, built-in widgets and the slot layout (`panels.register`). See `docs/METRICS-PANEL.md`. |
+| `app/metrics.js` | Mounts the metrics slots and dashboard overlay with its layout editor. |
 
 ### Versions: the repo is the release channel
 

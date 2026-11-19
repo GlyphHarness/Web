@@ -1,4 +1,5 @@
 import { known as knownStrategy } from './strategies.js';
+import { validate as validLayout } from './panels.js';
 // Paste-to-configure: a JSON block (from a reply, a note, another browser) merged
 // into the settings. Only the fields below are accepted; anything that looks like
 // a credential is refused and never applied. Policies merge by name: a known name
@@ -27,6 +28,7 @@ export const FIELDS = {
   bpKinds: { check: v => Array.isArray(v) && v.every(k => ['system', 'tail', 'stem'].includes(k)), hint: 'cache checkpoint kinds: system, tail, stem' },
   machineQuota: { check: v => Number.isInteger(v) && v >= 0, hint: 'MB per session home; 0 = none' },
   newProfile: { check: v => typeof v === 'string', hint: 'a profile name' },
+  metricsLayout: { check: v => validLayout(v).ok, hint: 'a metrics layout: {slots: {slot: [{id}]}} (docs/METRICS-PANEL.md)' },
 };
 const SECRET = /token|key|pem|secret|passw|credential|auth|bearer/i;
 const POLICY_FIELDS = ['name', 'tool', 'pattern', 'flags', 'rule', 'on'];
@@ -52,6 +54,7 @@ export function plan(text, current) {
       }
       continue;
     }
+    if (k === 'metricsLayout') { const a = validLayout(v).layout; if (JSON.stringify(current.settings[k]) !== JSON.stringify(a)) { settings[k] = a; changes.push({ path: k, from: current.settings[k] ?? '', to: a }); } continue; }
     if (current.settings[k] !== v) { settings[k] = v; changes.push({ path: k, from: current.settings[k] ?? '', to: v }); }
   }
   let policies = null;

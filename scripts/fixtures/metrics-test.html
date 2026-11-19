@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>metrics widgets, no app</title>
+<style>body{font:14px system-ui;background:#14161a;color:#e6e8ec;margin:16px}#out{display:flex;flex-wrap:wrap;gap:8px}</style></head>
+<body>
+<p>Test page for docs/METRICS-PANEL.md: imports panels.js without the app, registers a custom widget, draws a slot.</p>
+<div id="out"></div><div id="err"></div>
+<script type="module">
+import * as panels from '../../app/panels.js';
+try {
+  const fx = await fetch('./metrics-sessions.json').then(r => r.json());
+  const sessions = Object.fromEntries(fx.sessions.map(s => [s.id, s]));
+  panels.register({ id: 'helper-requests', title: 'Helper requests', size: 's', render(s, all, { h }) {
+    return s ? h('span', { text: `helper ${s.requests.helper}/${s.requests.main + s.requests.helper}` }) : h('span', { text: 'no session' }); } });
+  panels.register({ id: 'broken', title: 'Broken', size: 's', render() { throw new Error('boom'); } });
+  panels.setLayout({ slots: { 'header-right': [{ id: 'helper-requests' }, { id: 'cost-chip' }, { id: 'broken' }, { id: 'not-registered-yet' }] } });
+  const { session, all } = panels.gather(sessions, 'sfixA', {});
+  document.getElementById('out').append(...panels.renderSlot('header-right', session, all));
+  globalThis.__done = true;
+} catch (e) { document.getElementById('err').textContent = String(e.stack || e); globalThis.__done = true; }
+</script></body></html>
