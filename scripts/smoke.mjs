@@ -737,6 +737,35 @@ function activeIdOk(a, b) { return a === b; }
   check('checkpoints: a model without breakpoints gets none', bpsOf(await lastReq()).length === 0);
 }
 
+// ---- strategies: named, versioned orchestration specs chosen per session group (docs/STEMS.md §8) ----
+{
+  const lastReq = () => page.evaluate(() => JSON.parse(document.querySelector('#req').textContent || '{}'));
+  const bpsOf = b => (b.messages || []).map((m, i) => Array.isArray(m.content) && m.content.some(p => p.cache_control) ? i : -1).filter(i => i >= 0);
+  const paste = settings => page.evaluate(() => document.querySelector('[data-act=cfgpaste]').click()).then(() => page.fill('.modal textarea', JSON.stringify({ settings }))).then(() => page.click('.modal .primary'));
+  const list = await page.evaluate(async () => (await import('./app/strategies.js')).list().map(x => x.id));
+  check('strategies: built-ins are named and versioned (strat-<name>-<major>.<minor>)', list.length >= 3 && list.every(id => /^strat-[a-z]+-\d+\.\d+$/.test(id)) && list.includes('strat-serial-1.0') && list.includes('strat-stem-1.0'), JSON.stringify(list));
+  const model0 = await page.inputValue('#model');
+  await page.fill('#model', 'mock-bp'); await page.dispatchEvent('#model', 'change');
+  await paste({ strategy: 'strat-serial-1.0' });
+  await page.click('[data-act=new]');
+  await say('serial one');
+  const sid = await page.evaluate(() => sessionStorage.getItem('wh:tab-active'));
+  check('strategies: serial sends no checkpoints, and the ledger row names its strategy', bpsOf(await lastReq()).length === 0 && await page.evaluate(id => JSON.parse(localStorage['wh:s:' + id]).ledger.at(-1).strat, sid) === 'strat-serial-1.0');
+  await page.fill('#input', 'a goal'); await page.click('[data-act=stem]');
+  await page.waitForTimeout(300);
+  check('strategies: a strategy without stems refuses one, and says why', !(await page.$('.modal select')) && /strategy strat-serial-1\.0 has no stems/.test(await visible().textContent()));
+  await page.fill('#input', '');
+  await paste({ strategy: 'strat-checkpoint-1.0' });
+  await say('checkpoint one');
+  check('strategies: switching the group\'s strategy changes how the next turn is built', JSON.stringify(bpsOf(await lastReq())) === JSON.stringify([0, (await lastReq()).messages.length - 1]));
+  await paste({ strategy: 'strat-nosuch-9.9' });
+  check('strategies: an unknown id is refused by paste config', await page.evaluate(() => JSON.parse(localStorage['wh:meta']).settings.strategy) === 'strat-checkpoint-1.0');
+  const st = await page.evaluate(() => whDebug.strategyStats());
+  check('strategies: results are kept by strategy and model (for routing later)', st.some(r => r.strat === 'strat-serial-1.0' && r.model === 'mock-bp' && r.requests >= 1) && st.some(r => r.strat === 'strat-checkpoint-1.0' && r.requests >= 1), JSON.stringify(st).slice(0, 300));
+  await paste({ strategy: 'strat-stem-1.0' });
+  await page.fill('#model', model0 || 'mock-1'); await page.dispatchEvent('#model', 'change');
+}
+
 check('layout: the page itself does not scroll', await page.evaluate(() => document.documentElement.scrollHeight <= innerHeight && scrollY === 0));
 if (shot) await page.screenshot({ path: shot });
 check('no page errors', errors.filter(e => !/schema 99|ERR_TUNNEL|Failed to load resource/.test(e)).length === 0, errors.join(' | '));
