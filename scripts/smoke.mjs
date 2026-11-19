@@ -678,6 +678,57 @@ await page.reload();
 }
 function activeIdOk(a, b) { return a === b; }
 
+// ---- checkpoints: cache breakpoints only where reuse is expected, each one accounted (docs/STEMS.md §3) ----
+{
+  const lastReq = () => page.evaluate(() => JSON.parse(document.querySelector('#req').textContent || '{}'));
+  const bpsOf = b => (b.messages || []).map((m, i) => Array.isArray(m.content) && m.content.some(p => p.cache_control) ? i : -1).filter(i => i >= 0);
+  const stats = () => page.evaluate(() => whDebug.checkpoints());
+  const model0 = await page.inputValue('#model');
+  await page.fill('#model', 'mock-bp'); await page.dispatchEvent('#model', 'change');
+  await page.click('[data-act=new]');
+  await say('bp one'); await say('bp two'); await say('bp three');
+  const r = await lastReq(), at = bpsOf(r);
+  check('checkpoints: a breakpoint model gets them at the system prompt and the tail only', at.length === 2 && at[0] === 0 && at[1] === r.messages.length - 1 && r.messages[0].role === 'system', JSON.stringify(at));
+  const st1 = await stats();
+  check('checkpoints: each is accounted: written, then read by later requests', st1.tail?.writeTokens > 0 && st1.tail.reads >= 2 && st1.system?.reads >= 1, JSON.stringify(st1));
+  const led = await page.evaluate(() => { const id = sessionStorage.getItem('wh:tab-active'); return JSON.parse(localStorage['wh:s:' + id]).ledger.at(-1); });
+  check('checkpoints: the ledger row says which were sent', Array.isArray(led.bp) && led.bp.includes('tail') && led.bp.includes('system'), JSON.stringify(led.bp));
+  // two stems from the same turn: the second reads the anchor checkpoint the first wrote
+  const coreId = await page.evaluate(() => sessionStorage.getItem('wh:tab-active'));
+  const core = await page.evaluate(id => JSON.parse(localStorage['wh:s:' + id]), coreId);
+  const anchorAt = core.messages.findIndex(m => m.role === 'user' && /bp two/.test(m.content));
+  const openStem = async goal => {
+    await page.click(`#sessions [data-id="${coreId}"]`);
+    await page.fill('#input', goal);
+    await page.click('[data-act=stem]');
+    await page.waitForSelector('.modal select');
+    await page.selectOption('.modal select', String(anchorAt));
+    await page.click('.modal .primary');
+    await page.waitForFunction(c => sessionStorage.getItem('wh:tab-active') !== c, coreId, { timeout: 10000 });
+    await page.waitForSelector('#app:not([data-busy])', { state: 'attached', timeout: 20000 });
+    await page.waitForTimeout(200);
+  };
+  await openStem('stem goal A');
+  const sr = await lastReq();
+  check('checkpoints: a stem marks its anchor (the turn it branched from)', bpsOf(sr).includes(anchorAt), JSON.stringify(bpsOf(sr)) + ' anchor msg ' + anchorAt);
+  await openStem('stem goal B');
+  const st2 = await stats();
+  check('checkpoints: a second stem from the same turn reads the anchor the first one wrote', st2.stem?.writeTokens > 0 && st2.stem.reads >= 1, JSON.stringify(st2.stem));
+  // selective: a kind switched off is not sent; a model without breakpoints gets none
+  await page.click(`#sessions [data-id="${coreId}"]`);
+  await page.evaluate(() => document.querySelector('[data-act=cfgpaste]').click());
+  await page.fill('.modal textarea', JSON.stringify({ settings: { bpKinds: ['system'] } }));
+  await page.click('.modal .primary');
+  await say('bp four');
+  check('checkpoints: a kind switched off is not sent', JSON.stringify(bpsOf(await lastReq())) === '[0]', JSON.stringify(bpsOf(await lastReq())));
+  await page.evaluate(() => document.querySelector('[data-act=cfgpaste]').click());
+  await page.fill('.modal textarea', JSON.stringify({ settings: { bpKinds: ['system', 'tail', 'stem'] } }));
+  await page.click('.modal .primary');
+  await page.fill('#model', model0 || 'mock-1'); await page.dispatchEvent('#model', 'change');
+  await say('bp five');
+  check('checkpoints: a model without breakpoints gets none', bpsOf(await lastReq()).length === 0);
+}
+
 check('layout: the page itself does not scroll', await page.evaluate(() => document.documentElement.scrollHeight <= innerHeight && scrollY === 0));
 if (shot) await page.screenshot({ path: shot });
 check('no page errors', errors.filter(e => !/schema 99|ERR_TUNNEL|Failed to load resource/.test(e)).length === 0, errors.join(' | '));
