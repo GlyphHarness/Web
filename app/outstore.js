@@ -83,6 +83,10 @@ export async function present(raw, { want, helper } = {}) {
 export async function read({ handle, find, offset = 0, length = 3000 }) {
   const text = await get(String(handle || ''));
   if (text == null) return `No stored output "${handle}".`;
+  return slice(text, { find, offset, length });
+}
+// find: matching lines; else a slice from offset
+export function slice(text, { find, offset = 0, length = 3000 } = {}) {
   if (find) {
     const hits = text.split('\n').map((l, i) => [i + 1, l]).filter(([, l]) => l.includes(String(find)));
     return hits.length ? hits.slice(0, 60).map(([n, l]) => `${n}: ${l.slice(0, 300)}`).join('\n') + (hits.length > 60 ? `\n[${hits.length - 60} more matches]` : '') : 'No matching lines.';

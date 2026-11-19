@@ -1,7 +1,8 @@
 // Tools the model can call. Definitions are sent in a fixed order (they sit in
 // the cacheable prefix) and are worded without reference to where they run.
 //   { def: <OpenAI tool schema>, run(args, ctx) -> string | Promise<string> }
-import { present, read, get, handlesIn } from './outstore.js';
+import { present, read, slice, get, handlesIn } from './outstore.js';
+import * as H from './handles.js';
 import * as pat from './patterns.js';
 
 // ctx = { pads, savePads, depth, fanOut, branchRead, by(), knownRef(h), onPatterns(), helper(want, text) } from the host.
@@ -116,9 +117,16 @@ export const tools = [
     { slot: { type: 'string' }, kind: { type: 'string', enum: ['html', 'text', 'image', 'audio', 'video', 'embed', 'table', 'chart', 'form'] }, title: { type: 'string' }, data: { type: 'object' }, ...REF_PROPS }, [],
     ({ slot }) => `Displayed${slot ? ` in slot "${slot}"` : ''}.`),
   fn('output_read',
-    'Read stored output by its handle (os:...). Give `find` to get matching lines, or `offset` and `length` for a slice.',
+    'Read what a handle holds now: stored output (os:...) or an id you were given. Give `find` to get matching lines, or `offset` and `length` for a slice.',
     { handle: { type: 'string' }, find: { type: 'string' }, offset: { type: 'number' }, length: { type: 'number' } }, ['handle'],
-    args => read(args)),
+    async (args, ctx) => {
+      if (!H.ID.test(String(args.handle || ''))) return read(args);
+      // an opaque id: resolved for this reader as it stands now; the session records it
+      const text = await H.resolve(args.handle, ctx?.reader || '*', get);
+      if (text == null) return `Nothing is held under "${args.handle}".`;
+      ctx?.onResolve?.(args.handle, H.contentHash(text));
+      return slice(text, args);
+    }),
   fn('fan_out',
     'Work several concerns in parallel, each in its own isolated continuation of this conversation, and get back one compact fold per concern (OUTCOME, RESULT, EVIDENCE, OPEN). Use it for work whose intermediate steps are not needed here. `after` makes a concern wait for the folds of the listed concern ids.',
     { concerns: { type: 'array', items: { type: 'object', properties: { id: { type: 'string' }, task: { type: 'string' }, after: { type: 'array', items: { type: 'string' } } }, required: ['id', 'task'] } } }, ['concerns'],

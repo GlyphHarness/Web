@@ -30,7 +30,7 @@ import * as pat from './patterns.js';
 import { put, get, handlesIn, setFallback } from './outstore.js';
 import { buildRequest, measure, report, padAttachment, inherit, imitatesNote, keptLines, corePrompt, EDGE_MIN, markedOnly, edgeReplies, turnOf, KINDS } from './context.js';
 
-export const VERSION = '0.46.0';
+export const VERSION = '0.47.0';
 // This tab: an id kept for the tab's life (sessionStorage survives its reloads).
 const TAB = (() => { const mk = () => 't' + Math.random().toString(36).slice(2, 8); try { let t = sessionStorage.getItem('wh:tab'); if (!t) sessionStorage.setItem('wh:tab', t = mk()); return t; } catch { return mk(); } })();
 const QS = new URLSearchParams(location.search);
@@ -1175,6 +1175,9 @@ async function turnsInner(s, depth, onFirst) {
     helper: set.helper ? (want, text) => helper(s, want, text) : null,
     vm: s.tools?.includes('vm') ? shellRunner(s) : null,
     fsMark: () => fsMark(s),
+    // handles (handles.js): this session is the reader; which ids it resolved, with a hash of what came back
+    reader: s.id,
+    onResolve: (id, h) => { (s.resolved ??= []).push({ t: Date.now(), id, h, at: s.messages.length }); saveSession(s); },
     ask: a => askCard(s, a),
     concern: (a, who) => fileConcern(s, a, who),
     values: valueTools(s, () => ctx.by()),
