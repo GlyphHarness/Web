@@ -16,6 +16,7 @@ import { machine, vmWanted, vmReady } from './vm.js';
 import { sharedMachine, MPROTO, stashed } from './vmhost.js';
 import { coordinator, published } from './coord.js';
 import * as termx from './term.js';
+import * as H from './handles.js';
 import * as policy from './policy.js';
 import * as smells from './smells.js';
 import { logRepo } from './logrepo.js';
@@ -30,7 +31,7 @@ import * as pat from './patterns.js';
 import { put, get, handlesIn, setFallback } from './outstore.js';
 import { buildRequest, measure, report, padAttachment, inherit, imitatesNote, keptLines, corePrompt, EDGE_MIN, markedOnly, edgeReplies, turnOf, KINDS } from './context.js';
 
-export const VERSION = '0.47.0';
+export const VERSION = '0.48.0';
 // This tab: an id kept for the tab's life (sessionStorage survives its reloads).
 const TAB = (() => { const mk = () => 't' + Math.random().toString(36).slice(2, 8); try { let t = sessionStorage.getItem('wh:tab'); if (!t) sessionStorage.setItem('wh:tab', t = mk()); return t; } catch { return mk(); } })();
 const QS = new URLSearchParams(location.search);
@@ -66,6 +67,7 @@ const SHELL = `
     <datalist id="models"></datalist>
     <button data-act="export" class="needs-session">export .session</button>
     <button data-act="branch" class="needs-session" title="Fork this session at its tail to work the text in the message box as one concern">branch</button>
+    <button data-act="stem" class="needs-session" title="Work the goal in the message box in a branch from the turn where it was stated; this session keeps only a handle the stem re-points as it goes">stem</button>
     <button data-act="epoch" class="needs-session" title="Replace this conversation with a short pocket in a new session">fold session</button>
     <button data-act="foldback" title="Append this branch's last reply to its source as a fold">fold back</button>
     <button data-act="inspector">inspector</button>
@@ -1025,7 +1027,7 @@ async function send(text) {
   await stewarding; // a pass already under way may be condensing this session's edge
   await edgeFold(s);
   // a new session opens with the pattern index; it is part of the first message from then on
-  push(s, { role: 'user', content: text + (s.messages.length ? '' : pat.index() + ghNote(s)) + valueLines(s, !s.messages.length) + padAttachment(s, state.meta.pads) });
+  push(s, { role: 'user', content: text + (s.messages.length ? '' : pat.index() + ghNote(s)) + valueLines(s, !s.messages.length) + padAttachment(s, state.meta.pads) + stemLines(s) });
   await run(s);
 }
 
@@ -1057,7 +1059,7 @@ async function runInner(s) {
   if (p.needsKey && !state.keys[set.provider]) return notice(s, 'Add an API key in Settings first.');
   busy = true; runningId = s.id; app.setAttribute('data-busy', ''); ctl = new AbortController();
   try { return await turns(s, 0); }
-  finally { busy = false; runningId = null; app.removeAttribute('data-busy'); ctl = null; queueSteward(); }
+  finally { await stemProgress(s).catch(() => {}); busy = false; runningId = null; app.removeAttribute('data-busy'); ctl = null; queueSteward(); }
 }
 
 // ---------- edge folding and the steward ----------
@@ -1677,6 +1679,48 @@ function fork(source, id, cut) {
   return b;
 }
 
+// ---------- stems (docs/STEMS.md §2) ----------
+//
+// A stem works a goal in a branch forked at the turn where the goal was stated.
+// The core keeps only an opaque handle (handles.js) and one step line when the
+// stem opens and when it folds; the stem re-points the handle to its progress
+// after each run, and to its fold (with what the core did since the anchor).
+async function openStem(src, goal, at) {
+  const handle = await H.mint({ kind: 'stem', owner: src.id, text: `stem open: ${goal}\n(no progress yet)` });
+  const b = fork(src, 'stem-' + handle, at);
+  b.stem = { handle, goal, anchor: at, core: src.id, coreLen: src.messages.length, t: Date.now() };
+  b.title = '⎇ ' + goal.slice(0, 30);
+  saveSession(b); redrawSessions();
+  (src.stemNotes ??= []).push(`stem ${handle}: ${goal.split('\n')[0].slice(0, 120)}`);
+  saveSession(src);
+  return b;
+}
+async function stemProgress(b) {
+  if (!b?.stem || b.stem.folded) return;
+  const replies = b.messages.slice(b.parent.at).filter(m => m.role === 'assistant' && m.content);
+  const last = replies.at(-1)?.content || '';
+  const head = (markedOnly(last) || last).split('\n').filter(l => l.trim()).slice(0, 6).join('\n');
+  await H.point(b.stem.handle, { text: `stem open: ${b.stem.goal}\n${replies.length} turn${replies.length === 1 ? '' : 's'} so far; latest:\n${head}` });
+}
+async function stemFold(b) {
+  const core = state.sessions[b.stem.core];
+  const since = core ? core.messages.slice(b.stem.coreLen).filter(m => m.role === 'user').length : 0;
+  await H.point(b.stem.handle, { text: `stem folded: ${b.stem.goal}\ncore since the anchor: ${since} turn${since === 1 ? '' : 's'}\n${foldOf(b, 'done', '')}` });
+  b.stem.folded = true; b.folded = true;
+  saveSession(b);
+  if (!core) return;
+  (core.stemNotes ??= []).push(`stem ${b.stem.handle} folded`);
+  saveSession(core);
+  activate(core.id);
+}
+// the step lines waiting for the core's next message (sent once)
+function stemLines(s) {
+  const n = s.stemNotes?.splice(0) || [];
+  if (!n.length) return '';
+  saveSession(s);
+  return '\n' + n.join('\n');
+}
+
 const foldOf = (b, status, task) => {
   const m = b.messages.at(-1);
   if (status === 'done' && m?.role === 'assistant' && m.content) return m.content.length > FOLD_MAX ? m.content.slice(0, FOLD_MAX) + '\n[truncated; see branch_read]' : m.content;
@@ -1907,11 +1951,27 @@ const actions = {
     await run(b);
   },
   // Manual fold: appended to the source, which is not run, so several folds can be batched before the next send.
+  async stem() {
+    const src = cur(), goal = $('#input').value.trim();
+    if (busy || !src) return;
+    if (!goal) return notice(src, 'Type the goal for the stem in the message box first.');
+    const ups = src.messages.map((m, i) => [m, i]).filter(([m]) => m.role === 'user');
+    const sel = h('select', {}, ...ups.map(([m, i]) => h('option', { value: String(i), text: String(m.content).split('\n')[0].slice(0, 70) })), h('option', { value: String(src.messages.length), text: '(the end: after everything so far)' }));
+    sel.value = String(ups.at(-1)?.[1] ?? src.messages.length);
+    const ok = await modal({ title: 'Stem', body: h('div', {}, h('p', { text: 'Work this goal in a branch from the turn where it was stated. This session keeps a handle; the stem re-points it to its progress and, when folded, to its fold.' }), field('from the turn', sel)), actions: [{ text: 'Cancel', value: false, cancel: true }, { text: 'Open the stem', value: true, primary: true }] });
+    if (!ok) return;
+    $('#input').value = '';
+    const b = await openStem(src, goal, Number(sel.value));
+    activate(b.id);
+    push(b, { role: 'user', content: concernMessage(b.stem.handle, goal) });
+    await run(b);
+  },
   async foldback() {
     const b = cur(), src = state.sessions[b.parent?.id];
     if (busy || !src) return;
     const m = b.messages.at(-1);
     if (m?.role !== 'assistant' || !m.content) return notice(b, 'Nothing to fold: the branch has no final reply yet.');
+    if (b.stem) return stemFold(b);
     if (b.folded && !await ask2('Fold back again?', 'This branch was already folded back. Append it to the source again?', 'Append again')) return;
     b.folded = true;
     saveSession(b);
