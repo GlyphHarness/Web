@@ -325,6 +325,23 @@ Opening the page with `#bridge=<owner/repo>~<branch>~<key>` connects it to an ag
 - **Paired agent as the model:** choose provider "Paired agent (bridge)" and each request goes up as a `turn` event; the agent answers with `do answer '{"turn":"...","content":"...","tool_calls":[{"name":"...","args":{}}]}'`. Tool runs, approvals and the log follow the normal path, from the page's own network.
 - **Agent side:** `node scripts/bridge.mjs pair --repo OWNER/NAME --page URL` prints the link; `listen`, `do NAME JSON`, `show N`, `close`.
 
+### Local bridge: the page reaching your computer
+
+The page is served from github.io, so it cannot see localhost by itself. `localbridge/wh-local.mjs` is a small no-dependency node server you run on your own machine; the page calls it, and it exposes only what you list. Off by default.
+
+```
+node localbridge/wh-local.mjs --http app=http://127.0.0.1:3000 --dir notes=C:path	o
+otes
+```
+
+It prints a URL (default `http://127.0.0.1:8791`) and a random token for this run (`--token` or `WH_BRIDGE_TOKEN` to fix it). In Settings, "Local bridge": the URL, the token, then "check". Turn on "Local bridge tools" for a session (System prompt) to give the model `local_info`, `local_http` (GET/POST to a listed service) and `local_read` (read a file or list a folder, read-only). A profile can switch the capability off (`local`).
+
+- **Protection.** Listens on 127.0.0.1 only; every call but `/health` needs the bearer token; the page origin must be the github.io page, a `localhost` page, or one you add with `--origin`; a non-loopback Host is refused (DNS rebinding); `--http` targets must be loopback http; files are read-only and must resolve inside a listed folder (links that leave it are refused), 2 MB per file, 5 MB per body, 30 s per call. The page's cookies and token are not forwarded to the service.
+- **Credentials.** The token is a key in the key store (id `localbridge`): the `keys` block of Paste config, the import line `local bridge token: …`, or its Settings field; masked, never in settings, copy config or exports. The URL is an ordinary setting (`localBridge`) and must be loopback.
+- **The browser.** Chrome asks once to allow "Local network access" for an https page to reach localhost; the bridge answers the Private Network Access preflight so the request can go through. If the bridge is not running, or the browser or an extension blocks the call, the page cannot tell which, and the Settings status says both.
+- **Not the debug bridge.** `scripts/bridge.mjs` pairs an agent with the page through a git branch; this one is a loopback server the page calls directly.
+- **Tests.** `node scripts/test-localbridge.mjs` (suite `local` in `scripts/ci.mjs`) starts the real bridge with a throwaway service and folder. See `docs/TESTING.md` for the other suites and their gotchas.
+
 ### Live values through CSS (slots)
 
 Values that change while you work (section counts, the trace count, the ledger summary, the Machine status, the GitHub, log repo and bridge status lines, the status on held and question cards) are not text nodes. `slot(el, value)` in `styles.js` sets a `data-v` attribute and `.slot::after { content: attr(data-v) }` draws it. An update is one attribute write: no node is rebuilt, focus, selection and scroll survive, and the devtools tree does not churn. Such values cannot be selected or found with Ctrl+F, so messages, results, rules and cards stay real text. `slotText(el)` reads an element with its slot values; the bridge's `dom` directive and the tests use it.

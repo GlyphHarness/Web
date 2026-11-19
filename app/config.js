@@ -1,5 +1,6 @@
 import { known as knownStrategy } from './strategies.js';
 import { validate as validLayout } from './panels.js';
+import { urlOk, KEY_ID } from './localbridge.js';
 // Paste-to-configure: a JSON block (from a reply, a note, another browser) merged
 // into the settings. Only the fields below are accepted; anything that looks like
 // a credential is refused and never applied. Policies merge by name: a known name
@@ -22,6 +23,7 @@ export const FIELDS = {
   model: { check: S }, helper: { check: S }, policyModel: { check: S },
   ghlabel: { check: S, hint: 'label told to the model' },
   logRepo: { check: v => v === '' || (S(v) && /^[\w.-]+\/[\w.-]+$/.test(v)), hint: 'owner/name' },
+  localBridge: { check: v => S(v) && urlOk(v), hint: 'http://127.0.0.1:8791 (the local bridge, localbridge/wh-local.mjs); blank = off' },
   concernRepo: { check: v => v === '' || (S(v) && /^[\w.-]+\/[\w.-]+$/.test(v)), hint: 'owner/name; blank = the repo this page is served from' },
   branchBudget: { check: v => Number.isInteger(v) && v >= 1000 },
   pace: { check: v => ['run', 'requests', 'tools', 'both'].includes(v) },
@@ -75,7 +77,7 @@ export function plan(text, current) {
     else {
       for (const [id, v] of Object.entries(j.keys)) {
         const path = 'key ' + id;
-        if (id !== 'github' && !current.providers.includes(id)) { refused.push({ path, why: 'a provider id or "github"' }); continue; }
+        if (id !== 'github' && id !== KEY_ID && !current.providers.includes(id)) { refused.push({ path, why: 'a provider id, "github" or "localbridge"' }); continue; }
         if (!KEY_OK(v)) { refused.push({ path, why: 'a single string of 8 or more characters, no spaces ("" removes it)' }); continue; }
         const now = current.keys?.[id] || '';
         if (now === v) continue;
@@ -124,7 +126,7 @@ export function plan(text, current) {
         if (t.mutable === false) { if (Object.keys(p).some(k => !['name', 'mutable'].includes(k))) refused.push({ path: `profile ${p.name}`, why: 'frozen: set "mutable": true first' }); continue; }
         if ('parent' in p) { const par = p.parent ? byName(p.parent) : null; if (p.parent && !par) refused.push({ path: `profile ${p.name}.parent`, why: 'no profile named ' + p.parent }); else if (par && par.id === t.id) refused.push({ path: `profile ${p.name}.parent`, why: 'cannot be its own parent' }); else if ((t.parent || null) !== (par?.id || null)) { changes.push({ path: `profile ${p.name}.parent`, from: profiles.find(x => x.id === t.parent)?.name || '', to: p.parent || '' }); t.parent = par?.id; } }
         for (const [k, v] of Object.entries(p.settings || {})) { if (SECRET.test(k) || !['model', 'helper', 'policyModel', 'pace', 'branchBudget', 'logRepo', 'logTranscripts'].includes(k)) { refused.push({ path: `profile ${p.name}.settings.${k}`, why: 'not a profile setting' }); continue; } if (t.settings[k] !== v) { changes.push({ path: `profile ${p.name}.settings.${k}`, from: t.settings[k] ?? '', to: v }); t.settings[k] = v; } }
-        for (const [k, v] of Object.entries(p.caps || {})) { const ok = k === 'repo' ? ['none', 'read', 'write'].includes(v) : ['run_js', 'fanout', 'ask', 'vm'].includes(k) && typeof v === 'boolean'; if (!ok) { refused.push({ path: `profile ${p.name}.caps.${k}`, why: 'invalid capability' }); continue; } if (t.caps[k] !== v) { changes.push({ path: `profile ${p.name}.caps.${k}`, from: t.caps[k] ?? 'inherit', to: v }); t.caps[k] = v; } }
+        for (const [k, v] of Object.entries(p.caps || {})) { const ok = k === 'repo' ? ['none', 'read', 'write'].includes(v) : ['run_js', 'fanout', 'ask', 'vm', 'local'].includes(k) && typeof v === 'boolean'; if (!ok) { refused.push({ path: `profile ${p.name}.caps.${k}`, why: 'invalid capability' }); continue; } if (t.caps[k] !== v) { changes.push({ path: `profile ${p.name}.caps.${k}`, from: t.caps[k] ?? 'inherit', to: v }); t.caps[k] = v; } }
         if (Array.isArray(p.repos)) { const bad = p.repos.filter(r => !/^[\w.-]+\/[\w.*-]+$/.test(r)); if (bad.length) refused.push({ path: `profile ${p.name}.repos`, why: 'bad entries: ' + bad.join(', ') }); else { changes.push({ path: `profile ${p.name}.repos`, from: (t.repos || []).join(', '), to: p.repos.join(', ') }); t.repos = p.repos; } }
         if (Array.isArray(p.locks)) { changes.push({ path: `profile ${p.name}.locks`, from: (t.locks || []).join(', '), to: p.locks.join(', ') }); t.locks = p.locks.filter(k => ['model', 'helper', 'policyModel', 'pace', 'branchBudget', 'logRepo', 'logTranscripts'].includes(k)); }
         if (S(p.color) && p.color !== t.color) t.color = p.color;
@@ -186,6 +188,7 @@ export const ALIASES = {
   pace: ['pace'],
   branchBudget: ['branch budget', 'budget', 'branchbudget', 'token budget'],
   logRepo: ['log repo', 'logrepo', 'log repository', 'audit repo', 'logs repo'],
+  localBridge: ['local bridge', 'local bridge url', 'localhost bridge', 'bridge url', 'localbridge'],
   concernRepo: ['concerns repo', 'concern repo', 'concerns repository', 'concernrepo', 'concerns'],
   ghlabel: ['github access', 'access label', 'ghlabel', 'github label', 'token label'],
   provider: ['provider'],
@@ -197,6 +200,7 @@ const GH_KEY = ['github token', 'gh token', 'github pat', 'gh pat', 'github key'
 export function keyFor(label, ctx = {}) {
   const n = norm(label);
   if (GH_KEY.includes(n)) return 'github';
+  if (['local bridge token', 'localhost bridge token', 'bridge token', 'local bridge key', 'localbridge token'].includes(n)) return KEY_ID;
   for (const p of ctx.providers || []) if ([p + ' key', p + ' api key', p + ' token', p + ' secret key'].includes(n)) return p;
   if (['api key', 'apikey', 'key', 'provider key', 'llm key', 'model key'].includes(n)) return ctx.settings?.provider || null;
   return null;
