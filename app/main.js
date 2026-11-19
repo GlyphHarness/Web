@@ -30,6 +30,7 @@ import * as config from './config.js';
 import * as metricsPanel from './metrics.js';
 import * as panels from './panels.js';
 import * as prof from './profiles.js';
+import * as lbridge from './localbridge.js';
 import * as handoff from './handoff.js';
 import * as vals from './values.js';
 import * as bridge from './bridge.js';
@@ -139,6 +140,9 @@ const SHELL = `
       <label class="check"><input type="checkbox" id="ghprobe"> probe write access (creates an unreferenced blob in each repo that needs write; no commit, no branch change)</label>
       <div class="cfgbar"><button data-act="ghderive">fill from configuration</button><button data-act="ghscopes" class="primary">check scopes</button></div>
     </details>
+    <label>Local bridge: lets sessions reach services and folders on this computer that you expose with <code>node localbridge/wh-local.mjs</code>. Off until a URL is set; the token is kept in this browser only. Needs the session switch under System prompt.</label>
+    <div style="display:flex;gap:6px"><input id="localbridge" placeholder="http://127.0.0.1:8791" autocomplete="off"><input id="localkey" type="password" placeholder="token printed by wh-local" autocomplete="off"><button data-act="localcheck">check</button></div>
+    <p class="note" id="localstat"></p>
     <label><input type="checkbox" id="vmauto"> start the Linux machine when the page loads</label>
     <label><input type="checkbox" id="vmon"> Linux machine: a <code>shell</code> tool for new sessions (bash, git, python3, gh). Downloads the image once; switching this reloads the page to turn cross-origin isolation on or off.</label>
     <label>Log repo: a private repo of yours where the harness keeps tracking over time (owner/name). Only the harness writes to it; agents can read it.</label>
@@ -193,6 +197,7 @@ const SHELL = `
     <label><input type="checkbox" id="sprivate"> Keep this session out of the log repo (no transcript, no artifacts)</label>
     <label><input type="checkbox" id="repotools"> Repository tools (repo_read, repo_commit, repo_pr, repo_create; needs GitHub access in Settings). Turning this on or off changes the tool list, which breaks the cached prefix once.</label>
     <label><input type="checkbox" id="vmtools"> Linux machine (shell tool). Changes the tool list, which breaks the cached prefix once.</label>
+    <label><input type="checkbox" id="localtools"> Local bridge tools (local_info, local_http, local_read; needs the bridge URL and token in Settings). Changes the tool list, which breaks the cached prefix once.</label>
     <label><input type="checkbox" id="keep"> Keep marks: the model flags lines to keep with "!" (adds one sentence to the system prompt)</label>
     <p class="note">First bytes of every request. Editing it mid-session breaks the cached prefix; the ledger will show it.</p>
   </details>
@@ -514,6 +519,7 @@ function showSettings() {
   $('#polmodel').value = set.policyModel || ''; $('#ghlabel').value = set.ghlabel || ''; $('#logrepo').value = set.logRepo || '';
   $('#budget').value = set.branchBudget || BRANCH_BUDGET; $('#pace').value = pace();
   $('#concernrepo').value = set.concernRepo || ''; $('#key').value = state.keys[set.provider] || ''; $('#ghkey').value = state.keys.github || '';
+  $('#localbridge').value = set.localBridge || ''; $('#localkey').value = state.keys[lbridge.KEY_ID] || '';
   showBase(); renderPolicies(); renderProfiles(); redrawSessions(); showPrice(); renderScope(); renderValues();
 }
 async function pasteConfig(prefill = '') {
@@ -810,7 +816,7 @@ function scopeSet(el) {
 
 // ---------- profiles (profiles.js) ----------
 
-const CAP_LABEL = { run_js: 'run code', fanout: 'fan out', ask: 'ask', vm: 'machine' };
+const CAP_LABEL = { run_js: 'run code', fanout: 'fan out', ask: 'ask', vm: 'machine', local: 'local bridge' };
 function renderProfiles() {
   const ps = profiles();
   const opt = (v, t, sel) => Object.assign(h('option', { value: v, text: t }), { selected: sel });
@@ -825,7 +831,7 @@ function renderProfiles() {
         h('p', { class: 'note', text: 'Settings (blank = inherit; lock = no profile or session below may change it)' }),
         ...prof.SETTING_KEYS.map(k => h('div', { class: 'row2' }, field(k + (e.from[k] && e.from[k] !== p.name ? ` (now: ${e.settings[k]} from ${e.from[k]})` : ''), h('input', { 'data-pf': 'set.' + k, value: p.settings?.[k] ?? '', list: /model|helper/i.test(k) ? 'models' : '' })), h('label', { class: 'check' }, Object.assign(h('input', { type: 'checkbox', 'data-pf': 'lock.' + k }), { checked: (p.locks || []).includes(k) }), ' lock'))),
         h('p', { class: 'note', text: 'Capabilities (can only narrow what the parent allows)' }),
-        h('div', { class: 'caps' }, ...['run_js', 'fanout', 'ask', 'vm'].map(k => field(CAP_LABEL[k], tri(k, p.caps?.[k]))),
+        h('div', { class: 'caps' }, ...['run_js', 'fanout', 'ask', 'vm', 'local'].map(k => field(CAP_LABEL[k], tri(k, p.caps?.[k]))),
           field('repos', h('select', { 'data-pf': 'cap.repo' }, opt('', 'inherit', p.caps?.repo == null), ...['none', 'read', 'write'].map(v => opt(v, v, p.caps?.repo === v))))),
         field('allowed repositories (owner/name or owner/*, comma separated; blank = inherit)', h('input', { 'data-pf': 'repos', value: (p.repos || []).join(', '), class: 'mono' })),
         h('p', { class: 'note', text: `resolved: ${Object.entries(e.caps).map(([k, v]) => `${CAP_LABEL[k] || k} ${v === true ? 'yes' : v === false ? 'no' : v}`).join(' · ')}${e.repoLists.length ? ' · repos ' + e.repoLists.map(r => r.list.join('|')).join(' ∩ ') : ''}${(p.policies || []).length ? ' · own policies: ' + p.policies.map(x => x.name).join(', ') : ''}` }),
@@ -903,6 +909,7 @@ function activate(id) {
   $('#repotools').checked = !!s.tools?.includes('repo');
   $('#sprivate').checked = !!s.private;
   $('#vmtools').checked = !!s.tools?.includes('vm');
+  $('#localtools').checked = !!s.tools?.includes('local');
   $('#keep').checked = !!s.keep;
   $('#edge').value = s.edge || 'off';
   showCore();
@@ -1201,6 +1208,7 @@ async function turnsInner(s, depth, onFirst) {
     onPatterns: renderPatterns,
     helper: set.helper ? (want, text) => helper(s, want, text) : null,
     vm: s.tools?.includes('vm') ? shellRunner(s) : null,
+    local: s.tools?.includes('local') ? localClient() : null,
     fsMark: () => fsMark(s),
     // handles (handles.js): this session is the reader; which ids it resolved, with a hash of what came back
     reader: s.id,
@@ -1359,7 +1367,7 @@ async function turnsInner(s, depth, onFirst) {
   return 'limit';
 }
 
-const tools_known = name => defsFor({ tools: ['ask', 'repo', 'vm'] }).some(d => d.function.name === name);
+const tools_known = name => defsFor({ tools: ['ask', 'repo', 'vm', 'local'] }).some(d => d.function.name === name);
 
 // ---------- scoped values (values.js) ----------
 
@@ -2040,6 +2048,11 @@ const actions = {
     try { slot(who, state.meta.settings.ghwho = await gh.whoami()); saveMeta(); }
     catch (e) { slot(who, e.message); }
   },
+  async localcheck() {
+    const st = $('#localstat'); slot(st, 'checking…');
+    const r = await lbridge.check({ url: state.meta.settings.localBridge, token: state.keys[lbridge.KEY_ID] });
+    slot(st, r.text);
+  },
   inspector() { state.meta.settings.inspector = !state.meta.settings.inspector; saveMeta(); applyInspector(); },
   stop() { ctl?.abort(); },
   pane(el) { setPane(el.dataset.pane); saveMeta(); },
@@ -2166,6 +2179,11 @@ function bind() {
     s.tools = e.target.checked ? [...new Set([...(s.tools || []), 'vm'])] : (s.tools || []).filter(t => t !== 'vm');
     saveSession(s);
   });
+  $('#localtools').addEventListener('change', e => {
+    const s = cur(); if (!s) return;
+    s.tools = e.target.checked ? [...new Set([...(s.tools || []), 'local'])] : (s.tools || []).filter(t => t !== 'local');
+    saveSession(s);
+  });
   $('#values').addEventListener('change', e => {
     const f = e.target.dataset.vf, card = e.target.closest('[data-val]');
     if (!f || !card) return;
@@ -2205,7 +2223,7 @@ function bind() {
   $('#pace').value = pace(cur());
   $('#pace').addEventListener('change', e => { if (e.target.value === 'run') letLoose(); else { state.meta.settings.pace = e.target.value; saveMeta(); } });
   $('#polmodel').value = state.meta.settings.policyModel || '';
-  $('#toolnames').replaceChildren(...['*', ...defsFor({ tools: ['repo', 'vm'] }).map(d => d.function.name)].map(n => h('option', { value: n })));
+  $('#toolnames').replaceChildren(...['*', ...defsFor({ tools: ['repo', 'vm', 'local'] }).map(d => d.function.name)].map(n => h('option', { value: n })));
   renderPolicies();
   $('#policies').addEventListener('change', e => {
     const f = e.target.dataset.pf, card = e.target.closest('[data-pol]');
@@ -2261,6 +2279,13 @@ function bind() {
   $('#ghappid').addEventListener('change', saveApp);
   $('#ghpem').addEventListener('change', saveApp);
   $('#ghkey').addEventListener('change', e => { state.keys.github = e.target.value.trim(); saveKeys(); state.meta.settings.ghwho = ''; saveMeta(); slot($('#ghwho'), ''); });
+  $('#localbridge').addEventListener('change', e => {
+    const v = e.target.value.trim(), n = lbridge.normalizeUrl(v);
+    if (n === null) { slot($('#localstat'), 'Use http://localhost:PORT or http://127.0.0.1:PORT (this computer only).'); return; }
+    e.target.value = state.meta.settings.localBridge = n; saveMeta();
+    slot($('#localstat'), n ? 'press "check"' : 'Off (no URL set).');
+  });
+  $('#localkey').addEventListener('change', e => { const v = e.target.value.trim(); if (v) state.keys[lbridge.KEY_ID] = v; else delete state.keys[lbridge.KEY_ID]; saveKeys(); slot($('#localstat'), 'press "check"'); });
   $('#ghlabel').addEventListener('change', e => { state.meta.settings.ghlabel = e.target.value.trim(); saveMeta(); });
   $('#key').addEventListener('change', e => { state.keys[state.meta.settings.provider] = e.target.value.trim(); saveKeys(); });
   $('#ref').addEventListener('change', e => { location.search = '?ref=' + encodeURIComponent(e.target.value.trim()); });
@@ -2354,6 +2379,7 @@ export function boot(env) {
   $('#ghkey').value = state.keys.github || '';
   $('#ghlabel').value = state.meta.settings.ghlabel || '';
   slot($('#ghwho'), state.meta.settings.ghwho || '');
+  $('#localbridge').value = state.meta.settings.localBridge || ''; $('#localkey').value = state.keys[lbridge.KEY_ID] || '';
   $('#ghappid').value = state.keys.ghapp?.appId || '';
   $('#ghpem').value = state.keys.ghapp?.pem || '';
   $('#sessions').append(...rows());
@@ -2562,6 +2588,12 @@ async function syncGhFile(s) {
     await vm().run(`id ${u} >/dev/null 2>&1 || adduser -D -s /bin/bash ${u} >/dev/null 2>&1; mkdir -p /home/${u}/.wh; umask 077; printf %s ${shq(state.keys.github)} > /home/${u}/.wh/gh; chown -R ${u}:${u} /home/${u}/.wh; chmod 600 /home/${u}/.wh/gh`, 60, { quiet: true, label: `give ${u} the GitHub token (machineGh env)`, display: '' });
   } else if (ghFile.has(u)) await vm().run(`rm -f /home/${u}/.wh/gh`, 30, { quiet: true, label: `take the GitHub token from ${u}` });
   ghFile.set(u, mode);
+}
+// The bridge client for this moment's settings; null (tools answer "not configured") when there is no URL or token.
+function localClient() {
+  const url = state.meta.settings.localBridge, token = state.keys[lbridge.KEY_ID];
+  if (!url || !token) return null;
+  try { return lbridge.client({ url, token }); } catch { return null; }
 }
 const secretsNow = () => [...Object.values(state.keys).filter(v => typeof v === 'string'), ...gh.secrets()];
 const hooksOn = dir => state.meta.settings.termHooks?.[dir] ?? termx.DEFAULT_ON[dir];

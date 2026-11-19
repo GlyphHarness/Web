@@ -4,6 +4,7 @@
 import { present, read, slice, get, handlesIn } from './outstore.js';
 import * as H from './handles.js';
 import * as pat from './patterns.js';
+import { run as lb } from './localbridge.js';
 
 // ctx = { pads, savePads, depth, fanOut, branchRead, by(), knownRef(h), onPatterns(), helper(want, text) } from the host.
 
@@ -250,12 +251,27 @@ export const valueTools = [
     { id: { type: 'string' }, history: { type: 'boolean' } }, ['id'],
     (a, ctx) => ctx.values ? ctx.values.get(a) : 'Values are not available.'),
 ];
-const all = () => [...tools, ...repoTools, ...vmTools, ...askTools, ...valueTools];
+// Things on this computer, through the local bridge (localbridge.js); only offered when the session has it on and Settings has a URL and token.
+export const localTools = [
+  fn('local_info',
+    'List what the local bridge exposes on the computer you are running for: services (name -> origin) you can call with local_http, and folders you can read with local_read.',
+    {}, [],
+    (a, ctx) => ctx.local ? lb.info(ctx.local) : 'No local bridge is configured.'),
+  fn('local_http',
+    'Call a local web service the person exposed through the bridge. service is a name from local_info; path starts with / and may carry a query. Returns [status type, size] then the body. The status is the service itself, not the bridge.',
+    { service: { type: 'string' }, method: { type: 'string', enum: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] }, path: { type: 'string' }, body: { description: 'string, or an object sent as JSON' } }, ['service'],
+    (a, ctx) => ctx.local ? lb.http(ctx.local, a) : 'No local bridge is configured.'),
+  fn('local_read',
+    'Read a file, or list a folder (path ending at a directory), from a folder the person exposed through the bridge (read-only). folder is a name from local_info; path starts with /.',
+    { folder: { type: 'string' }, path: { type: 'string' } }, ['folder'],
+    (a, ctx) => ctx.local ? lb.read(ctx.local, a) : 'No local bridge is configured.'),
+];
+const all = () => [...tools, ...repoTools, ...vmTools, ...askTools, ...valueTools, ...localTools];
 
 const WHOLE = new Set(['ask', 'value_request', 'value_set', 'value_get', 'entry_read', 'fan_out', 'output_read', 'branch_read', 'pattern_find', 'pattern_get', 'pattern_put', 'pattern_run']);
 
 export const toolDefs = tools.map(t => t.def);
-export const defsFor = s => [...toolDefs, ...(s.tools?.includes('ask') ? askTools.map(t => t.def) : []), ...(s.tools?.includes('values') ? valueTools.map(t => t.def) : []), ...(s.tools?.includes('repo') ? repoTools.map(t => t.def) : []), ...(s.tools?.includes('vm') ? vmTools.map(t => t.def) : [])];
+export const defsFor = s => [...toolDefs, ...(s.tools?.includes('ask') ? askTools.map(t => t.def) : []), ...(s.tools?.includes('values') ? valueTools.map(t => t.def) : []), ...(s.tools?.includes('repo') ? repoTools.map(t => t.def) : []), ...(s.tools?.includes('vm') ? vmTools.map(t => t.def) : []), ...(s.tools?.includes('local') ? localTools.map(t => t.def) : [])];
 
 // Every call leaves a trail row written by the harness: tool, argument shape, outcome, size, time.
 export async function execTool(call, ctx, via) {
