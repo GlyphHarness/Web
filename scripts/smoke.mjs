@@ -817,6 +817,14 @@ await say('broken call');
   check('ref: a handle that holds an output (not a call) is refused with what to do instead', out.every(o => /holds an output, not a stored call.*output_read/.test(o)), JSON.stringify(out));
 }
 
+// ---- reasoning tokens are kept per request (issue #11: they dominated stem cost in production) ----
+await page.click('[data-act=new]');
+await say('hello reasoning');
+{
+  const row = await page.evaluate(() => { const id = sessionStorage.getItem('wh:tab-active'); return JSON.parse(localStorage['wh:s:' + id]).ledger.at(-1); });
+  check('ledger: reasoning tokens are kept with each request', row.reasoning === 5, JSON.stringify(row));
+}
+
 check('layout: the page itself does not scroll', await page.evaluate(() => document.documentElement.scrollHeight <= innerHeight && scrollY === 0));
 if (shot) await page.screenshot({ path: shot });
 check('no page errors', errors.filter(e => !/schema 99|ERR_TUNNEL|Failed to load resource/.test(e)).length === 0, errors.join(' | '));
