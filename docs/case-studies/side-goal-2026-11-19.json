@@ -1,0 +1,56 @@
+{
+ "scenario": "side goal",
+ "model": "mock-bp",
+ "price": {
+  "in": 0.000003,
+  "out": 0.000015,
+  "read": 3e-7,
+  "write": 0.00000375
+ },
+ "date": "2026-11-19",
+ "url": "http://localhost:8787/",
+ "results": [
+  {
+   "strategy": "strat-serial-1.0",
+   "requests": 12,
+   "coreRequests": 12,
+   "prompt": 44621,
+   "uncached": 5517,
+   "cached": 39104,
+   "write": 0,
+   "completion": 1246,
+   "cost": 0.046972200000000006,
+   "coreChars": 13808,
+   "coherent": true,
+   "errors": 0
+  },
+  {
+   "strategy": "strat-checkpoint-1.0",
+   "requests": 12,
+   "coreRequests": 12,
+   "prompt": 44621,
+   "uncached": 1314,
+   "cached": 38070,
+   "write": 5237,
+   "completion": 1246,
+   "cost": 0.053691749999999996,
+   "coreChars": 14097,
+   "coherent": true,
+   "errors": 0
+  },
+  {
+   "strategy": "strat-stem-1.0",
+   "requests": 14,
+   "coreRequests": 7,
+   "prompt": 42820,
+   "uncached": 1769,
+   "cached": 36498,
+   "write": 4553,
+   "completion": 1604,
+   "cost": 0.05739015,
+   "coreChars": 6266,
+   "coherent": false,
+   "errors": 0
+  }
+ ]
+}

@@ -107,7 +107,8 @@ const mock = {
     mockSeen.push(flat);
     if (mockSeen.length > 20) mockSeen.shift();
     const prompt = Math.ceil(flat.length / 4);
-    const cached = Math.floor(kept / 4 / 64) * 64;
+    // automatic prefix caching, except on the breakpoint model: like real breakpoint providers, nothing is cached without a mark
+    const cached = /-bp$/.test(body.model || '') ? 0 : Math.floor(kept / 4 / 64) * 64;
     const last = body.messages[body.messages.length - 1];
     const tick = () => new Promise((ok, no) => {
       if (signal?.aborted) return no(new DOMException('Aborted', 'AbortError'));
@@ -143,7 +144,8 @@ const mock = {
       return;
     }
     const concern = last.role === 'user' && /^concern (\S+):/.exec(last.content);
-    if (concern) text = `OUTCOME: done\nRESULT: mock result for ${concern[1]}\nEVIDENCE: folds received: ${(last.content.match(/^fold \S+/gm) || []).length}\nOPEN: none`;
+    if (/^wrap up/.test(last.content || '')) text = 'OUTCOME: done\nRESULT: slow-path numbers: line 399 is the worst case\nEVIDENCE: 3 measurements\nOPEN: none';
+    else if (concern) text = `OUTCOME: done\nRESULT: mock result for ${concern[1]}\nEVIDENCE: folds received: ${(last.content.match(/^fold \S+/gm) || []).length}\nOPEN: none`;
     else if (last.role === 'tool') text = 'The tool returned:\n\n```text\n' + last.content + '\n```';
     else if (/^event \S+: /.test(last.content || '')) text = 'Got the event: ' + last.content;
     else if (/^Write the pocket/.test(last.content || '')) text = '## Goal\nmock goal\n## Settled\n- mock decision\n## Open\n- none';
