@@ -203,6 +203,8 @@ const mock = {
       yield { choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_' + Date.now(), type: 'function', function: { name: 'output_read', arguments: JSON.stringify({ handle: /\bpull ([a-z][a-z0-9]{5})\b/.exec(last.content)[1] }) } }] } }] };
     } else if (/read (os:\w+)/.test(last.content || '')) {
       yield { choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_' + Date.now(), type: 'function', function: { name: 'output_read', arguments: JSON.stringify({ handle: /read (os:\w+)/.exec(last.content)[1], find: 'line 399' }) } }] } }] };
+    } else if (/\bbroken call\b/.test(last.content || '')) {
+      yield { choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_' + Date.now(), type: 'function', function: { name: '', arguments: '{"code": "return 1"' } }] } }] };
     } else if (/\bfn tool\b/.test(last.content || '')) {
       yield { choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_' + Date.now(), type: 'function', function: { name: 'run_js', arguments: JSON.stringify({ code: 'async function () {\n  return 6 * 7;\n}' }) } }] } }] };
     } else if (/big/i.test(last.content || '')) {

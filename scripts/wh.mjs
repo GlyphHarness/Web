@@ -19,6 +19,7 @@
 //   wh flags [-i id] | wh ok <n…>         open watcher flags; check flags off as handled
 //   wh watch [-i id]                      assess the calls not checked yet
 //   wh cost                               by strategy and model; checkpoints by kind
+//   wh raw [-i id] [-n 40]                the last request's raw stream (tool-call and finish chunks)
 //   wh down                               stop the daemon
 // Options: --url (default http://localhost:8787/), --port (daemon, default 8790), --json
 import { createRequire } from 'node:module';
@@ -230,6 +231,13 @@ const CMDS = {
   async cost() {
     const p = await main(), r = await p.evaluate(() => whDebug.strategyStats()), c = await p.evaluate(() => whDebug.checkpoints());
     return { text: [...r.map(o => `${o.strat.padEnd(22)} ${o.model.padEnd(34)} ${String(o.requests).padStart(4)} req  cache ${o.cache == null ? '-' : Math.round(o.cache * 100) + '%'}  ${money(o.costRate)}/req  smells ${o.smellRate.toFixed(3)}/req`), ...Object.entries(c).map(([kind, o]) => `checkpoint ${kind}: ${o.paid}/${o.set} paid, ${k(o.writeTokens)} written, ${o.reads} reads (${k(o.readTokens)})`)].join('\n') || 'no requests yet', data: { strategies: r, checkpoints: c } };
+  },
+  // the raw stream of the last model request in a session's tab (provider chunks), for diagnosis
+  async raw(a) {
+    const id = flagOf(a, 'i') || readState().current, n = Number(flagOf(a, 'n') || 40), p = await tab(id);
+    const ev = await p.evaluate(() => document.querySelector('#events')?.textContent || '');
+    const lines = ev.split('\n').filter(Boolean);
+    return { text: lines.filter(l => /tool_calls|finish_reason|error/.test(l)).slice(0, n).join('\n') || '(no events shown)', data: lines };
   },
   async down() { setTimeout(async () => { await ctx.close(); process.exit(0); }, 100); return { text: 'stopping' }; },
 };

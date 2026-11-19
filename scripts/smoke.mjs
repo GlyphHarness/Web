@@ -803,6 +803,14 @@ await page.click('[data-act=new]');
 await say('fn tool');
 check('run_js: a function expression is called, not rejected', /\b42\b/.test(await visible().locator('.msg[data-role=tool] pre').last().textContent()));
 
+// ---- a call streamed without a tool name (an upstream dropped it; seen in production) is not run, and says so ----
+await page.click('[data-act=new]');
+await say('broken call');
+{
+  const tr = await visible().locator('.msg[data-role=tool] pre').last().textContent();
+  check('malformed call: not run, the model is told to call again, and the upstream is recorded', /Not run: the call arrived without a tool name/.test(tr) && await page.evaluate(() => JSON.parse(localStorage['wh:smells'] || '[]').some(r => r.kind === 'malformed-call' && r.upstream)), JSON.stringify(tr));
+}
+
 check('layout: the page itself does not scroll', await page.evaluate(() => document.documentElement.scrollHeight <= innerHeight && scrollY === 0));
 if (shot) await page.screenshot({ path: shot });
 check('no page errors', errors.filter(e => !/schema 99|ERR_TUNNEL|Failed to load resource/.test(e)).length === 0, errors.join(' | '));
