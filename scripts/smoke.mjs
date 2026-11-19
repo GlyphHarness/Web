@@ -639,6 +639,43 @@ await page.reload();
   check('handles: the session records which ids it resolved, with hashes', (sess.resolved || []).filter(r => r.id === id).length === 2 && new Set(sess.resolved.filter(r => r.id === id).map(r => r.h)).size === 2);
 }
 
+// ---- stems: a goal worked in a context branch from the turn where it was stated (docs/STEMS.md §2) ----
+{
+  const sessOf = id => page.evaluate(id => JSON.parse(localStorage['wh:s:' + id]), id);
+  const activeId = () => page.evaluate(() => sessionStorage.getItem('wh:tab-active'));
+  await page.click('[data-act=new]');
+  await say('stem core one');
+  await say('stem core two');
+  const coreId = await activeId(), core0 = await sessOf(coreId);
+  const anchorAt = core0.messages.findIndex(m => m.role === 'user' && /stem core two/.test(m.content));
+  await page.fill('#input', 'make the widget faster');
+  await page.click('[data-act=stem]');
+  await page.waitForSelector('.modal select');
+  await page.selectOption('.modal select', String(anchorAt));
+  await page.click('.modal .primary');
+  await page.waitForSelector('#app:not([data-busy])', { state: 'attached', timeout: 20000 });
+  const stemId = await activeId(), st = await sessOf(stemId);
+  check('stem: a branch forked at the chosen turn, carrying the goal and an opaque handle', stemId !== coreId && st.parent?.id === coreId && st.parent?.at === anchorAt && /^[a-z][a-z0-9]{5}$/.test(st.stem?.handle || '') && st.stem.goal === 'make the widget faster' && st.messages.length > anchorAt, JSON.stringify(st.stem));
+  const h = st.stem.handle;
+  const prog = await page.evaluate(async h => (await import('./app/handles.js')).resolve(h, 'check'), h);
+  check('stem: its handle resolves to its progress while it works', /open/.test(prog) && /make the widget faster/.test(prog) && /OUTCOME|RESULT|turn/.test(prog), JSON.stringify(prog));
+  await page.click(`#sessions [data-id="${coreId}"]`);
+  await say('core keeps going');
+  await say('core again');
+  const core1 = await sessOf(coreId), ups = core1.messages.filter(m => m.role === 'user');
+  check('stem: the core line gets one step line with the handle, once', ups.filter(m => m.content.includes('stem ' + h)).length === 1 && /stem \w{6}: make the widget faster/.test(ups.find(m => m.content.includes('stem ' + h)).content));
+  check('stem: the core line before the anchor is untouched', JSON.stringify(core1.messages.slice(0, anchorAt + 1)) === JSON.stringify(core0.messages.slice(0, anchorAt + 1)));
+  await page.click(`#sessions [data-id="${stemId}"]`);
+  await page.click('[data-act=foldback]');
+  await page.waitForTimeout(300);
+  const fold = await page.evaluate(async h => (await import('./app/handles.js')).resolve(h, 'check'), h);
+  check('stem: folding re-points the handle to the fold, with what the core did since the anchor', /folded/.test(fold) && /OUTCOME/.test(fold) && /core since the anchor: 2 turns/.test(fold), JSON.stringify(fold));
+  await say('after the fold');
+  const core2 = await sessOf(coreId), last = core2.messages.filter(m => m.role === 'user').at(-1);
+  check('stem: the fold reaches the core as one step line (the fold itself stays behind the handle)', new RegExp(`stem ${h} folded`).test(last.content) && !/OUTCOME/.test(last.content) && activeIdOk(await activeId(), coreId), JSON.stringify(last.content).slice(0, 200));
+}
+function activeIdOk(a, b) { return a === b; }
+
 check('layout: the page itself does not scroll', await page.evaluate(() => document.documentElement.scrollHeight <= innerHeight && scrollY === 0));
 if (shot) await page.screenshot({ path: shot });
 check('no page errors', errors.filter(e => !/schema 99|ERR_TUNNEL|Failed to load resource/.test(e)).length === 0, errors.join(' | '));
