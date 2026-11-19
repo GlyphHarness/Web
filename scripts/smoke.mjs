@@ -811,6 +811,12 @@ await say('broken call');
   check('malformed call: not run, the model is told to call again, and the upstream is recorded', /Not run: the call arrived without a tool name/.test(tr) && await page.evaluate(() => JSON.parse(localStorage['wh:smells'] || '[]').some(r => r.kind === 'malformed-call' && r.upstream)), JSON.stringify(tr));
 }
 
+// ---- a ref must name a stored call; an output handle passed as ref is refused clearly (operator escalation, 2026-11-19) ----
+{
+  const out = await page.evaluate(async () => { const T = await import('./app/tools.js'), O = await import('./app/outstore.js'); const h = await O.put('null'); const h2 = await O.put('[1,2,3]'); return [await T.execTool({ id: 'x', function: { name: 'run_js', arguments: JSON.stringify({ ref: h }) } }, {}), await T.execTool({ id: 'y', function: { name: 'run_js', arguments: JSON.stringify({ ref: h2 }) } }, {})]; });
+  check('ref: a handle that holds an output (not a call) is refused with what to do instead', out.every(o => /holds an output, not a stored call.*output_read/.test(o)), JSON.stringify(out));
+}
+
 check('layout: the page itself does not scroll', await page.evaluate(() => document.documentElement.scrollHeight <= innerHeight && scrollY === 0));
 if (shot) await page.screenshot({ path: shot });
 check('no page errors', errors.filter(e => !/schema 99|ERR_TUNNEL|Failed to load resource/.test(e)).length === 0, errors.join(' | '));

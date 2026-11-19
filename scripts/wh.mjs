@@ -176,13 +176,15 @@ const CMDS = {
     const sid = await p.evaluate(() => sessionStorage.getItem('wh:tab-active'));
     const st = await settle(p), s = await sess(p, sid);
     tabs.set(sid, p); tabs.delete(id); // this tab now shows the stem
-    return { text: `stem ${sid} handle ${s.stem.handle}\n` + fmtTurn(await turnReport(p, sid, { n: s.parent.at, l: 0 }), st), data: { id: sid, handle: s.stem.handle } };
+    const stt = readState(); stt.core = id; stt.current = sid; writeState(stt); // the stem is the work now (wh fold goes back)
+    return { text: `stem ${sid} handle ${s.stem.handle} (now current; wh fold returns to ${id})\n` + fmtTurn(await turnReport(p, sid, { n: s.parent.at, l: 0 }), st), data: { id: sid, handle: s.stem.handle } };
   },
   async fold(a) {
     const id = flagOf(a, 'i') || readState().current, p = await tab(id);
     await p.click('[data-act=foldback]'); await p.waitForTimeout(300);
     const s = await sess(p, id);
-    return s.stem?.folded ? { text: `folded ${s.stem.handle} into ${s.stem.core}` } : { ok: false, text: 'not folded (is it a stem with a final reply?)' };
+    if (s.stem?.folded) { const stt = readState(); stt.current = s.stem.core; writeState(stt); tabs.delete(id); }
+    return s.stem?.folded ? { text: `folded ${s.stem.handle} into ${s.stem.core} (now current)` } : { ok: false, text: 'not folded (is it a stem with a final reply?)' };
   },
   async ls() {
     const p = await main(), m = await meta(p);
