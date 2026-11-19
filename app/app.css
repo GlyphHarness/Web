@@ -399,3 +399,19 @@ ol.xlines li::marker { color: var(--dim); font-size: 10px; }
 #app[data-machine-tab] #composer, #app[data-machine-tab] #threads { display: none; }
 #vmjobs .jrow { display: flex; gap: 8px; align-items: baseline; font-size: 12px; }
 #vmjobs .jrow button { margin-left: auto; }
+
+/* the person's commands: bar, history, scratch helper (term.js) */
+.vmpanel { border-top: 1px solid var(--line); padding: 4px 0; display: flex; flex-direction: column; gap: 4px; }
+.vmcmdbar { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.vmcmdbar button { font-size: 12px; }
+.vmlast { max-width: 22em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vmkeys { display: flex; flex-wrap: wrap; gap: 2px; }
+.vmkeys button { min-width: 2.2em; font-family: ui-monospace, monospace; }
+.vmhist { max-height: 14em; overflow: auto; }
+.vmhist .hrow, .scratchcmd { display: flex; gap: 6px; align-items: center; padding: 2px 0; }
+.vmhist code, .scratchcmd code { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
+.scratchask { display: flex; gap: 6px; }
+.scratchask textarea { flex: 1; font: inherit; }
+.scratchcmd { flex-wrap: wrap; }
+.scratchcmd .note { flex-basis: 100%; }
+.scratchtry pre { max-height: 10em; overflow: auto; }

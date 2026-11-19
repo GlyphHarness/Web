@@ -15,6 +15,7 @@ import * as fx from './explorer.js';
 import { machine, vmWanted, vmReady } from './vm.js';
 import { sharedMachine, MPROTO, stashed } from './vmhost.js';
 import { coordinator, published } from './coord.js';
+import * as termx from './term.js';
 import * as policy from './policy.js';
 import * as smells from './smells.js';
 import { logRepo } from './logrepo.js';
@@ -29,7 +30,7 @@ import * as pat from './patterns.js';
 import { put, get, handlesIn, setFallback } from './outstore.js';
 import { buildRequest, measure, report, padAttachment, inherit, imitatesNote, keptLines, corePrompt, EDGE_MIN, markedOnly, edgeReplies, turnOf, KINDS } from './context.js';
 
-export const VERSION = '0.45.0';
+export const VERSION = '0.46.0';
 // This tab: an id kept for the tab's life (sessionStorage survives its reloads).
 const TAB = (() => { const mk = () => 't' + Math.random().toString(36).slice(2, 8); try { let t = sessionStorage.getItem('wh:tab'); if (!t) sessionStorage.setItem('wh:tab', t = mk()); return t; } catch { return mk(); } })();
 const QS = new URLSearchParams(location.search);
@@ -700,7 +701,7 @@ function inlineEdit(head, edit, input, { label, show = v => v, save }) {
 // ---------- this session's scope, attribute by attribute ----------
 
 const SCOPE_ROWS = [...prof.SETTING_KEYS.map(k => ({ k, kind: 'set' })), ...prof.CAP_KEYS.map(k => ({ k, kind: 'cap' }))];
-const SCOPE_LABEL = { machineUser: 'machine user', machineQuota: 'machine quota (MB)', logRepo: 'log repo', logTranscripts: 'transcripts', model: 'model', helper: 'helper model', policyModel: 'policy model', pace: 'pace', branchBudget: 'branch budget', run_js: 'run code', fanout: 'fan out', ask: 'ask and values', vm: 'machine', repo: 'repositories' };
+const SCOPE_LABEL = { machineAuth: 'machine GitHub auth', machineUser: 'machine user', machineQuota: 'machine quota (MB)', logRepo: 'log repo', logTranscripts: 'transcripts', model: 'model', helper: 'helper model', policyModel: 'policy model', pace: 'pace', branchBudget: 'branch budget', run_js: 'run code', fanout: 'fan out', ask: 'ask and values', vm: 'machine', repo: 'repositories' };
 // levels from this session up: session, each profile leaf to root, defaults
 function scopeLevels(s) {
   const ch = eff(s).chain;
@@ -2346,11 +2347,59 @@ async function agentRun(cmd, timeoutS, o = {}) {
   const r = await vm().run(script, timeoutS + 30, { ...o, display: cmd });
   return { ...r, timedOut: /\[timed out after \d+s; interrupted\]/.test(r.out) || r.timedOut };
 }
+// The guest's GitHub credential, added by the page (machineAuth "inject", the default):
+// a repository call gets that repository's token (App: minted for it; else the PAT),
+// a call that names no repository (gh api user, gh auth status) gets the PAT.
+async function vmToken(repo, level) {
+  if (repo && gh.mode() === 'app') { try { return await gh.token(repo, level); } catch (e) { if (!state.keys.github) throw e; } }
+  if (state.keys.github) return state.keys.github;
+  if (gh.mode() === 'app') throw new Error(repo ? 'the App could not mint a token for ' + repo : 'App tokens are minted per repository and this call names none; add a personal access token in GitHub settings for account-level calls');
+  return '';
+}
+// machineAuth "env": the conventional way. The session's own user gets GH_TOKEN = the
+// PAT in its environment (a 600 file in its 700 home); the model can read it then.
+const ghFile = new Map(); // user -> 'env' | 'inject' (this boot)
+async function syncGhFile(s) {
+  const u = userOf(s), mode = cfg(s).machineAuth === 'env' ? 'env' : 'inject';
+  if (!u || ghFile.get(u) === mode) return;
+  if (mode === 'env') {
+    if (!state.keys.github) throw new Error('machineAuth "env" needs a personal access token in GitHub settings');
+    await vm().run(`id ${u} >/dev/null 2>&1 || adduser -D -s /bin/bash ${u} >/dev/null 2>&1; mkdir -p /home/${u}/.wh; umask 077; printf %s ${shq(state.keys.github)} > /home/${u}/.wh/gh; chown -R ${u}:${u} /home/${u}/.wh; chmod 600 /home/${u}/.wh/gh`, 60, { quiet: true, label: `give ${u} the GitHub token (machineAuth env)`, display: '' });
+  } else if (ghFile.has(u)) await vm().run(`rm -f /home/${u}/.wh/gh`, 30, { quiet: true, label: `take the GitHub token from ${u}` });
+  ghFile.set(u, mode);
+}
+const secretsNow = () => [...Object.values(state.keys).filter(v => typeof v === 'string'), ...gh.secrets()];
+const hooksOn = dir => state.meta.settings.termHooks?.[dir] ?? termx.DEFAULT_ON[dir];
+const down = text => termx.apply('down', text, { secrets: secretsNow() }, hooksOn('down')).text;
+
+// Scratch helper: the helper model drafts commands for the person, testing them first
+// as the scratch user (home /home/uscratch, 50 MB, 30 s per try), at most 3 rounds.
+async function scratchDraft(ask, onStep = () => {}) {
+  const s = cur(), model = (s && (cfg(s).helper || cfg(s).model)) || state.meta.settings.helper || state.meta.settings.model;
+  if (!model) throw new Error('choose a model (or a helper model) first');
+  let text = `TASK: ${ask}\nTHE PERSON'S SESSION USER: ${s ? userOf(s) || 'root' : 'root'} (home ${s ? homeOf(s) : '/root'})`;
+  const tries = [];
+  for (let round = 0; round < 4; round++) {
+    const reply = await aux(s, model, termx.SCRATCH_SYSTEM, text, 'scratch', 700);
+    const p = termx.parseScratch(reply);
+    if (p.commands.length || !p.tries.length || round === 3) return { ...p, tries, reply };
+    for (const t of p.tries) {
+      onStep({ trying: t });
+      const r = vmInst && /ready/.test(vmInst.status()) ? await vm().run(t, 30, { user: 'uscratch', quotaMB: 50, quiet: true, label: 'scratch: ' + t.slice(0, 80) }) : { out: 'not run: the machine is not started', code: null };
+      const out = down(r.out || '').slice(0, 1500);
+      tries.push({ cmd: t, code: r.code, out });
+      text += `\n\nTRIED: ${t}\nEXIT: ${r.timedOut ? 'timed out' : r.code}\nOUTPUT:\n${out || '(none)'}`;
+    }
+  }
+}
+
 // what the shell tool runs on for a session: its own user, plain or in its agent pty
 // (installing a package is one command of its own, run as root)
+// (results pass the "down" hooks: known secrets are masked before the model reads them)
 function shellRunner(s) {
   const o = shellOpt(s);
-  return { run: (cmd, t, opt = {}) => INSTALL_ONLY.test(cmd) ? vm().run(cmd, t, { ...opt, session: s.id }) : state.meta.settings.vmTmux ? agentRun(cmd, t, o) : vm().run(cmd, t, { ...o, ...opt }) };
+  const go = async (cmd, t, opt) => { await syncGhFile(s); return INSTALL_ONLY.test(cmd) ? vm().run(cmd, t, { ...opt, session: s.id }) : state.meta.settings.vmTmux ? agentRun(cmd, t, o) : vm().run(cmd, t, { ...o, ...opt }); };
+  return { run: (cmd, t, opt = {}) => go(cmd, t, opt).then(r => ({ ...r, out: down(r.out || '') })) };
 }
 
 // ---------- machine status: what is on, what is missing, and why ----------
@@ -2525,9 +2574,9 @@ function vm() {
   if (vmInst) return vmInst;
   vmInst = sharedMachine({
     tab: TAB, dedicated: MACHINE_TAB, info: () => ({ version: VERSION }),
-    local: cb => machine({ token: gh.token, trace, onStatus: cb.onStatus, showHarness: () => !!state.meta.settings.vmShowHarness }),
+    local: cb => machine({ token: vmToken, trace, onStatus: cb.onStatus, showHarness: () => !!state.meta.settings.vmShowHarness }),
   });
-  vmInst.onStatus(t => { slot($('#vmstat'), 'Machine: ' + t + (vmInst.role() === 'client' ? ' (in another tab)' : '')); link?.emit('notice', { session: 'machine', text: t }); machineDiag(); });
+  vmInst.onStatus(t => { if (!/ready/.test(t)) ghFile.clear(); slot($('#vmstat'), 'Machine: ' + t + (vmInst.role() === 'client' ? ' (in another tab)' : '')); link?.emit('notice', { session: 'machine', text: t }); machineDiag(); });
   vmInst.onRole(() => { machineDiag(); co?.announce(); });
   mountMachine();
   return vmInst;
@@ -2551,23 +2600,105 @@ function mountMachine() {
         catch (e) { ptyView.textContent = 'The agent pty is not available: ' + (e.message || e); }
         ptyTimer = setTimeout(ptyPoll, 1500);
       };
-      ptyIn.addEventListener('keydown', async e => { if (e.key === 'Enter') { const v = ptyIn.value; ptyIn.value = ''; const o = shellOpt(cur()); await ensureTmux(o); await vm().run(`tmux send-keys -t ${TMUX} -l ${shq(v)}; tmux send-keys -t ${TMUX} Enter`, 20, { ...o, quiet: true, label: 'typed into the agent pty' }); } });
+
       ptyBar.addEventListener('click', async e => { const k = e.target.dataset?.pty; if (k) { const o = shellOpt(cur()); await ensureTmux(o); await vm().run(`tmux send-keys -t ${TMUX} ${k}`, 20, { ...o, quiet: true, label: 'sent ' + k + ' to the agent pty' }); } });
       ptyBar.querySelector('#vmtmux').addEventListener('change', e => { state.meta.settings.vmTmux = e.target.checked; saveMeta(); });
       const nAct = h('span', { class: 'count slot' });
       tabH.append(' ', nAct);
       const pick = which => {
-        term.hidden = which !== 'term'; line.hidden = which !== 'term'; acts.hidden = which !== 'acts';
+        term.hidden = which !== 'term'; line.hidden = which !== 'term'; acts.hidden = which !== 'acts'; panel.hidden = which === 'acts';
         ptyView.hidden = ptyIn.hidden = ptyBar.hidden = which !== 'pty';
         tabT.toggleAttribute('data-on', which === 'term'); tabH.toggleAttribute('data-on', which === 'acts'); tabP.toggleAttribute('data-on', which === 'pty');
         if (which === 'pty' && !ptyTimer) ptyPoll();
       };
       tabT.onclick = () => pick('term'); tabH.onclick = () => pick('acts'); tabP.onclick = () => pick('pty');
-      const line = h('input', { class: 'vmin', placeholder: 'type a command for the machine and press Enter' });
-      line.addEventListener('keydown', e => { if (e.key === 'Enter') { vmInst.typed(line.value); type(line.value + '\r'); line.value = ''; } });
+      const line = h('input', { class: 'vmin', placeholder: 'type a command for the machine and press Enter (↑ ↓: your history)' });
       const raw = Object.assign(h('input', { type: 'checkbox', id: 'vmraw' }), { checked: !!state.meta.settings.vmShowHarness });
       raw.addEventListener('change', () => { state.meta.settings.vmShowHarness = raw.checked; saveMeta(); });
-      box.replaceChildren(h('div', { class: 'vmtabs' }, tabT, tabH, tabP, h('label', { class: 'check vmrawsw', title: 'debug: also draw the harness’s own commands in the terminal' }, raw, ' raw')), term, line, acts, ptyBar, ptyView, ptyIn);
+      // ---- the person's commands: "up" hooks, history, send again, keys a phone keyboard lacks ----
+      // the target is the tab in view: the machine's terminal (root) or this session's agent pty
+      for (const el of [line, ptyIn]) for (const [k, v] of Object.entries({ autocapitalize: 'off', autocorrect: 'off', autocomplete: 'off', spellcheck: 'false', enterkeyhint: 'send' })) el.setAttribute(k, v);
+      const target = () => ptyView.hidden ? 'terminal' : 'pty';
+      const field = () => target() === 'pty' ? ptyIn : line;
+      const lastBtn = btn('', { class: 'slot vmlast', 'data-cmd': 'again', title: 'send the last command you typed into this terminal again' });
+      const hist = h('div', { class: 'vmhist', hidden: '' }), scratch = h('div', { class: 'vmscratch', hidden: '' });
+      const KEYS = [['Tab', '\t', 'Tab'], ['Ctrl-C', '\x03', 'C-c'], ['Esc', '\x1b', 'Escape'], ['↑', '\x1b[A', 'Up'], ['|'], ['~'], ['/'], ['-'], ['$'], ['&&', ' && '], ['>'], ["'"], ['"']];
+      const keys = h('div', { class: 'vmkeys' }, ...KEYS.map(([l, v, tm]) => btn(l, { 'data-k': l, title: tm ? 'send ' + l + ' now' : 'insert ' + l })));
+      const cmdbar = h('div', { class: 'vmcmdbar' }, lastBtn, btn('history', { 'data-cmd': 'hist' }), btn('scratch', { 'data-cmd': 'scratch', title: 'draft commands with the helper model; it can test them in a scratch account first' }), btn('hooks', { 'data-cmd': 'hooks', title: 'filters on what you send and what comes back' }), keys);
+      const ensureOn = async () => { if (!/ready/.test(vmInst.status())) await vm().run('true', 300, { quiet: true, label: 'start' }); };
+      async function sendTo(tg, text) {
+        const { text: cmd, changed } = termx.apply('up', text, {}, hooksOn('up'));
+        if (!cmd.trim()) return;
+        if (changed.length) addAct(`your input changed by: ${changed.join(', ')}`, `${JSON.stringify(text)} → ${JSON.stringify(cmd)}`, 'hook');
+        termx.remember(cmd, tg); showLast(); if (!hist.hidden) renderHist();
+        await ensureOn();
+        if (tg === 'pty') { const o = shellOpt(cur()); await ensureTmux(o); await vm().run(`tmux send-keys -t ${TMUX} -l ${shq(cmd)}; tmux send-keys -t ${TMUX} Enter`, 20, { ...o, quiet: true, label: 'typed into the agent pty' }); }
+        else { vmInst.typed(cmd); type(cmd + '\r'); }
+      }
+      async function sendKey(tg, raw, tm) {
+        await ensureOn();
+        if (tg === 'pty') { const o = shellOpt(cur()); await ensureTmux(o); await vm().run(`tmux send-keys -t ${TMUX} ${tm}`, 20, { ...o, quiet: true, label: 'sent ' + tm + ' to the agent pty' }); }
+        else type(raw);
+      }
+      const showLast = () => { const l = termx.lastTyped(target()); lastBtn.hidden = !l; if (l) { slot(lastBtn, '↻ ' + (l.cmd.length > 42 ? l.cmd.slice(0, 42) + '…' : l.cmd)); lastBtn.dataset.full = l.cmd; } };
+      const renderHist = () => {
+        const list = termx.history().filter(e => e.target === target()).sort((a, b) => (b.pinned - a.pinned) || (b.t - a.t));
+        hist.replaceChildren(...(list.length ? list.slice(0, 60).map(e => h('div', { class: 'hrow', 'data-c': e.cmd }, h('code', { 'data-cmd': 'load', title: 'put it in the input to edit', text: e.cmd }), h('span', { class: 'note', text: e.n > 1 ? '×' + e.n : '' }), btn('▶', { 'data-cmd': 'send', title: 'send it now' }), btn(e.pinned ? '★' : '☆', { 'data-cmd': 'pin', title: e.pinned ? 'unpin' : 'pin (kept first)' }), btn('×', { 'data-cmd': 'forget', title: 'forget it' }))) : [h('p', { class: 'note', text: 'Commands you type here are listed here.' })]));
+      };
+      const renderScratch = () => {
+        const ask = h('textarea', { rows: '2', placeholder: 'what do you want to do? e.g. find the 10 largest files under my home', ...{ autocapitalize: 'sentences' } });
+        const out = h('div', { class: 'scratchout' });
+        const go = btn('draft', { class: 'primary' });
+        go.onclick = async () => {
+          if (!ask.value.trim()) return;
+          go.disabled = true; out.replaceChildren(h('p', { class: 'note', text: 'drafting…' }));
+          try {
+            const r = await scratchDraft(ask.value.trim(), st => out.append(h('p', { class: 'note', text: 'testing: ' + st.trying })));
+            out.replaceChildren(
+              ...r.tries.map(t => h('details', { class: 'scratchtry' }, h('summary', { text: `tested: ${t.cmd} (${t.code == null ? 'not run' : 'exit ' + t.code})` }), h('pre', { text: t.out || '(no output)' }))),
+              ...(r.commands.length ? r.commands.map(c => h('div', { class: 'scratchcmd', 'data-c': c.cmd }, h('code', { text: c.cmd }), c.note ? h('span', { class: 'note', text: c.note }) : '', h('span', { class: 'acts' }, btn('copy', { 'data-cmd': 'copy' }), btn('edit', { 'data-cmd': 'load' }), btn('send', { 'data-cmd': 'send', class: 'primary', title: 'send to the terminal in view' })))) : [h('pre', { class: 'note', text: r.reply || 'no commands came back' })]));
+          } catch (e) { out.replaceChildren(h('p', { class: 'note', text: 'scratch helper: ' + (e.message || e) })); }
+          go.disabled = false;
+        };
+        scratch.replaceChildren(h('div', { class: 'scratchask' }, ask, go), out);
+      };
+      const hookModal = async () => {
+        const rows = dir => Object.entries(termx.HOOKS[dir]).map(([k, v]) => h('label', { class: 'check' }, Object.assign(h('input', { type: 'checkbox', 'data-hk': dir + ':' + k }), { checked: hooksOn(dir).includes(k) }), ' ' + v.label));
+        const body = h('div', {}, h('b', { text: 'What you send (up)' }), ...rows('up'), h('b', { text: 'What comes back (down): the terminal and the shell tool’s result' }), ...rows('down'));
+        const ok = await modal({ title: 'Terminal hooks', body, actions: [{ text: 'Cancel', value: false, cancel: true }, { text: 'Save', value: true, primary: true }] });
+        if (!ok) return;
+        const next = { up: [], down: [] };
+        for (const c of body.querySelectorAll('[data-hk]')) if (c.checked) { const [d, k] = c.dataset.hk.split(':'); next[d].push(k); }
+        state.meta.settings.termHooks = next; saveMeta();
+      };
+      // history walk with ↑ ↓ in the input
+      let walk = -1;
+      for (const el of [line, ptyIn]) el.addEventListener('keydown', e => {
+        if (e.key === 'Enter') { const v = el.value; el.value = ''; walk = -1; sendTo(target(), v); return; }
+        if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
+        const list = termx.history().filter(x => x.target === target());
+        if (!list.length) return;
+        e.preventDefault();
+        walk = Math.max(-1, Math.min(list.length - 1, walk + (e.key === 'ArrowUp' ? 1 : -1)));
+        el.value = walk < 0 ? '' : list[walk].cmd;
+      });
+      const panel = h('div', { class: 'vmpanel' }, cmdbar, hist, scratch);
+      panel.addEventListener('click', async e => {
+        const k = e.target.closest('[data-k]')?.dataset.k, c = e.target.closest('[data-cmd]')?.dataset.cmd, row = e.target.closest('[data-c]')?.dataset.c;
+        if (k) { const def = KEYS.find(x => x[0] === k); if (def[2]) sendKey(target(), def[1], def[2]); else { const f = field(), at = f.selectionStart ?? f.value.length; f.value = f.value.slice(0, at) + (def[1] ?? def[0]) + f.value.slice(f.selectionEnd ?? at); f.focus(); f.selectionStart = f.selectionEnd = at + (def[1] ?? def[0]).length; } return; }
+        if (c === 'again' && lastBtn.dataset.full) sendTo(target(), lastBtn.dataset.full);
+        else if (c === 'hist') { hist.hidden = !hist.hidden; scratch.hidden = true; if (!hist.hidden) renderHist(); }
+        else if (c === 'scratch') { scratch.hidden = !scratch.hidden; hist.hidden = true; if (!scratch.hidden && !scratch.firstChild) renderScratch(); }
+        else if (c === 'hooks') hookModal();
+        else if (c === 'load' && row) { const f = field(); f.value = row; f.focus(); }
+        else if (c === 'send' && row) sendTo(target(), row);
+        else if (c === 'copy' && row) { try { await navigator.clipboard.writeText(row); } catch {} }
+        else if (c === 'pin' && row) { termx.pin(row, e.target.textContent === '☆'); renderHist(); }
+        else if (c === 'forget' && row) { termx.forget(row); renderHist(); showLast(); }
+      });
+      for (const t of [tabT, tabP]) t.addEventListener('click', () => { walk = -1; showLast(); if (!hist.hidden) renderHist(); });
+      showLast();
+      box.replaceChildren(h('div', { class: 'vmtabs' }, tabT, tabH, tabP, h('label', { class: 'check vmrawsw', title: 'debug: also draw the harness’s own commands in the terminal' }, raw, ' raw')), term, line, acts, ptyBar, ptyView, ptyIn, panel);
       let carry = '', count = 0;
       const addAct = (label, meta, kind = '') => { count++; slot(nAct, count); acts.append(h('div', { class: 'vmact', 'data-kind': kind }, h('span', { class: 'vmt', text: new Date().toLocaleTimeString() }), h('span', { class: 'vml', text: label }), h('span', { class: 'vmm', text: meta || '' }))); acts.scrollTop = acts.scrollHeight; };
       vmInst.onEvent(e => addAct(e.label, e.ms != null ? `${e.ms} ms · ${e.bytes} chars${e.timedOut ? ' · timed out' : e.code ? ' · exit ' + e.code : ''}` : '', e.kind));
@@ -2579,7 +2710,7 @@ function mountMachine() {
       const emit = (l, cls) => {
         const rt = /__WH_RUNTIME_POLICY (\S+) (.*?)__/.exec(l);
         if (rt) { addAct(`policy ${rt[1]}: refused ${rt[2]}`, '', 'policy'); if (!raw.checked) return; }
-        put(cls, l);
+        put(cls, down(l)); // "down" hooks (known secrets masked)
       };
       vmInst.onView(seg => {
         if (seg.k === 'in') { flush(); const [first, ...more] = String(seg.text).split('\n'); put('vmin-line', '$ ' + first); for (const m of more) put('vmin-line', '> ' + m); return; }

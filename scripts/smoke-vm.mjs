@@ -93,6 +93,47 @@ check('tabs: a second tab uses the first tab\'s machine (no second boot)', t2.ro
 await page.waitForFunction(() => /from-the-second-tab/.test(document.querySelector('#machine .vmout').textContent), null, { timeout: 30000 });
 check('tabs: the second tab\'s command shows in the machine\'s terminal', true);
 await page2.close();
+// ---- the person's commands: hooks in, history, send again, scratch helper; secrets masked out ----
+await page.click('[data-pane=machine]');
+await page.fill('#machine .vmin', 'Echo typed-$((2+3))’s');
+await page.press('#machine .vmin', 'Enter');
+await page.waitForFunction(() => /typed-5's/.test(document.querySelector('#machine .vmout').textContent), null, { timeout: 60000 });
+check('input hooks: a phone keyboard\'s capital and curly quote are undone before it is sent', /\$ echo typed-\$\(\(2\+3\)\)'s/.test(await page.textContent('#machine .vmout')) && /your input changed by: autocap, smartquotes/.test(await page.textContent('#machine .vmacts')));
+check('send again: the bar offers the last command you typed', /↻ echo typed-/.test(await slotOf('#machine .vmlast')));
+await page.click('#machine .vmlast');
+await page.waitForFunction(() => (document.querySelector('#machine .vmout').textContent.match(/typed-5's/g) || []).length >= 2, null, { timeout: 60000 });
+check('send again: it runs the typed command once more', true);
+await page.click('#machine [data-cmd=hist]');
+check('history: what you typed is listed, with send / pin / forget', await page.locator('#machine .vmhist .hrow').count() >= 1 && /echo typed-/.test(await page.textContent('#machine .vmhist')));
+await page.click('#machine .vmhist .hrow [data-cmd=load]');
+check('history: a row loads into the input for editing', /echo typed-/.test(await page.inputValue('#machine .vmin')));
+await page.fill('#machine .vmin', '');
+check('input: no auto-capitalise or auto-correct on phones', await page.getAttribute('#machine .vmin', 'autocapitalize') === 'off' && await page.getAttribute('#machine .vmin', 'autocorrect') === 'off');
+await page.click('#machine [data-cmd=scratch]');
+await page.fill('#machine .vmscratch textarea', 'list my home');
+await page.click('#machine .vmscratch button.primary');
+await page.waitForSelector('#machine .scratchcmd', { timeout: 120000 });
+const tried = await page.textContent('#machine .scratchtry pre');
+check('scratch: the helper tests in the scratch account first, then gives commands with a why', /scratch-test-42/.test(tried) && /uscratch/.test(tried) && await page.locator('#machine .scratchcmd').count() === 2 && /list the home folder/.test(await page.textContent('#machine .scratchcmd')), JSON.stringify(tried));
+await page.click('#machine .scratchcmd:nth-of-type(2) [data-cmd=send]');
+await page.waitForFunction(() => /drafted-42/.test(document.querySelector('#machine .vmout').textContent), null, { timeout: 60000 });
+check('scratch: a drafted command is sent to the terminal in view', true);
+await page.click('[data-pane=insp]');
+const masked = await run('echo github_pat_VMTEST_$(printf "y%.0s" $(seq 24))');
+check('down hooks: a known secret printed by a command reaches the model masked', /\[key\]/.test(masked) && !masked.includes(TOKEN), JSON.stringify(masked.slice(0, 200)));
+// machineAuth env: the conventional way, GH_TOKEN for the session's user
+await page.evaluate(() => document.querySelector('[data-act=cfgpaste]').click());
+await page.fill('.modal textarea', JSON.stringify({ settings: { machineAuth: 'env' } }));
+await page.click('.modal .primary');
+seen.length = 0;
+const envRun = await run('[ "$GH_TOKEN" != wh-placeholder-token ] && [ -n "$GH_TOKEN" ] && echo real-token-set; ls -l ~/.wh/gh | cut -c1-10; gh api /repos/o/r --jq .full_name');
+check('machineAuth env: the session\'s user has the real GH_TOKEN (600 file) and gh uses it', /real-token-set/.test(envRun) && /-rw-------/.test(envRun) && /^o\/r$/m.test(envRun) && seen.some(x => x.auth.includes(TOKEN)), JSON.stringify(envRun.slice(0, 300)));
+await page.evaluate(() => document.querySelector('[data-act=cfgpaste]').click());
+await page.fill('.modal textarea', JSON.stringify({ settings: { machineAuth: 'inject' } }));
+await page.click('.modal .primary');
+const back = await run('ls ~/.wh/gh 2>&1; echo GH=$GH_TOKEN');
+check('machineAuth inject: switching back takes the token out of the machine', /No such file/.test(back) && /GH=wh-placeholder-token/.test(back), JSON.stringify(back.slice(0, 200)));
+
 // the rest of this suite checks paths under /root: run as root from here on
 await page.evaluate(() => document.querySelector('[data-act=cfgpaste]').click());
 await page.fill('.modal textarea', JSON.stringify({ settings: { machineUser: 'root' } }));

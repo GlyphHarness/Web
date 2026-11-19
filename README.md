@@ -307,6 +307,10 @@ Settings → "Linux machine" gives new sessions a `shell` tool: an x86_64 Alpine
 
 Open a session in a tab of its own (↗ on its row) to run sessions in parallel; one tab hosts the machine for all of them (or a dedicated machine tab, `?machine`, that stays up through site updates). Each session is its own unix user with a 700 home and a size quota; commands run as concurrent jobs. **halt all / step / resume** move every session in every tab together, stopping at the gate before a model request (a state that survives a reload). **update to vX** appears when a newer build is published: every tab halts at a safe point, reloads onto the new build (served from `b/<commit>/`, named in `version.json`), and the halted sessions continue; the machine restarts only when its protocol changed, with the homes saved and restored. Details: [docs/TABS.md](docs/TABS.md).
 
+### Terminal commands, scratch helper, stdio hooks, GitHub auth in the machine
+
+Under the terminal: send again the last command you typed, your history (pins, ↑ / ↓), keys a phone keyboard hides, and a scratch helper that drafts commands and tests them in a scratch account first. Inbound and outbound text passes named hooks (smart punctuation and phone capitals undone on the way in, secrets masked on the way out; `register()` adds more). GitHub calls from the machine get your PAT for account-level calls and the repository's token otherwise (`machineAuth: inject`), or the session's user gets a real `GH_TOKEN` (`machineAuth: env`). Details: [docs/TABS.md](docs/TABS.md).
+
 ### Debug bridge
 
 Opening the page with `#bridge=<owner/repo>~<branch>~<key>` connects it to an agent running `scripts/bridge.mjs`. The channel is a git branch: the page commits encrypted batches to `up/` through the API with your GitHub token; the agent pushes directives to `down/` with plain git; the page polls with ETags (304s are free). Payloads are AES-GCM; the key exists only in the fragment, which is moved to sessionStorage and removed from the address bar.

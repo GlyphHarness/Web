@@ -19,6 +19,7 @@ export const FIELDS = {
   machine: { check: v => typeof v === 'boolean', hint: 'true/false; reloads the page' },
   logTranscripts: { check: v => typeof v === 'boolean' },
   machineUser: { check: v => v === 'session' || v === 'root', hint: 'session (a unix user per session) or root' },
+  machineAuth: { check: v => v === 'inject' || v === 'env', hint: 'inject (the page adds the credential; none in the machine) or env (GH_TOKEN for the session\'s user)' },
   machineQuota: { check: v => Number.isInteger(v) && v >= 0, hint: 'MB per session home; 0 = none' },
   newProfile: { check: v => typeof v === 'string', hint: 'a profile name' },
 };

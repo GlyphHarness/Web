@@ -106,6 +106,13 @@ const mock = {
       return;
     }
     const sys0 = String(body.messages[0]?.content || '');
+    if (sys0.startsWith('TERMINAL SCRATCH')) {
+      // first a test in the scratch account, then the commands (with a "why" line)
+      const said = /TRIED:/.test(last.content) ? '```sh\nls -la ~\n# list the home folder\necho drafted-$((6*7))\n```' : 'TRY: echo scratch-test-$((40+2)); id -un';
+      yield { choices: [{ delta: { content: said } }] };
+      yield { choices: [{ delta: {}, finish_reason: 'stop' }], usage: { prompt_tokens: prompt, completion_tokens: 12, prompt_tokens_details: { cached_tokens: 0 }, cost: 0 } };
+      return;
+    }
     if (sys0.startsWith('You repair') || sys0.startsWith('You review')) {
       const said = sys0.startsWith('You review') ? 'POLICIES: keep p1 -- policy-rewritten 1 in 3 requests'
         : /refuse me/.test(last.content) ? '{"refuse": "cannot be made safe"}'

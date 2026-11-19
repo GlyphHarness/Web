@@ -61,3 +61,32 @@ What is lost on a machine restart: processes and anything outside the homes, `/r
 | E2B (server-side Firecracker) | per-agent isolation reference | one microVM per agent; create ~0.7 s, resume ~0.7 s in one third-party harness | summarised |
 
 No project found shares one in-browser VM across tabs or isolates agents as unix users inside one; no source gives verified boot, CPU, snapshot or disk numbers for an in-browser x86 guest. Our own numbers come from `scripts/smoke-vm.mjs` (prints boot and `gh api` times).
+
+## GitHub from the machine
+
+`machineAuth` (defaults, a profile or a session):
+
+| Mode | What the guest has | Who adds the credential |
+|---|---|---|
+| `inject` (default) | `GH_TOKEN=wh-placeholder-token` | the page, on each request to api.github.com: a repository call gets that repository's token (App: minted for it, else the PAT); a call naming no repository (`gh api user`, `gh auth status`) gets the PAT. With only an App set, account-level calls have no credential, and harness activity says so. |
+| `env` | `GH_TOKEN=<your PAT>` for the session's own user (a 600 file in its 700 home) | nobody: gh and git use it as usual. The model can read the token; tool results still show it masked. Switching back to `inject` removes the file. |
+
+One call through gh takes about 20 s in the emulator (Go start-up); use timeouts of 120 s or more.
+
+## The person's commands
+
+Under the terminal and the agent pty:
+
+- **Target**: the tab in view (the machine's terminal, or this session's agent pty).
+- **↻ last**: the last command *you typed* into that target, sent again (not the last one that ran).
+- **history**: what you typed, per target, most recent first; pin (★) keeps one at the top; a row loads into the input to edit; ↑ / ↓ in the input walk it.
+- **keys**: Tab, Ctrl-C, Esc, ↑ sent at once; `| ~ / - $ && > ' "` inserted (the ones a phone keyboard hides). Inputs have auto-capitalise, auto-correct and spell-check off.
+- **scratch**: describe what you want; the helper model (the session's helper, else its model) may test up to 3 commands per round in a scratch account (`uscratch`, 50 MB, 30 s each), then returns commands with a "why" line each: copy, edit, or send to the target.
+
+## stdio hooks (`app/term.js`)
+
+Named, ordered filters, switched on per name in `settings.termHooks {up, down}` (the **hooks** button):
+
+- `up` (what you send): `smartquotes` (“ ” ‘ ’ — … to ASCII), `autocap` (a capitalised first word from a phone keyboard), `trimend`.
+- `down` (what comes back: the terminal view and the shell tool's result for the model): `mask` (known secrets: API keys, the GitHub credential, minted tokens).
+- `register(dir, name, label, fn(text, ctx))` adds one (a sanitizer, a recorder, a policy check); a changed input is noted in harness activity.
