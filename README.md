@@ -2,7 +2,7 @@
 
 A client-side LLM chat harness served straight from this repo with GitHub Pages. No server, no build step: the browser holds the API key, the sessions and the tools.
 
-Status: working skeleton (v0.44.0). The OpenRouter path is written from the OpenAI-compatible conventions and has not yet been run against the live API.
+Status: working skeleton (v0.44.0). The OpenRouter path (streaming, tools, cached tokens, upstream pinning) and the GitHub paths (commit, branch, issue, repository creation) have been run live; see [docs/live-evidence](docs/live-evidence/2026-11-19-windows-chrome.md). GitHub App token minting has not.
 
 ## Run
 

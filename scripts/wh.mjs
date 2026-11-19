@@ -21,8 +21,12 @@
 //   wh watch [-i id]                      assess the calls not checked yet
 //   wh cost                               by strategy and model; checkpoints by kind
 //   wh raw [-i id] [-n 40]                the last request's raw stream (tool-call and finish chunks)
+//   wh allow [-i id] | wh deny            answer the approval card for a write (commit, PR, repo, concern); say/step show it as APPROVE?
+//   wh trace [-i id] [-o file]            save the page's .trace (live evidence)
+//   wh concerns <owner/name>              set the concerns repository
 //   wh down                               stop the daemon
 // Options: --url (default http://localhost:8787/), --port (daemon, default 8790), --json
+// Env: WH_CHROME=1 real Chrome (channel chrome), WH_HEADED=1 show it, OPENROUTER_API_KEY and WH_GITHUB_PAT stored by `init`, WH_PORT
 import { createRequire } from 'node:module';
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
@@ -43,7 +47,7 @@ const writeState = s => fs.writeFileSync(STATE, JSON.stringify(s, null, 1));
 // ---------------- client ----------------
 if (argv[0] !== 'daemon') {
   const [cmd = 'help', ...rest] = argv;
-  if (cmd === 'help') { console.log(fs.readFileSync(fileURLToPath(import.meta.url), 'utf8').split('\n').slice(1, 25).map(l => l.replace(/^\/\/ ?/, '')).join('\n')); process.exit(0); }
+  if (cmd === 'help') { console.log(fs.readFileSync(fileURLToPath(import.meta.url), 'utf8').split('\n').slice(1, 30).map(l => l.replace(/^\/\/ ?/, '')).join('\n')); process.exit(0); }
   const call = () => new Promise((ok, no) => {
     const req = http.request({ host: '127.0.0.1', port: PORT, method: 'POST', path: '/', headers: { 'content-type': 'application/json' } }, res => { let b = ''; res.on('data', d => b += d); res.on('end', () => ok(JSON.parse(b))); });
     req.on('error', no); req.end(JSON.stringify({ cmd, args: rest, json: !!JSONOUT }));
@@ -63,8 +67,9 @@ if (argv[0] !== 'daemon') {
 // ---------------- daemon ----------------
 const { chromium } = createRequire(import.meta.url)('playwright');
 const up = async () => { try { return (await fetch(URL0)).ok; } catch { return false; } };
-if (!(await up())) { spawn('python3', ['-m', 'http.server', new globalThis.URL(URL0).port || '8787'], { cwd: ROOT, detached: true, stdio: 'ignore' }).unref(); for (let i = 0; i < 40 && !(await up()); i++) await new Promise(s => setTimeout(s, 250)); }
-const ctx = await chromium.launchPersistentContext(path.join(DIR, 'profile'), { headless: true, viewport: { width: 1400, height: 900 } });
+if (!(await up())) { spawn(process.platform === 'win32' ? 'python' : 'python3', ['-m', 'http.server', new globalThis.URL(URL0).port || '8787'], { cwd: ROOT, detached: true, stdio: 'ignore' }).unref(); for (let i = 0; i < 40 && !(await up()); i++) await new Promise(s => setTimeout(s, 250)); }
+// WH_CHROME=1 drives the installed Google Chrome (channel "chrome") instead of bundled Chromium; WH_HEADED=1 shows it.
+const ctx = await chromium.launchPersistentContext(path.join(DIR, 'profile'), { headless: !process.env.WH_HEADED, viewport: { width: 1400, height: 900 }, ...(process.env.WH_CHROME ? { channel: 'chrome' } : {}) });
 const tabs = new Map(); // session id -> page
 const ready = async p => { await p.waitForSelector('#app #composer', { state: 'attached', timeout: 30000 }); return p; };
 async function main() { const p = ctx.pages()[0] || await ctx.newPage(); if (!p.url().startsWith(URL0)) { await p.goto(URL0); await ready(p); } return p; }
@@ -92,8 +97,9 @@ async function settle(p, ms = 900000) {
   const t0 = Date.now();
   await p.waitForSelector('#app[data-busy]', { state: 'attached', timeout: 3000 }).catch(() => {});
   for (;;) {
-    const st = await p.evaluate(() => ({ busy: document.querySelector('#app').hasAttribute('data-busy'), held: [...document.querySelectorAll('.msg[data-role=held]:not([data-done])')].map(c => c.querySelector('pre')?.textContent.slice(0, 200)), ask: !!document.querySelector('.msg[data-role=ask]:not([data-done])') }));
+    const st = await p.evaluate(() => ({ busy: document.querySelector('#app').hasAttribute('data-busy'), held: [...document.querySelectorAll('.msg[data-role=held]:not([data-done])')].map(c => c.querySelector('pre')?.textContent.slice(0, 200)), approve: [...document.querySelectorAll('.msg[data-role=approve]:not([data-done])')].map(c => c.textContent.replace(/\s+/g, ' ').slice(0, 1200)), ask: !!document.querySelector('.msg[data-role=ask]:not([data-done])') }));
     if (st.held.length) return { held: st.held };
+    if (st.approve.length) return { approve: st.approve };
     if (st.ask) return { ask: true };
     if (!st.busy) return { done: true };
     if (Date.now() - t0 > ms) return { timeout: true };
@@ -108,20 +114,31 @@ async function turnReport(p, id, before) {
   return { id, requests: ledger.filter(e => !e.helper).length, tools: calls, tokens: { prompt: tok.p, cached: tok.c, out: tok.o }, cost: tok.$, reply: reply.slice(0, 600), flags: openFlags(s).filter(f => f.at > before.n).map(f => `${f.tool}: ${f.why}`) };
 }
 const fmtTurn = (r, st) => [`${r.id} · ${r.requests} req · ${k(r.tokens.prompt)} in (${k(r.tokens.cached)} cached) · ${k(r.tokens.out)} out · ${money(r.cost)}${r.tools.length ? ' · tools ' + r.tools.join(',') : ''}`,
+  ...(st.approve ? st.approve.map(a => 'APPROVE? ' + a + '  (wh allow | wh deny)') : []),
   ...(st.held ? st.held.map(h => 'HELD ' + h + '  (wh step | wh skip)') : st.ask ? ['ASKS a question (answer it in the page)'] : st.timeout ? ['still running (wh show / wh say later)'] : []),
   ...(r.flags.length ? r.flags.map(f => 'FLAG ' + f) : []), r.reply ? '> ' + r.reply.replace(/\n+/g, ' ⏎ ').slice(0, 400) : ''].filter(Boolean).join('\n');
 
+async function decide(a, verb) {
+  const id = flagOf(a, 'i') || readState().current, p = await tab(id), s0 = await sess(p, id), before = { n: s0.messages.length, l: s0.ledger.length };
+  const card = p.locator('.msg[data-role=approve]:not([data-done])').first();
+  if (!await card.count()) return { ok: false, text: 'nothing is waiting for approval' };
+  const what = (await card.textContent()).replace(/\s+/g, ' ').slice(0, 300);
+  await card.locator('button', { hasText: verb }).click();
+  const st = await settle(p);
+  return { text: `${verb}ed: ${what}\n` + fmtTurn(await turnReport(p, id, before), st) };
+}
 const CMDS = {
   async init(a) {
     const p = await main();
-    await p.evaluate(() => { const k = JSON.parse(localStorage['wh:keys'] || '{}'); k.openrouter = 'sk-or-v1-proxy-injected'; localStorage['wh:keys'] = JSON.stringify(k); }); // the proxy replaces it
+    // In the cloud a network proxy swaps this placeholder for the real key; locally OPENROUTER_API_KEY (daemon env) is used as is.
+    await p.evaluate(([key, gh]) => { const k = JSON.parse(localStorage['wh:keys'] || '{}'); k.openrouter = key; if (gh) k.github = gh; localStorage['wh:keys'] = JSON.stringify(k); }, [process.env.OPENROUTER_API_KEY || 'sk-or-v1-proxy-injected', process.env.WH_GITHUB_PAT || '']);
     await p.reload(); await ready(p);
     await p.selectOption('#provider', 'openrouter');
     const settings = {};
     for (const [f, key] of [['m', 'model'], ['s', 'strategy'], ['w', 'watchModel'], ['p', 'pace'], ['h', 'helper']]) { const v = flagOf(a, f); if (v != null) settings[key] = v; }
     const txt = Object.keys(settings).length ? await pasteSettings(p, settings) : 'no settings given';
     const cur = (await meta(p)).settings;
-    return { text: `provider openrouter (key: proxy) · model ${cur.model || '-'} · strategy ${cur.strategy || 'strat-stem-1.0 (default)'} · watch ${cur.watchModel || 'off'} · pace ${cur.pace || 'run'}${/refused/.test(txt) ? '\n' + txt.replace(/\s+/g, ' ').slice(0, 300) : ''}`, data: cur };
+    return { text: `provider openrouter (key: ${process.env.OPENROUTER_API_KEY ? 'env' : 'proxy'}) · model ${cur.model || '-'} · strategy ${cur.strategy || 'strat-stem-1.0 (default)'} · watch ${cur.watchModel || 'off'} · pace ${cur.pace || 'run'}${/refused/.test(txt) ? '\n' + txt.replace(/\s+/g, ' ').slice(0, 300) : ''}`, data: cur };
   },
   async models(a) {
     const q = (flagOf(a, 'q') || '').toLowerCase(), n = Number(flagOf(a, 'n') || 12);
@@ -163,6 +180,25 @@ const CMDS = {
     await p.locator('.msg[data-role=held]:not([data-done]) [data-hold=skip]').first().click();
     const st = await settle(p);
     return { text: st.held ? 'skipped; next held: ' + st.held[0] : 'skipped; the turn ' + (st.done ? 'ended' : 'goes on') };
+  },
+  // A write that leaves the browser (commit, PR, repo, concern) waits on a card: `say`/`step` return with APPROVE? and the card text; the operator reads it, then allows or denies.
+  async allow(a) { return decide(a, 'allow'); },
+  async deny(a) { return decide(a, 'deny'); },
+  // Save the page's .trace (every request of this page load: bodies sent, status, raw response chunks; no keys) -- the evidence format issue #4 asks for.
+  async trace(a) {
+    const id = flagOf(a, 'i') || readState().current, out = path.resolve(flagOf(a, 'o') || path.join(DIR, 'traces', `trace-${new Date().toISOString().replace(/[:.]/g, '-')}.trace`));
+    const p = await tab(id); fs.mkdirSync(path.dirname(out), { recursive: true });
+    const [dl] = await Promise.all([p.waitForEvent('download', { timeout: 15000 }), p.evaluate(() => document.querySelector('[data-act=trace]').click())]);
+    await dl.saveAs(out);
+    const j = JSON.parse(fs.readFileSync(out, 'utf8'));
+    const hosts = [...new Set(j.exchanges.map(e => { try { return new globalThis.URL(e.url).host; } catch { return '?'; } }))];
+    return { text: `${out}\n${j.exchanges.length} exchanges · hosts ${hosts.join(', ')} · ${j.smells?.length || 0} smells`, data: { out, exchanges: j.exchanges.length, hosts } };
+  },
+  // Point concern_file / "file a concern" at a repository (Settings -> Concerns repository; not in paste config).
+  async concerns([repo = '']) {
+    const p = await main();
+    await p.evaluate(r => { const el = document.querySelector('#concernrepo'); el.value = r; el.dispatchEvent(new Event('change')); }, repo);
+    return { text: 'concerns repository: ' + (repo || '(page repo)') };
   },
   async pace([v]) { const p = await main(); await pasteSettings(p, { pace: v }); return { text: 'pace ' + v }; },
   async stem(a) {
