@@ -31,6 +31,7 @@ import * as handoff from './handoff.js';
 import * as vals from './values.js';
 import * as bridge from './bridge.js';
 import { render } from './widgets.js';
+import * as theme from './theme.js';
 import * as pat from './patterns.js';
 import { put, get, handlesIn, setFallback } from './outstore.js';
 import { buildRequest, measure, report, padAttachment, inherit, imitatesNote, keptLines, corePrompt, EDGE_MIN, markedOnly, edgeReplies, turnOf, KINDS } from './context.js';
@@ -2322,6 +2323,7 @@ export function boot(env) {
   app = $('#app');
   app.innerHTML = SHELL;
   $('#ver').textContent = 'v' + VERSION;
+  theme.mount($('#side > header'));
   $('#build').textContent = `build ${VERSION} · schema ${SCHEMA} · ${env.ref ? 'ref ' + env.ref : 'default branch'}`;
   $('#ref').value = env.ref;
   const set = state.meta.settings;
