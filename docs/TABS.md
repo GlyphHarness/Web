@@ -19,6 +19,7 @@ Chrome does not freeze a background tab that holds a Web Lock; it can still disc
 - **Jobs.** Every command is a job: its script goes in as short base64 lines, runs in the background with output to a root-only file (`/var/wh`), and is read back when it ends. Commands from different sessions run at the same time; the console only carries short lines. Timeouts are enforced in the guest (`timeout -k 5 -s INT`); "stop" on a running job in the Machine pane sends it TERM.
 - **Users.** Each top-level session (and its branches) is its own unix user, home `/home/u<id>` mode 700, so sessions cannot read each other's files. Setting `machineUser: root` (defaults, a profile or a session) runs as root in `/root` instead.
 - **Quota.** `machineQuota` (MB, default 200): a home over it refuses new commands (exit 122) until files are deleted; it is also each file's size limit (`ulimit -f`).
+- **CPU shares.** `machineCpu` (2 to 1024, default 1024 = a normal share): the weight of a session's jobs against the other jobs. It becomes a `nice` level on the scheduler's curve (512 is nice 3, 128 is 9, the floor 19), so it matters only while jobs compete for the one virtual CPU; a lone job runs as fast as ever. Harness commands and the root user's jobs take their own `cpuShares` option and default to a normal share.
 - **Packages.** `wh-install <name>` works for every user: non-root calls go to a root install service that accepts package names only and installs from the page's own shelf.
 
 ## Halt, step, resume (every tab together)
