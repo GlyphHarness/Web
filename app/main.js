@@ -2565,7 +2565,7 @@ async function scratchDraft(ask, onStep = () => {}) {
 // (results pass the "down" hooks: known secrets are masked before the model reads them)
 function shellRunner(s) {
   const o = shellOpt(s);
-  const go = async (cmd, t, opt) => { await syncGhFile(s); return INSTALL_ONLY.test(cmd) ? vm().run(cmd, t, { ...opt, session: s.id }) : state.meta.settings.vmTmux ? agentRun(cmd, t, o) : vm().run(cmd, t, { ...o, ...opt }); };
+  const go = async (cmd, t, opt) => { await syncGhFile(s); return INSTALL_ONLY.test(cmd) ? vm().run(cmd, t, { ...opt, session: s.id }) : state.meta.settings.vmTmux ? agentRun(cmd, t, o) : vm().run(cmd, t, { ...o, ...opt, session: s.id }); };
   return { run: (cmd, t, opt = {}) => go(cmd, t, opt).then(r => ({ ...r, out: down(r.out || '') })) };
 }
 
@@ -2741,7 +2741,8 @@ function vm() {
   if (vmInst) return vmInst;
   vmInst = sharedMachine({
     tab: TAB, dedicated: MACHINE_TAB, info: () => ({ version: VERSION }),
-    local: cb => machine({ token: vmToken, trace, onStatus: cb.onStatus, showHarness: () => !!state.meta.settings.vmShowHarness }),
+    local: cb => machine({ token: vmToken, trace, onStatus: cb.onStatus, showHarness: () => !!state.meta.settings.vmShowHarness,
+      sessionCheck: (id, repo) => { const s = state.sessions[id]; if (s && eff(s).repoAllowed(repo)) return true; smell(s || cur(), { kind: 'vm-repo-refused', tool: 'gh', detail: `${repo} (session ${id || 'none'})` }); return false; } }),
   });
   vmInst.onStatus(t => { if (!/ready/.test(t)) ghFile.clear(); slot($('#vmstat'), 'Machine: ' + t + (vmInst.role() === 'client' ? ' (in another tab)' : '')); link?.emit('notice', { session: 'machine', text: t }); machineDiag(); });
   vmInst.onRole(() => { machineDiag(); co?.announce(); });
