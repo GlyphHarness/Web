@@ -770,6 +770,20 @@ function activeIdOk(a, b) { return a === b; }
   check('strategies: an unknown id is refused by paste config', await page.evaluate(() => JSON.parse(localStorage['wh:meta']).settings.strategy) === 'strat-checkpoint-1.0');
   const st = await page.evaluate(() => whDebug.strategyStats());
   check('strategies: results are kept by strategy and model (for routing later)', st.some(r => r.strat === 'strat-serial-1.0' && r.model === 'mock-bp' && r.requests >= 1) && st.some(r => r.strat === 'strat-checkpoint-1.0' && r.requests >= 1), JSON.stringify(st).slice(0, 300));
+  // strat-stem-2.0: the stem opens with the goal in plain words (no concern framing); its turns ask for low reasoning
+  await paste({ strategy: 'strat-stem-2.0' });
+  await page.click('[data-act=new]');
+  await say('plain stem core');
+  const c2 = await page.evaluate(() => sessionStorage.getItem('wh:tab-active'));
+  await page.fill('#input', 'count the widgets');
+  await page.click('[data-act=stem]');
+  await page.waitForSelector('.modal select');
+  await page.click('.modal .primary');
+  await page.waitForFunction(c => sessionStorage.getItem('wh:tab-active') !== c, c2, { timeout: 10000 });
+  await page.waitForSelector('#app:not([data-busy])', { state: 'attached', timeout: 20000 });
+  const st2 = await page.evaluate(() => { const id = sessionStorage.getItem('wh:tab-active'); return JSON.parse(localStorage['wh:s:' + id]); });
+  const first = st2.messages[st2.parent.at];
+  check('strategies: strat-stem-2.0 opens a stem with the goal in plain words', first?.role === 'user' && /^count the widgets/.test(first.content) && !/^concern /.test(first.content), JSON.stringify(first).slice(0, 160));
   await paste({ strategy: 'strat-stem-1.0' });
   await page.fill('#model', model0 || 'mock-1'); await page.dispatchEvent('#model', 'change');
 }

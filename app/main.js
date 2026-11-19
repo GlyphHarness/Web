@@ -1770,6 +1770,8 @@ function fork(source, id, cut) {
   const b = newSession({
     title: '↳ ' + id, system: source.system, tools: source.tools, profile: source.profile, over: source.over ? { ...source.over } : undefined, wire: source.wire, keep: source.keep, core: source.core, edge: source.edge, sent: Math.min(source.sent || 0, cut), padSeen: { ...source.padSeen },
     parent: { id: source.id, at: cut, concern: id },
+    // same upstream as its source, so its first request reads the prefix the source already cached
+    ...(source.upstream ? { upstream: source.upstream } : {}),
     messages: structuredClone(source.messages.slice(0, cut)),
   });
   inherit(b.id, source.id);
