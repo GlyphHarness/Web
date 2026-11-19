@@ -110,7 +110,7 @@ const after = await page.evaluate(async () => (await whDebug.vm().run('echo cons
 check('terminal: what you type runs as its own job, so an open quote cannot stall the console', /console-still-free/.test(after), JSON.stringify(after));
 await page.click('#machine [data-cmd=hist]');
 check('history: what you typed is listed, with send / pin / forget', await page.locator('#machine .vmhist .hrow').count() >= 1 && /echo "typed-/.test(await page.textContent('#machine .vmhist')));
-await page.click('#machine .vmhist .hrow [data-cmd=load]');
+await page.click('#machine .vmhist .hrow:has-text("typed-") [data-cmd=load]');
 check('history: a row loads into the input for editing', /echo "typed-/.test(await page.inputValue('#machine .vmin')));
 await page.fill('#machine .vmin', '');
 check('input: no auto-capitalise or auto-correct on phones', await page.getAttribute('#machine .vmin', 'autocapitalize') === 'off' && await page.getAttribute('#machine .vmin', 'autocorrect') === 'off');
