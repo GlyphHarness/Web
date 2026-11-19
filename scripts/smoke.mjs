@@ -769,6 +769,21 @@ function activeIdOk(a, b) { return a === b; }
   await page.fill('#model', model0 || 'mock-1'); await page.dispatchEvent('#model', 'change');
 }
 
+// ---- watcher: a small model checks each tool call on-hook and only flags (docs/STEMS.md §9) ----
+{
+  const paste = settings => page.evaluate(() => document.querySelector('[data-act=cfgpaste]').click()).then(() => page.fill('.modal textarea', JSON.stringify({ settings }))).then(() => page.click('.modal .primary'));
+  await paste({ watchModel: 'mock-1' });
+  await page.click('[data-act=new]');
+  await say('please use a tool');
+  await say('shell: ls');
+  await page.waitForTimeout(800);
+  const ws = await page.evaluate(() => { const id = sessionStorage.getItem('wh:tab-active'); return JSON.parse(localStorage['wh:s:' + id]); });
+  check('watcher: every tool call gets one cheap check (helper rows "watch")', ws.ledger.filter(e => e.helper && e.kind === 'watch').length === 2, JSON.stringify(ws.ledger.map(e => e.kind || 'main')));
+  check('watcher: a clean call raises nothing; a failed one is flagged with a reason', (ws.flags || []).length === 1 && ws.flags[0].tool === 'shell' && /machine/i.test(ws.flags[0].why), JSON.stringify(ws.flags));
+  check('watcher: a flag is also a smell, so it is tracked over time', await page.evaluate(() => JSON.parse(localStorage['wh:smells'] || '[]').some(r => r.kind === 'watch-flag' && r.tool === 'shell')));
+  await paste({ watchModel: '' });
+}
+
 check('layout: the page itself does not scroll', await page.evaluate(() => document.documentElement.scrollHeight <= innerHeight && scrollY === 0));
 if (shot) await page.screenshot({ path: shot });
 check('no page errors', errors.filter(e => !/schema 99|ERR_TUNNEL|Failed to load resource/.test(e)).length === 0, errors.join(' | '));
