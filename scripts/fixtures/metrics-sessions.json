@@ -1,0 +1,316 @@
+{
+ "sessions": [
+  {
+   "id": "sfixA",
+   "title": "Fixture A: stem run",
+   "created": 1700000000000,
+   "system": "SECRET-CONTENT",
+   "padSeen": {},
+   "messages": [
+    {
+     "role": "user",
+     "content": "SECRET-CONTENT please look at the repo and fix the thing, with a long enough request to count as a full turn xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+     "role": "assistant",
+     "content": "SECRET-CONTENT",
+     "tool_calls": [
+      {
+       "id": "c1",
+       "type": "function",
+       "function": {
+        "name": "repo_read",
+        "arguments": "{\"path\":\"SECRET-CONTENT\"}"
+       }
+      },
+      {
+       "id": "c2",
+       "type": "function",
+       "function": {
+        "name": "repo_read",
+        "arguments": "{\"path\":\"SECRET-CONTENT\"}"
+       }
+      },
+      {
+       "id": "c3",
+       "type": "function",
+       "function": {
+        "name": "file_edit",
+        "arguments": "{\"path\":\"SECRET-CONTENT\"}"
+       }
+      }
+     ]
+    },
+    {
+     "role": "tool",
+     "tool_call_id": "c1",
+     "content": "ok SECRET-CONTENT"
+    },
+    {
+     "role": "tool",
+     "tool_call_id": "c2",
+     "content": "ok SECRET-CONTENT"
+    },
+    {
+     "role": "tool",
+     "tool_call_id": "c3",
+     "content": "Tool error: SECRET-CONTENT"
+    },
+    {
+     "role": "assistant",
+     "content": "SECRET-CONTENT"
+    },
+    {
+     "role": "user",
+     "content": "and again"
+    },
+    {
+     "role": "assistant",
+     "content": "SECRET-CONTENT",
+     "tool_calls": [
+      {
+       "id": "c4",
+       "type": "function",
+       "function": {
+        "name": "repo_commit",
+        "arguments": "{\"m\":\"SECRET-CONTENT\"}"
+       }
+      },
+      {
+       "id": "c5",
+       "type": "function",
+       "function": {
+        "name": "shell",
+        "arguments": "{\"cmd\":\"SECRET-CONTENT\"}"
+       }
+      }
+     ]
+    },
+    {
+     "role": "tool",
+     "tool_call_id": "c4",
+     "content": "ok SECRET-CONTENT"
+    },
+    {
+     "role": "tool",
+     "tool_call_id": "c5",
+     "content": "Not run: policy SECRET-CONTENT"
+    },
+    {
+     "role": "assistant",
+     "content": "SECRET-CONTENT"
+    }
+   ],
+   "ledger": [
+    {
+     "t": 1700000000000,
+     "kept": 0,
+     "chars": 1000,
+     "model": "vendor/model-a",
+     "strat": "strat-stem-2.0",
+     "prompt": 4000,
+     "cached": 0,
+     "cacheWrite": 3800,
+     "completion": 300,
+     "reasoning": 120,
+     "cost": 0.0123
+    },
+    {
+     "t": 1700000000000,
+     "kept": 0,
+     "chars": 1000,
+     "model": "vendor/model-a",
+     "strat": "strat-stem-2.0",
+     "prompt": 4500,
+     "cached": 3800,
+     "cacheWrite": 600,
+     "completion": 250,
+     "reasoning": 90,
+     "cost": 0.0061
+    },
+    {
+     "t": 1700000000000,
+     "kept": 0,
+     "chars": 1000,
+     "helper": true,
+     "kind": "squeeze",
+     "model": "vendor/small",
+     "prompt": 1200,
+     "cached": 0,
+     "completion": 80,
+     "reasoning": 0,
+     "cost": 0.0004
+    },
+    {
+     "t": 1700000000000,
+     "kept": 0,
+     "chars": 1000,
+     "model": "vendor/model-a",
+     "strat": "strat-stem-2.0",
+     "prompt": 5200,
+     "cached": 4400,
+     "cacheWrite": 700,
+     "completion": 400,
+     "reasoning": 200,
+     "cost": 0.0072
+    },
+    {
+     "t": 1700000000000,
+     "kept": 0,
+     "chars": 1000,
+     "model": "vendor/model-a",
+     "strat": "strat-stem-2.0",
+     "prompt": 6100,
+     "cached": 5800,
+     "cacheWrite": 300,
+     "completion": 150,
+     "reasoning": 40,
+     "cost": 0.0049
+    },
+    {
+     "t": 1700000000000,
+     "kept": 0,
+     "chars": 1000,
+     "helper": true,
+     "kind": "policy",
+     "model": "vendor/small",
+     "prompt": 900,
+     "cached": 0,
+     "completion": 60,
+     "reasoning": 0,
+     "cost": 0.0003
+    },
+    {
+     "t": 1700000000000,
+     "kept": 0,
+     "chars": 1000,
+     "model": "vendor/model-a",
+     "strat": "strat-stem-2.0",
+     "prompt": 6800,
+     "cached": 6100,
+     "cacheWrite": 700,
+     "completion": 500,
+     "reasoning": 220,
+     "cost": 0.0088
+    }
+   ],
+   "flags": [
+    {
+     "tool": "shell",
+     "kind": "policy-runtime",
+     "why": "SECRET-CONTENT"
+    }
+   ]
+  },
+  {
+   "id": "sfixB",
+   "title": "Fixture B: serial run",
+   "created": 1700000100000,
+   "system": "SECRET-CONTENT",
+   "padSeen": {},
+   "messages": [
+    {
+     "role": "user",
+     "content": "SECRET-CONTENT"
+    },
+    {
+     "role": "assistant",
+     "content": "SECRET-CONTENT",
+     "tool_calls": [
+      {
+       "id": "d1",
+       "type": "function",
+       "function": {
+        "name": "ls",
+        "arguments": "{}"
+       }
+      }
+     ]
+    },
+    {
+     "role": "tool",
+     "tool_call_id": "d1",
+     "content": "ok"
+    },
+    {
+     "role": "assistant",
+     "content": "SECRET-CONTENT"
+    }
+   ],
+   "ledger": [
+    {
+     "t": 1700000000000,
+     "kept": 0,
+     "chars": 1000,
+     "model": "vendor/model-b",
+     "strat": "strat-serial-1.0",
+     "prompt": 2000,
+     "cached": 0,
+     "cacheWrite": 0,
+     "completion": 100,
+     "reasoning": 0,
+     "cost": 0.0301
+    },
+    {
+     "t": 1700000000000,
+     "kept": 0,
+     "chars": 1000,
+     "model": "vendor/model-b",
+     "strat": "strat-serial-1.0",
+     "prompt": 2300,
+     "cached": 1900,
+     "cacheWrite": 0,
+     "completion": 120,
+     "reasoning": 0,
+     "cost": 0.0177
+    },
+    {
+     "t": 1700000000000,
+     "kept": 0,
+     "chars": 1000,
+     "model": "vendor/model-b",
+     "strat": "strat-serial-1.0",
+     "prompt": 2700,
+     "cached": 2200,
+     "cacheWrite": 0,
+     "completion": 90,
+     "reasoning": 0,
+     "cost": 0.019
+    }
+   ]
+  }
+ ],
+ "ckpt": {
+  "a1": {
+   "kind": "system",
+   "len": 100,
+   "t": 1,
+   "session": "sfixA",
+   "writes": 1,
+   "writeTokens": 3800,
+   "reads": 4,
+   "readTokens": 20000
+  },
+  "a2": {
+   "kind": "tail",
+   "len": 200,
+   "t": 1,
+   "session": "sfixA",
+   "writes": 4,
+   "writeTokens": 2300,
+   "reads": 0,
+   "readTokens": 0
+  },
+  "a3": {
+   "kind": "stem",
+   "len": 300,
+   "t": 1,
+   "session": "sfixA",
+   "writes": 1,
+   "writeTokens": 600,
+   "reads": 1,
+   "readTokens": 5000
+  }
+ },
+ "sentinel": "SECRET-CONTENT"
+}

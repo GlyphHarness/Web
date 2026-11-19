@@ -27,11 +27,14 @@ import * as smells from './smells.js';
 import { logRepo } from './logrepo.js';
 import * as asks from './ask.js';
 import * as config from './config.js';
+import * as metricsPanel from './metrics.js';
+import * as panels from './panels.js';
 import * as prof from './profiles.js';
 import * as handoff from './handoff.js';
 import * as vals from './values.js';
 import * as bridge from './bridge.js';
 import { render } from './widgets.js';
+import * as theme from './theme.js';
 import * as pat from './patterns.js';
 import { put, get, handlesIn, setFallback } from './outstore.js';
 import { buildRequest, measure, report, padAttachment, inherit, imitatesNote, keptLines, corePrompt, EDGE_MIN, markedOnly, edgeReplies, turnOf, KINDS } from './context.js';
@@ -502,7 +505,7 @@ const ask2 = (title, text, yes = 'OK', no = 'Cancel') => modal({ title, body: te
 
 // ---------- paste-to-configure (config.js) ----------
 
-const cfgCurrent = () => ({ settings: { ...state.meta.settings, newProfile: profiles().find(p => p.id === state.meta.settings.newProfile)?.name }, policies: policyList(), profiles: profiles(), providers: Object.keys(providers), machine: vmWanted(),
+const cfgCurrent = () => ({ settings: { ...state.meta.settings, newProfile: profiles().find(p => p.id === state.meta.settings.newProfile)?.name, metricsLayout: panels.getLayout() }, policies: policyList(), profiles: profiles(), providers: Object.keys(providers), machine: vmWanted(),
   values: allValues().map(v => { const r = vals.current(v); return { id: v.id, scope: v.scope.kind === 'global' ? 'defaults' : v.scope.kind === 'session' ? 'session' : 'profile:' + (profiles().find(p => p.id === v.scope.id)?.name || v.scope.id), label: r.label, value: r.value, purpose: r.purpose }; }) });
 // Inputs re-read from state after a merge.
 function showSettings() {
@@ -544,6 +547,7 @@ async function pasteConfig(prefill = '') {
     if (old) vals.revise(old, { value: v.value, purpose: v.purpose || undefined, role: v.role, expose: v.expose, why: 'paste config' }, by);
     else vals.create(state.meta, scope, { label: v.label, role: v.role, value: v.value, purpose: v.purpose, expose: v.expose, notes: v.notes, why: 'paste config' }, by);
   }
+  if (settings.metricsLayout) { panels.setLayout(settings.metricsLayout); delete settings.metricsLayout; } // kept in its own key (wh:metrics-layout), not in the settings
   Object.assign(state.meta.settings, settings);
   if ('logRepo' in settings) state.meta.settings.logReady = false;
   if (policies) state.meta.settings.policyList = policies;
@@ -2336,6 +2340,7 @@ export function boot(env) {
   app = $('#app');
   app.innerHTML = SHELL;
   $('#ver').textContent = 'v' + VERSION;
+  theme.mount($('#side > header'));
   $('#build').textContent = `build ${VERSION} · schema ${SCHEMA} · ${env.ref ? 'ref ' + env.ref : 'default branch'}`;
   $('#ref').value = env.ref;
   const set = state.meta.settings;
@@ -2360,6 +2365,7 @@ export function boot(env) {
   bind();
   lookui.mount({ modal, after: $('#side [data-act=import]') });
   R.onChange(() => { redrawLook(); renderSmells(); });
+  metricsPanel.mount(); // metrics panel (docs/METRICS-PANEL.md)
   uptext();
   { let ta = ''; try { ta = sessionStorage.getItem('wh:tab-active') || ''; } catch {} const want = QS.get('s') || ta; if (state.sessions[want]) state.meta.active = want; }
   co = coordinator({ tab: TAB, version: VERSION, describe: () => ({ machine: vmInst?.role() || 'idle', dedicated: MACHINE_TAB, session: state.meta.active, build: bootEnv?.build || '' }), onChange: renderCoord, onReload: x => onCoordReload(x) });
