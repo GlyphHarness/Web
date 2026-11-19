@@ -505,7 +505,7 @@ const ask2 = (title, text, yes = 'OK', no = 'Cancel') => modal({ title, body: te
 
 // ---------- paste-to-configure (config.js) ----------
 
-const cfgCurrent = () => ({ settings: { ...state.meta.settings, newProfile: profiles().find(p => p.id === state.meta.settings.newProfile)?.name, metricsLayout: panels.getLayout() }, policies: policyList(), profiles: profiles(), providers: Object.keys(providers), machine: vmWanted(),
+const cfgCurrent = () => ({ settings: { ...state.meta.settings, newProfile: profiles().find(p => p.id === state.meta.settings.newProfile)?.name, metricsLayout: panels.getLayout() }, policies: policyList(), profiles: profiles(), providers: Object.keys(providers), machine: vmWanted(), keys: Object.fromEntries(Object.entries(state.keys).filter(([, v]) => typeof v === 'string')),
   values: allValues().map(v => { const r = vals.current(v); return { id: v.id, scope: v.scope.kind === 'global' ? 'defaults' : v.scope.kind === 'session' ? 'session' : 'profile:' + (profiles().find(p => p.id === v.scope.id)?.name || v.scope.id), label: r.label, value: r.value, purpose: r.purpose }; }) });
 // Inputs re-read from state after a merge.
 function showSettings() {
@@ -513,15 +513,16 @@ function showSettings() {
   $('#provider').value = set.provider; $('#model').value = set.model || ''; $('#helper').value = set.helper || '';
   $('#polmodel').value = set.policyModel || ''; $('#ghlabel').value = set.ghlabel || ''; $('#logrepo').value = set.logRepo || '';
   $('#budget').value = set.branchBudget || BRANCH_BUDGET; $('#pace').value = pace();
+  $('#concernrepo').value = set.concernRepo || ''; $('#key').value = state.keys[set.provider] || ''; $('#ghkey').value = state.keys.github || '';
   showBase(); renderPolicies(); renderProfiles(); redrawSessions(); showPrice(); renderScope(); renderValues();
 }
 async function pasteConfig(prefill = '') {
-  const ta = h('textarea', { rows: '10', class: 'mono', spellcheck: 'false', placeholder: '{"settings": {"model": "...", "helper": "..."}, "policies": [{"name": "...", "rule": "..."}]}' });
+  const ta = h('textarea', { rows: '10', class: 'mono', spellcheck: 'false', placeholder: '{"settings": {"model": "...", "logRepo": "owner/name", "concernRepo": "owner/name"}, "keys": {"openrouter": "...", "github": "..."}}' });
   const out = h('div', { class: 'cfgplan' });
   let last = null;
   const show = () => {
     const text = ta.value.trim();
-    if (!text) { last = null; out.replaceChildren(h('p', { class: 'note', text: 'Paste a JSON block. Only the fields it names change; credentials are refused.' })); return; }
+    if (!text) { last = null; out.replaceChildren(h('p', { class: 'note', text: 'Paste a JSON block. Only the fields it names change. Keys go in a "keys" block ({"openrouter": "…", "github": "…"}), are shown masked here, and stay in this browser only.' })); return; }
     last = config.plan(text, cfgCurrent());
     if (last.error) { out.replaceChildren(h('p', { class: 'note bad', text: last.error })); return; }
     out.replaceChildren(
@@ -536,7 +537,8 @@ async function pasteConfig(prefill = '') {
   setTimeout(() => ta.focus());
   const go = await modal({ title: 'Paste config', body: [ta, out], actions: [{ text: 'Cancel', value: false, cancel: true }, { text: 'Apply', value: true, primary: true }] });
   if (!go || !last || last.error || !last.changes.length) return;
-  const { settings, policies, machine, profiles: nextProfiles, values: nextValues } = last.next;
+  const { settings, policies, machine, profiles: nextProfiles, values: nextValues, keys: nextKeys } = last.next;
+  if (nextKeys) { for (const [id, v] of Object.entries(nextKeys)) { if (v) state.keys[id] = v; else delete state.keys[id]; } saveKeys(); if ('github' in nextKeys) state.meta.settings.ghwho = ''; }
   if (nextProfiles) state.meta.profiles = nextProfiles;
   if (settings.newProfile) settings.newProfile = profiles().find(p => p.name === settings.newProfile)?.id;
   for (const v of nextValues || []) {
@@ -563,20 +565,20 @@ async function pasteConfig(prefill = '') {
 // alias at a chosen level, else existing values by label (new revision), else new values.
 async function importLines() {
   const s = cur(), levels = scopeLevels(s);
-  const ta = h('textarea', { rows: '8', class: 'mono', spellcheck: 'false', placeholder: 'model: …\nhelper model: …\nlog repo: owner/name\nregion = eu-west-1\n| main | some/model | … |' });
+  const ta = h('textarea', { rows: '8', class: 'mono', spellcheck: 'false', placeholder: 'model: …\nhelper model: …\nlog repo: owner/name\nconcerns repo: owner/name\nopenrouter key: …\ngithub token: …\nregion = eu-west-1\n| main | some/model | … |' });
   const lv = h('select', {}, ...levels.map((l, i) => Object.assign(h('option', { value: l.id, text: (l.id === 'session' ? 'this session' : l.id === 'default' ? 'defaults (all sessions)' : 'profile ' + l.name) + (levelFrozen(s, l.id) ? ' (frozen)' : '') }), { selected: i === 0, disabled: levelFrozen(s, l.id) })));
   const out = h('div', { class: 'cfgplan' });
   let rows = [];
   const plan = () => {
     const visibleVals = valuesFor(s).map(v => { const r = vals.current(v); return { id: v.id, label: r.label, value: typeof r.value === 'string' ? r.value : JSON.stringify(r.value) }; });
-    rows = config.planImport(ta.value, { settings: state.meta.settings, current: k => eff(s).settings[k], values: visibleVals, providers: Object.keys(providers) });
+    rows = config.planImport(ta.value, { settings: state.meta.settings, keys: state.keys, current: k => eff(s).settings[k], values: visibleVals, providers: Object.keys(providers) });
     const level = lv.value, e = eff(s);
     if (levelFrozen(s, level)) for (const r of rows) if (r.target?.kind === 'setting' && r.target.level === 'chosen') { r.action = 'refused'; r.why = 'that level is frozen'; }
     out.replaceChildren(h('p', { class: 'note', text: rows.length ? `${rows.filter(r => r.action === 'update' || r.action === 'create').length} to apply · uncheck a line to leave it out` : 'Paste lines of label and value.' }), ...rows.map((r, i) => {
       const lockBy = r.target?.kind === 'setting' && r.target.level === 'chosen' ? e.locked.get(r.target.key) : null;
       const li = levels.findIndex(l => l.id === level), lk = lockBy ? levels.findIndex(l => l.name === lockBy) : -1;
       if (lockBy && li < lk) { r.action = 'refused'; r.why = `locked by profile ${lockBy}`; }
-      const where = !r.target ? '' : r.target.kind === 'setting' ? `${r.target.key}${r.target.level === 'default' ? ' (defaults)' : ''}` : r.target.id ? `value ${r.target.id}` : 'new value';
+      const where = !r.target ? '' : r.target.kind === 'key' ? 'key store (this browser only)' : r.target.kind === 'setting' ? `${r.target.key}${r.target.level === 'default' ? ' (defaults)' : ''}` : r.target.id ? `value ${r.target.id}` : 'new value';
       const box = Object.assign(h('input', { type: 'checkbox', 'data-i': String(i) }), { checked: r.action === 'update' || r.action === 'create', disabled: r.action === 'refused' || r.action === 'unchanged' });
       return h('label', { class: 'cfgrow imp ' + (r.action === 'refused' ? 'bad' : '') }, box, h('code', { text: r.label }), h('span', { text: '→ ' + (where || '—') }),
         r.action === 'refused' ? h('span', { text: 'refused: ' + r.why }) : h('span', {}, h('span', { class: 'from', text: JSON.stringify(r.from ?? '') }), h('span', { text: ' → ' }), h('span', { class: 'to', text: JSON.stringify(r.value) }), h('span', { class: 'note', text: ' ' + r.action })));
@@ -590,7 +592,8 @@ async function importLines() {
   const level = lv.value, done = [];
   const scope = level === 'default' ? { kind: 'global' } : level === 'session' ? { kind: 'session', id: s.id } : { kind: 'profile', id: level.slice(2) };
   for (const r of picked) {
-    if (r.target.kind === 'setting') {
+    if (r.target.kind === 'key') { state.keys[r.target.id] = r.secret; saveKeys(); if (r.target.id === 'github') state.meta.settings.ghwho = ''; done.push('key ' + r.target.id); }
+    else if (r.target.kind === 'setting') {
       if (r.target.level === 'default') { state.meta.settings[r.target.key] = r.value; if (r.target.key === 'logRepo') state.meta.settings.logReady = false; saveMeta(); done.push(r.target.key); }
       else { const err = setAt(s, level, r.target.key, r.value); if (!err) { done.push(r.target.key); if (r.target.key === 'logRepo' && level === 'default') { state.meta.settings.logReady = false; saveMeta(); } } }
     } else if (r.target.id) { const v = allValues().find(x => x.id === r.target.id); vals.revise(v, { value: r.value, why: 'imported' }, valueBy(s, 'you')); done.push(v.id); }
