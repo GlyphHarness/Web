@@ -208,14 +208,16 @@ const CMDS = {
     const main_ = led.filter(e => !e.helper);
     const out = {
       id, since: mark.n, turns: msgs.filter(m => m.role === 'user').length, requests: main_.length, helper: led.length - main_.length,
-      tokens: { prompt: sum('prompt'), cached: sum('cached'), write: sum('cacheWrite'), out: sum('completion') }, cost: sum('cost'),
+      tokens: { prompt: sum('prompt'), cached: sum('cached'), write: sum('cacheWrite'), out: sum('completion'), reasoning: sum('reasoning') }, cost: sum('cost'),
+      perTurn: main_.map(e => ({ out: e.completion || 0, reasoning: e.reasoning || 0 })),
       cache: sum('prompt') ? Math.round(100 * sum('cached') / sum('prompt')) : null,
       calls: calls.map(c => `${c.function.name}:${verdict(c)}`), flags: openFlags(s).filter(f => f.at > mark.n).map(f => `${f.tool}: ${f.why}`),
       errors: msgs.filter(m => m.role === 'tool' && /^(Tool error|Error:|Not run)/.test(String(m.content))).length,
       strategy: main_.at(-1)?.strat || null, model: main_.at(-1)?.model || null, stem: s.stem ? { handle: s.stem.handle, folded: !!s.stem.folded } : null,
     };
     st.assessed[id] = { n: s.messages.length, l: s.ledger.length, t: Date.now() }; writeState(st); // checked off
-    const text = [`${id} since #${out.since} · ${out.turns} turns · ${out.requests} req (+${out.helper} helper) · ${k(out.tokens.prompt)} in, ${out.cache ?? '-'}% cached, ${k(out.tokens.write)} written · ${k(out.tokens.out)} out · ${money(out.cost)}`,
+    const text = [`${id} since #${out.since} · ${out.turns} turns · ${out.requests} req (+${out.helper} helper) · ${k(out.tokens.prompt)} in, ${out.cache ?? '-'}% cached, ${k(out.tokens.write)} written · ${k(out.tokens.out)} out (${k(out.tokens.reasoning)} reasoning) · ${money(out.cost)}`,
+      out.perTurn.length ? 'out per request ' + out.perTurn.map(t => `${k(t.out)}${t.reasoning ? '/' + k(t.reasoning) + 'r' : ''}`).join(' ') : '',
       `strategy ${out.strategy || '-'} · model ${out.model || '-'}${out.stem ? ` · stem ${out.stem.handle} ${out.stem.folded ? 'folded' : 'open'}` : ''}`,
       out.calls.length ? 'calls ' + out.calls.join(' ') : 'no tool calls', out.errors ? `${out.errors} failed calls` : '', ...out.flags.map(f => 'FLAG ' + f)].filter(Boolean).join('\n');
     return { text: msgs.length || all ? text : `${id}: nothing new since the last assess`, data: out };

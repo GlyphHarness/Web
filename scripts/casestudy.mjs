@@ -15,8 +15,11 @@ const { chromium } = createRequire(import.meta.url)('playwright');
 const args = process.argv.slice(2);
 const flag = (n, d) => { const i = args.indexOf('--' + n); return i >= 0 ? args.splice(i, 2)[1] : d; };
 const url = flag('url', 'http://localhost:8787/'), outDir = flag('out', 'docs/case-studies');
+// --live: production run on real OpenRouter models (the key is added by the network proxy).
+// Never part of the test suites; it spends real (small) money and its turns are real model turns.
+const LIVE = args.includes('--live') && !!args.splice(args.indexOf('--live'), 1);
 const STRATS = flag('strategies', 'strat-serial-1.0,strat-checkpoint-1.0,strat-stem-1.0').split(',');
-const MODELS = flag('models', 'mock-bp,mock-1').split(','), TAILS = flag('tails', '2,8').split(',').map(Number);
+const MODELS = flag('models', LIVE ? 'qwen/qwen3.7-flash' : 'mock-bp,mock-1').split(','), TAILS = flag('tails', LIVE ? '2' : '2,8').split(',').map(Number);
 // $/token from the mock's model list (providers.js): input, output, cache read, cache write
 //   mock-bp: breakpoint caching (nothing cached without a mark), writes cost more than input
 //   mock-1:  automatic prefix caching (no marks), cheap reads, no write charge
@@ -24,34 +27,37 @@ const PRICES = { 'mock-bp': { in: 3e-6, out: 15e-6, read: 0.3e-6, write: 3.75e-6
 
 const browser = await chromium.launch();
 async function runOne(strategy, MODEL, tail) {
-  const PRICE = PRICES[MODEL];
+  const PRICE = PRICES[MODEL] || PRICES['mock-1'];
   const bctx = await browser.newContext({ viewport: { width: 1400, height: 900 } });
-  // mock only: OpenRouter is blocked, and a model request to it fails the run
+  // mock only: OpenRouter is blocked, and a model request to it fails the run (unless --live)
   const orCalls = [];
-  await bctx.route(/^https:\/\/openrouter\.ai\//, r => { orCalls.push(r.request().url()); r.abort(); });
+  if (!LIVE) await bctx.route(/^https:\/\/openrouter\.ai\//, r => { orCalls.push(r.request().url()); r.abort(); });
   const page = await bctx.newPage();
   const errors = [];
   page.on('pageerror', e => errors.push(String(e)));
   await page.goto(url);
   await page.waitForSelector('#app #composer', { state: 'attached' });
-  await page.selectOption('#provider', 'mock');
+  if (LIVE) { await page.evaluate(() => { localStorage['wh:keys'] = JSON.stringify({ openrouter: 'sk-or-v1-proxy-injected' }); }); await page.reload(); await page.waitForSelector('#app #composer', { state: 'attached' }); }
+  await page.selectOption('#provider', LIVE ? 'openrouter' : 'mock');
   await page.fill('#model', MODEL); await page.dispatchEvent('#model', 'change');
   await page.evaluate(() => document.querySelector('[data-act=cfgpaste]').click());
   await page.fill('.modal textarea', JSON.stringify({ settings: { strategy } }));
   await page.click('.modal .primary');
   const active = () => page.evaluate(() => sessionStorage.getItem('wh:tab-active'));
-  const say = async text => { await page.fill('#input', text); await page.click('#send'); await page.waitForSelector('#app[data-busy]', { state: 'attached', timeout: 5000 }).catch(() => {}); await page.waitForSelector('#app:not([data-busy])', { state: 'attached', timeout: 60000 }); };
+  const say = async text => { await page.fill('#input', text); await page.click('#send'); await page.waitForSelector('#app[data-busy]', { state: 'attached', timeout: 5000 }).catch(() => {}); await page.waitForSelector('#app:not([data-busy])', { state: 'attached', timeout: LIVE ? 300000 : 60000 }); };
   const sess = id => page.evaluate(id => JSON.parse(localStorage['wh:s:' + id]), id);
 
   await page.click('[data-act=new]');
   const core = await active();
-  for (const t of ['core: plan the work', 'core: settle the interface', 'core: we also need the slow-path numbers']) await say(t);
-  const sideTurns = ['side: measure it big', 'side: again with more data big', 'side: and the worst case big'];
-  const tailTurns = Array.from({ length: tail }, (_, i) => `core: next step ${i + 1}`);
+  const CORE = LIVE ? ["We're designing a tiny CLI that prints facts about primes. In 2 short lines: what should its subcommands be?", 'Good. In 2 short lines: how should it cache results?', 'We also need two numbers for the docs: the 300th prime and the sum of the first 300 primes.'] : ['core: plan the work', 'core: settle the interface', 'core: we also need the slow-path numbers'];
+  for (const t of CORE) await say(t);
+  const sideTurns = LIVE ? ['Use run_js to compute the first 300 primes; return the whole array, the 300th prime and their sum.', 'Use run_js to check the 300th prime a second, different way.'] : ['side: measure it big', 'side: again with more data big', 'side: and the worst case big'];
+  const WRAP = LIVE ? 'Wrap up for the core in 3 short lines: the 300th prime, the sum of the first 300 primes, and how you checked.' : null;
+  const tailTurns = Array.from({ length: tail }, (_, i) => LIVE ? ['In 2 short lines: which error messages should the CLI print?', 'In 2 short lines: what goes in its --help?', 'In 2 short lines: how do we test it?', 'In 2 short lines: how do we package it?'][i % 4] : `core: next step ${i + 1}`);
   let handle = null;
   if (strategy.includes('stem')) {
-    const s0 = await sess(core), at = s0.messages.findIndex(m => m.role === 'user' && /slow-path numbers/.test(m.content));
-    await page.fill('#input', 'find the slow-path numbers');
+    const s0 = await sess(core), at = s0.messages.findIndex(m => m.role === 'user' && (LIVE ? /300th prime/ : /slow-path numbers/).test(m.content));
+    await page.fill('#input', LIVE ? 'find the 300th prime and the sum of the first 300 primes' : 'find the slow-path numbers');
     await page.click('[data-act=stem]');
     await page.waitForSelector('.modal select');
     await page.selectOption('.modal select', String(at));
@@ -61,18 +67,18 @@ async function runOne(strategy, MODEL, tail) {
     const stem = await active();
     handle = (await sess(stem)).stem.handle;
     for (const t of sideTurns) await say(t);
-    await say('wrap up: the fold for the core');
+    await say(WRAP || 'wrap up: the fold for the core');
     await page.click(`#sessions [data-id="${core}"]`);
     for (const t of tailTurns) await say(t);
     await page.click(`#sessions [data-id="${stem}"]`);
     await page.click('[data-act=foldback]');
     await page.waitForFunction(c => sessionStorage.getItem('wh:tab-active') === c, core, { timeout: 10000 });
-    await say('pull ' + handle); // the core needs the side goal's result now
+    await say(LIVE ? `Read ${handle} with output_read and tell me, in one line, the 300th prime and the sum of the first 300 primes.` : 'pull ' + handle); // the core needs the side goal's result now
   } else {
     for (const t of sideTurns) await say(t);
-    await say('wrap up: the side goal');
+    await say(WRAP || 'wrap up: the side goal');
     for (const t of tailTurns) await say(t);
-    await say('core: what were the slow-path numbers?');
+    await say(LIVE ? 'In one line: what were the 300th prime and the sum of the first 300 primes?' : 'core: what were the slow-path numbers?');
   }
   // all sessions this run made (the core and any stems)
   const all = await page.evaluate(() => JSON.parse(localStorage['wh:meta']).order.map(id => JSON.parse(localStorage['wh:s:' + id])));
@@ -80,16 +86,19 @@ async function runOne(strategy, MODEL, tail) {
   const sum = (k, f = () => true) => rows.filter(f).reduce((n, e) => n + (Number(e[k]) || 0), 0);
   const prompt = sum('prompt'), cached = sum('cached'), write = sum('cacheWrite'), completion = sum('completion');
   const uncached = prompt - cached - write;
-  const cost = uncached * PRICE.in + cached * PRICE.read + write * PRICE.write + completion * PRICE.out;
+  const cost = LIVE ? sum('cost') : uncached * PRICE.in + cached * PRICE.read + write * PRICE.write + completion * PRICE.out; // live: what the provider reported
   const coreS = all.find(s => s.id === core);
   const coreChars = JSON.stringify(coreS.messages).length;
   // coherence: the core can answer with the side goal's result at the end
   const lastTool = [...coreS.messages].reverse().find(m => m.role === 'tool' || m.role === 'assistant');
   // the side goal's result (from its wrap-up) is in what the core holds at the end
-  const coherent = /line 399 is the worst case/.test(JSON.stringify(coreS.messages));
+  const finalReply = [...coreS.messages].reverse().find(m => m.role === 'assistant' && m.content)?.content || '';
+  const coherent = LIVE ? /1,?987/.test(finalReply) && /271,?061/.test(finalReply) : /line 399 is the worst case/.test(JSON.stringify(coreS.messages));
   if (orCalls.some(u => /completions|responses/.test(u))) throw new Error('a case study made an OpenRouter model request: ' + orCalls.join(' '));
   await page.context().close();
-  return { strategy, model: MODEL, tail, requests: rows.filter(e => !e.helper).length, coreRequests: rows.filter(e => !e.helper && e.session === 'core').length, prompt, uncached, cached, write, completion, cost, coreChars, coherent, errors: errors.length };
+  const reasoning = sum('reasoning'), out = role => rows.filter(e => !e.helper && e.session === role).map(e => e.completion || 0);
+  const realCost = sum('cost');
+  return { strategy, model: MODEL, tail, live: LIVE, reasoning, outCore: out('core'), outStem: out('stem'), ...(LIVE ? { reportedCost: realCost, finalReply: finalReply.slice(0, 300) } : {}), requests: rows.filter(e => !e.helper).length, coreRequests: rows.filter(e => !e.helper && e.session === 'core').length, prompt, uncached, cached, write, completion, cost, coreChars, coherent, errors: errors.length };
 }
 
 const results = [];
@@ -103,11 +112,11 @@ const baseOf = r => results.find(x => x.strategy === 'strat-serial-1.0' && x.mod
 const pct = (v, b) => b ? `${v <= b ? '−' : '+'}${Math.abs(Math.round(100 * (v - b) / b))}%` : '-';
 const k = n => n >= 1000 ? (n / 1000).toFixed(1) + 'k' : String(n);
 const table = [
-  '| model | core tail | strategy | requests | input (uncached) | cache read | cache write | output | cost | vs serial | core context | coherent |',
+  '| model | core tail | strategy | requests | input (uncached) | cache read | cache write | output (reasoning) | cost | vs serial | core context | coherent |',
   '|---|---|---|---|---|---|---|---|---|---|---|---|',
-  ...results.map(r => `| ${r.model} | ${r.tail} | ${r.strategy} | ${r.requests} | ${k(r.uncached)} | ${k(r.cached)} | ${k(r.write)} | ${k(r.completion)} | $${r.cost.toFixed(5)} | ${r.strategy === 'strat-serial-1.0' ? '-' : pct(r.cost, baseOf(r)?.cost)} | ${k(r.coreChars)} chars | ${r.coherent ? 'yes' : '**no**'} |`),
+  ...results.map(r => `| ${r.model} | ${r.tail} | ${r.strategy} | ${r.requests} | ${k(r.uncached)} | ${k(r.cached)} | ${k(r.write)} | ${k(r.completion)} (${k(r.reasoning)}) | $${r.cost.toFixed(5)} | ${r.strategy === 'strat-serial-1.0' ? '-' : pct(r.cost, baseOf(r)?.cost)} | ${k(r.coreChars)} chars | ${r.coherent ? 'yes' : '**no**'} |`),
 ].join('\n');
-const date = new Date().toISOString().slice(0, 10);
+const date = new Date().toISOString().slice(0, 10) + (LIVE ? '-live' : '');
 fs.mkdirSync(outDir, { recursive: true });
 const rec = { scenario: 'side goal', prices: PRICES, date, url, results };
 fs.writeFileSync(path.join(outDir, `side-goal-${date}.json`), JSON.stringify(rec, null, 1));

@@ -158,6 +158,7 @@ export function report(entry, usage) {
   entry.cached = d.cached_tokens ?? null;
   entry.cacheWrite = d.cache_write_tokens ?? null;
   entry.completion = usage.completion_tokens ?? null;
+  entry.reasoning = usage.completion_tokens_details?.reasoning_tokens ?? usage.reasoning_tokens ?? null; // part of completion
   entry.cost = usage.cost ?? null;
   return entry;
 }
