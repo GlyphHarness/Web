@@ -30,7 +30,7 @@ Three append-only catalogs, one JSON object per line. Ids: 6 lowercase letters, 
 
 ## With docs/concepts/
 `catalog/*.jsonl` is the index of record (one line per term, concept, fault; status; per-model results). `docs/concepts/*.md` is the prose it points to: the why, hypotheses H1.. in full, the programme.
-Concepts C1..C17 of `docs/concepts/CATALOG.md` are records by name; hypothesis ids sit in `claim` or `evidence`. Status map: idea=hypothesis, spec=specified, built=implemented, tested=measured, dropped=not-supported.
+Concepts C1..C17 of `docs/concepts/CATALOG.md` are records by name; hypothesis ids sit in `claim` or `evidence`. Status map: idea=hypothesis, spec=specified, built=implemented, tested=measured, promoted=measured (the promotion itself is only in PROGRAMME.md), dropped=not-supported.
 Names follow docs/concepts; the other name stays in `aka`. Prose is never rewritten from here.
 
 ## Order of work
