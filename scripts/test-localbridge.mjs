@@ -285,7 +285,9 @@ await attempt('launchers: one small entry each; the command line comes from the 
 
   // what the model is told when the host cannot run a command: nothing about how it is reached; the reason is kept for the person
   const found = t => neutralMod ? neutralMod.found(String(t)) : ['(app/neutral.js is missing)'];
-  const shellVia = (cl, name, args = { cmd: 'echo hi' }) => execTool({ function: { name: 'shell', arguments: JSON.stringify(args) } }, { vm: lbMod.hostShell(cl, name), pads: [], by: () => ({}) });
+  // spec correction: under strat-serial-3.0 (a ctx with no wording is a strategy registered before it, whose failure texts are its own)
+  const W3 = (await import('../app/strategies.js')).spec('strat-serial-3.0').wording;
+  const shellVia = (cl, name, args = { cmd: 'echo hi' }) => execTool({ function: { name: 'shell', arguments: JSON.stringify(args) } }, { vm: lbMod.hostShell(cl, name), pads: [], by: () => ({}), wording: W3 });
   for (const [what, cl, name] of [['the bridge is not running', client({ url: 'http://127.0.0.1:9', token: TOKEN }), 't'], ['the token is wrong', client({ url: x.url, token: 'nope' }), 't'], ['the target is not one of the bridge\'s', client({ url: x.url, token: TOKEN }), 'zzz'], ['the launcher fails', client({ url: x.url, token: TOKEN }), 't']]) {
     await attempt(`host shell: when ${what}, the model reads a plain failure with no identifying term`, async () => { const out = await shellVia(cl, name); return [/^Tool error: /.test(out) && found(out).length === 0, out]; });
     await attempt(`host shell: when ${what}, the reason is kept for the person`, async () => { const e = await lbMod.hostShell(cl, name).run('echo hi', 10).then(() => null, e => e); return [!!e && typeof e.detail === 'string' && e.detail.length > 10, String(e?.detail)]; });
@@ -471,7 +473,9 @@ await attempt('config: the tmux option (vmTmux) is true or false in Paste config
   check('neutral: what a tool answers when it is not set up holds no identifying term', answers.length >= 12 && bad.length === 0, bad.join(' | '));
   // local tools against a real bridge, when things go wrong
   const nb = await start({ port: 0, token: TOKEN, http: { app: 'http://127.0.0.1:9' }, dir: { notes } });
-  const good = client({ url: nb.url, token: TOKEN }), viaTool = (name, args, local) => execTool({ function: { name, arguments: JSON.stringify(args) } }, { local, pads: [], by: () => ({}) });
+  // spec correction: the failure texts follow the session's wording, and a ctx with none is the strategies registered before
+  // the neutral wording; this check is about strat-serial-3.0, so it says so (S3.wording)
+  const good = client({ url: nb.url, token: TOKEN }), viaTool = (name, args, local) => execTool({ function: { name, arguments: JSON.stringify(args) } }, { local, pads: [], by: () => ({}), wording: S3.wording });
   const outs = [
     await viaTool('local_http', { service: 'nope', path: '/' }, good), await viaTool('local_http', { service: 'app', path: '/' }, good), await viaTool('local_read', { folder: 'zzz', path: '/x' }, good),
     await viaTool('local_read', { folder: 'notes', path: '/nothere' }, good), await viaTool('local_info', {}, client({ url: nb.url, token: 'nope' })), await viaTool('local_info', {}, client({ url: 'http://127.0.0.1:9', token: TOKEN })),
