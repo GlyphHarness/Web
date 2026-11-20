@@ -312,9 +312,17 @@ await page.click('.modal button');
 const longTitle = 'A very long session title that cannot possibly fit in the sidebar row at all';
 await page.fill('#title', longTitle); await page.dispatchEvent('#title', 'change');
 const rowSel = await page.evaluate(() => `#sessions [data-id="${JSON.parse(localStorage['wh:meta']).active}"] span`);
+// what happens around the hover is recorded, so a failure says why (a scroll elsewhere, no pointerover, not truncated)
+await page.evaluate(sel => {
+  const w = window.__upw = { over: 0, scrolls: [], row: null };
+  document.addEventListener('pointerover', () => w.over++, true);
+  document.addEventListener('scroll', e => w.scrolls.push(e.target === document ? 'document' : (e.target.id ? '#' + e.target.id : e.target.className || e.target.tagName)), true);
+  const el = document.querySelector(sel); w.row = el ? { sw: el.scrollWidth, cw: el.clientWidth } : null;
+}, rowSel);
 await page.hover(rowSel);
 await page.waitForSelector('#uptext:not([hidden])', { timeout: 3000 }).catch(() => {});
-check('uptext: hovering a truncated label shows its full value above it', await page.evaluate(t => { const u = document.querySelector('#uptext'); return !u.hidden && u.textContent === t; }, longTitle));
+const upw = await page.evaluate(() => ({ ...window.__upw, scrolls: window.__upw.scrolls.slice(0, 12), hidden: document.querySelector('#uptext').hidden, text: document.querySelector('#uptext').textContent.slice(0, 40), modal: !!document.querySelector('.modal') }));
+check('uptext: hovering a truncated label shows its full value above it', await page.evaluate(t => { const u = document.querySelector('#uptext'); return !u.hidden && u.textContent === t; }, longTitle), upw);
 await page.mouse.move(700, 450);
 await page.waitForTimeout(100);
 check('uptext: it goes away on leave', await page.evaluate(() => document.querySelector('#uptext').hidden));
