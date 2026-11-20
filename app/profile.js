@@ -71,6 +71,25 @@ function slices(reqs) {
   return Object.values(g);
 }
 
+// A shell call that writes a file through a script, from the kept command line alone. Quoted text is
+// stripped first: a `>` inside a commit message is not a redirect. Only the first line is kept, so a
+// write on a later line is invisible. Fields kept as {length, hash} (a long command) carry no command.
+function scriptedWrite(cmd) {
+  const t = String(cmd).replace(/(["'])(?:\\.|(?!\1)[^\\])*\1?/g, ' '); // blank quoted runs, keeping separators
+  // python/node with an inline program (-c, -e, -p), on stdin (-), or from a here-document (<<)
+  const run = /\b(?:python3?|node)\b(?:\s+(?:--[\w-]+(?:=\S+)?|[\w-]+=\S+))*/i;
+  const inline = new RegExp(`${run.source}\\s(?:-c|-e|-p)(?=\\s|$)`).test(t);
+  const stdin = new RegExp(`${run.source}\\s-(?=\\s|$)`).test(t);
+  const heredoc = new RegExp(`${run.source}[^|;&\\n]*<<`).test(t);
+  // sed with an in-place edit (a short option cluster such as -ni counts too)
+  const sed = /\bsed\b(?:[^|;&\n]*\s)?-(?:[a-z]*i[a-z]*|-\s*in-place)\b/i.test(t);
+  // a redirect into a file, or a pipe into tee with a file name. Quoted text was blanked above;
+  // 2>/>& are excluded, as is /dev/null.
+  const redirect = /(?<![\d>&])>>?(?!&)\s*(?!\/dev\/null\b)[^\s|;&]+/.test(t)
+    || /\|\s*tee\b(?:\s+-[a-zA-Z]+)*\s+(?!\/dev\/null\b|-[a-zA-Z])[^\s|;&]+/.test(t);
+  return inline || stdin || heredoc || sed || redirect;
+}
+
 export function profile(s) {
   const msgs = s.messages || [], led = s.ledger || [];
   const reqs = led.map((e, i) => ({
@@ -122,6 +141,7 @@ export function profile(s) {
   // a commit made through the shell: the first shell call whose kept command line runs git commit (only the first line of a command is kept)
   const COMMIT = /\bgit(?:\s+(?:-C\s+\S+|-c\s+\S+|--[\w-]+(?:=\S+)?))*\s+commit\b/;
   const firstCommit = calls.findIndex(c => c.name === 'shell' && typeof c.args?.cmd === 'string' && COMMIT.test(c.args.cmd));
+  const scriptedWrites = calls.reduce((n, c) => n + (c.name === 'shell' && typeof c.args?.cmd === 'string' && scriptedWrite(c.args.cmd) ? 1 : 0), 0);
   const byClass = {}; for (const c of calls) byClass[c.cls] = (byClass[c.cls] || 0) + 1;
   const byTool = {}; for (const c of calls) byTool[c.name] = (byTool[c.name] || 0) + 1;
 
@@ -140,7 +160,7 @@ export function profile(s) {
     cost: { total: sum(reqs, 'cost'), main: sum(main, 'cost'), helper: sum(helper, 'cost'), perRequestMedian: med(main.map(r => r.cost)), helperMax: helper.length ? Math.max(...helper.map(r => r.cost)) : 0 },
     cache: { overallPct: sum(main, 'prompt') ? Math.round(100 * sum(main, 'cached') / sum(main, 'prompt')) : null, firstHitAtRequest: firstHit < 0 ? null : firstHit, curve: cacheCurve },
     growth: { promptCurve, outCurve: main.map(r => r.out), reasoningShare: sum(main, 'out') ? +(sum(main, 'reasoning') / sum(main, 'out')).toFixed(2) : 0 },
-    calls: { total: calls.length, byTool, byResultClass: byClass, repeats, repeatRuns, callsBeforeFirstWrite: firstWrite < 0 ? null : firstWrite, callsBeforeFirstCommit: firstCommit < 0 ? null : firstCommit, firstWriteTool: firstWrite < 0 ? null : calls[firstWrite].name },
+    calls: { total: calls.length, byTool, byResultClass: byClass, repeats, repeatRuns, callsBeforeFirstWrite: firstWrite < 0 ? null : firstWrite, callsBeforeFirstCommit: firstCommit < 0 ? null : firstCommit, firstWriteTool: firstWrite < 0 ? null : calls[firstWrite].name, scriptedWrites },
     perTurn: turns.map((t, n) => ({ n, userChars: t.userChars, shortFollowUp: n > 0 && t.userChars < SHORT, assistantMsgs: t.assistantMsgs, calls: t.calls.length, tools: t.calls.map(c => c.name + (c.cls === 'ok' ? '' : ':' + c.cls)).join(' '), stop: t.stop, after: after(n), args: t.calls.map(c => ({ name: c.name, args: c.args })) })), // args: one argument summary per call, in call order
     followUps, // turns after the first: after a round-limit stop, a short one after a failed stop, steering (after any other recorded stop), or with no stop recorded
     flags: (s.flags || []).reduce((o, f) => (o[f.tool + ':' + String(f.kind || f.why || '').slice(0, 30)] = (o[f.tool + ':' + String(f.kind || f.why || '').slice(0, 30)] || 0) + 1, o), {}),
@@ -164,7 +184,7 @@ export function across(profiles) {
 }
 // per-session behaviour counts (not tied to one model slice)
 export function behaviour(profiles) {
-  return profiles.map(p => ({ id: p.id, title: p.title, models: p.models, repeats: p.calls.repeats, callsBeforeFirstWrite: p.calls.callsBeforeFirstWrite, callsBeforeFirstCommit: p.calls.callsBeforeFirstCommit ?? null, failedShare: p.calls.total ? +((p.calls.total - (p.calls.byResultClass.ok || 0)) / p.calls.total).toFixed(2) : null, shortFollowUps: p.perTurn.filter(t => t.shortFollowUp).length, limitContinuations: p.followUps?.limitContinuations ?? null, failedContinuations: p.followUps?.failedContinuations ?? null, steeringFollowUps: p.followUps?.steering ?? null, helperShareOfCost: p.cost.total ? +(p.cost.helper / p.cost.total).toFixed(2) : null }));
+  return profiles.map(p => ({ id: p.id, title: p.title, models: p.models, repeats: p.calls.repeats, callsBeforeFirstWrite: p.calls.callsBeforeFirstWrite, callsBeforeFirstCommit: p.calls.callsBeforeFirstCommit ?? null, scriptedWrites: p.calls.scriptedWrites ?? 0, failedShare: p.calls.total ? +((p.calls.total - (p.calls.byResultClass.ok || 0)) / p.calls.total).toFixed(2) : null, shortFollowUps: p.perTurn.filter(t => t.shortFollowUp).length, limitContinuations: p.followUps?.limitContinuations ?? null, failedContinuations: p.followUps?.failedContinuations ?? null, steeringFollowUps: p.followUps?.steering ?? null, helperShareOfCost: p.cost.total ? +(p.cost.helper / p.cost.total).toFixed(2) : null }));
 }
 
 const k = n => n == null ? '-' : n >= 1000 ? (n / 1000).toFixed(1) + 'k' : String(Math.round(n));
@@ -178,7 +198,7 @@ export function render(p) {
     `  out per request    ${p.growth.outCurve.map(k).join(' ')}`,
     `  cache % per request ${p.cache.curve.map(x => x ?? '-').join(' ')}`,
     `  calls ${p.calls.total}: ${Object.entries(p.calls.byTool).map(([a, b]) => a + '×' + b).join(' ')} | results ${Object.entries(p.calls.byResultClass).map(([a, b]) => a + '×' + b).join(' ')}`,
-    `  repeated identical calls ${p.calls.repeats} in ${p.calls.repeatRuns} runs · calls before first write ${p.calls.callsBeforeFirstWrite ?? 'no write'}${p.calls.firstWriteTool ? ' (' + p.calls.firstWriteTool + ')' : ''} · calls before first commit ${p.calls.callsBeforeFirstCommit ?? 'no commit'}`,
+    `  repeated identical calls ${p.calls.repeats} in ${p.calls.repeatRuns} runs · calls before first write ${p.calls.callsBeforeFirstWrite ?? 'no write'}${p.calls.firstWriteTool ? ' (' + p.calls.firstWriteTool + ')' : ''} · calls before first commit ${p.calls.callsBeforeFirstCommit ?? 'no commit'} · scripted file writes ${p.calls.scriptedWrites ?? 0}`,
     ...p.perTurn.map(t => `  turn ${t.n}: user ${t.userChars}ch${t.shortFollowUp ? ' (short follow-up)' : ''}, ${t.assistantMsgs} assistant msgs, ${t.calls} calls ${t.tools ? '[' + t.tools + ']' : ''}${t.stop ? ' · stop ' + t.stop : ''}${t.after === 'limit' ? ' · continues a round-limit stop' : ''}${t.after === 'failed' && t.shortFollowUp ? ' · continues a failed stop' : ''}`),
     Object.keys(p.flags).length ? '  flags ' + JSON.stringify(p.flags) : '',
   ].filter(Boolean).join('\n');
@@ -187,7 +207,7 @@ export function renderAcross(rows) {
   return rows.map(r => `${r.group}\n  ${r.sessions} sessions · ${r.requests} req · ${$(r.costTotal)} · cost/req median ${$(r.costMedian)} p95 ${$(r.costP95)} max ${$(r.costMax)} · cache ${r.cachePct ?? '-'}% (first hit at req ${r.firstHitAtRequest ?? '-'}) · out/req ${k(r.outPerRequest)} · reasoning ${Math.round((r.reasoningShare || 0) * 100)}%`).join('\n');
 }
 export function renderBehaviour(rows) {
-  return rows.map(r => `${r.id} ${String(r.title).slice(0, 30).padEnd(30)} repeats ${r.repeats} · calls before first write ${r.callsBeforeFirstWrite ?? '-'} · calls before first commit ${r.callsBeforeFirstCommit ?? '-'} · failed share ${r.failedShare ?? '-'} · short follow-ups ${r.shortFollowUps}${r.limitContinuations != null ? ` · after a round-limit stop ${r.limitContinuations} · after a failed turn ${r.failedContinuations ?? '-'} · steering ${r.steeringFollowUps}` : ''} · helper share of cost ${r.helperShareOfCost ?? '-'}`).join('\n');
+  return rows.map(r => `${r.id} ${String(r.title).slice(0, 30).padEnd(30)} repeats ${r.repeats} · calls before first write ${r.callsBeforeFirstWrite ?? '-'} · calls before first commit ${r.callsBeforeFirstCommit ?? '-'} · scripted file writes ${r.scriptedWrites ?? 0} · failed share ${r.failedShare ?? '-'} · short follow-ups ${r.shortFollowUps}${r.limitContinuations != null ? ` · after a round-limit stop ${r.limitContinuations} · after a failed turn ${r.failedContinuations ?? '-'} · steering ${r.steeringFollowUps}` : ''} · helper share of cost ${r.helperShareOfCost ?? '-'}`).join('\n');
 }
 
 // the one place content appears: a message or a request, by index, truncated

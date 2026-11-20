@@ -192,6 +192,7 @@ const real = [
   { id: 'repeats-flags', title: 'Repeats and flags', size: 'm', render: s => needs(s, p => kv([
     ['identical calls repeated', p.calls.repeats, p.calls.repeats ? 'warn' : ''], ['repeat runs', p.calls.repeatRuns],
     ['calls before first write', p.calls.callsBeforeFirstWrite == null ? 'no write' : `${p.calls.callsBeforeFirstWrite} (${p.calls.firstWriteTool})`],
+    ['scripted file writes', p.calls.scriptedWrites ?? 0],
     ['failed calls', p.calls.total - (p.calls.byResultClass.ok || 0), p.calls.total - (p.calls.byResultClass.ok || 0) ? 'warn' : ''],
     ['short follow-ups', p.perTurn.filter(t => t.shortFollowUp).length], ['turns', p.turns],
     ...Object.entries(p.flags).map(([k, n]) => ['flag ' + k, n, 'warn'])])) },
