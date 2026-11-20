@@ -228,9 +228,17 @@ const CMDS = {
     const id = flagOf(a, 'i') || readState().current, p = await tab(id);
     const st = await p.evaluate(() => ({
       held: [...document.querySelectorAll('.msg[data-role=held]:not([data-done])')].map(c => c.querySelector('pre')?.textContent || ''),
-      approve: [...document.querySelectorAll('.msg[data-role=approve]:not([data-done])')].map(c => ({ what: c.querySelector('pre')?.textContent || '', files: [...c.querySelectorAll('details')].map(d => ({ path: d.querySelector('summary')?.textContent || '', chars: (d.querySelector('pre')?.textContent || '').length })) })),
+      // an approval card: what it asks, then each file's change as the card shows it (changed lines with their line numbers)
+      approve: [...document.querySelectorAll('.msg[data-role=approve]:not([data-done])')].map(c => ({
+        what: c.querySelector('pre')?.textContent || '',
+        changes: [...c.querySelectorAll('[data-change]')].map(d => ({ path: d.dataset.path, kind: d.dataset.change, added: Number(d.dataset.added), removed: Number(d.dataset.removed), cut: d.querySelector('[data-cut-rows]')?.dataset.cutRows || null,
+          rows: [...d.querySelectorAll('[data-op]')].map(r => ({ op: r.dataset.op, old: r.dataset.old || null, new: r.dataset.new || null, text: r.querySelector('[data-code]')?.textContent ?? '' })) })),
+        files: [...c.querySelectorAll('details:not([data-change])')].map(d => ({ path: d.querySelector('summary')?.textContent || '', chars: (d.querySelector('pre')?.textContent || '').length })),
+      })),
     }));
-    return { text: [...st.held.map(h => 'HELD ' + h), ...st.approve.map(c => 'APPROVE? ' + c.what + (c.files.length ? '\nshown: ' + c.files.map(f => `${f.path} (${f.chars} chars)`).join(', ') : ''))].join('\n') || 'nothing is held', data: st, log: { id, held: st.held.length, approve: st.approve.length } };
+    const sign = { add: '+', del: '-', ctx: ' ' }, row = r => `${sign[r.op]}${String(r.old ?? '').padStart(6)}${String(r.new ?? '').padStart(6)}  ${r.text}`;
+    const change = f => [`--- ${f.kind} ${f.path}  +${f.added} -${f.removed}`, ...f.rows.map(row), ...(f.cut ? [`    (${f.cut} more lines of this change are not on the card)`] : [])].join('\n');
+    return { text: [...st.held.map(h => 'HELD ' + h), ...st.approve.map(c => ['APPROVE? ' + c.what, ...c.changes.map(change), c.files.length ? 'whole-file previews: ' + c.files.map(f => `${f.path} (${f.chars} chars shown)`).join(', ') : ''].filter(Boolean).join('\n'))].join('\n') || 'nothing is held', data: st, log: { id, held: st.held.length, approve: st.approve.length } };
   },
   // The session's record as stored (messages with their text, ledger, flags): for validators and write-ups. Keys are masked.
   async dump(a) {

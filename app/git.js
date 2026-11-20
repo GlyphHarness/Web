@@ -124,15 +124,21 @@ export function client(env) {
     if (Array.isArray(ch.edits)) {
       let text = (await fileAt(repo, ch.path, branch)).text;
       if (text == null) throw new Error(`${ch.path} is not a file`);
+      const old = text;
       for (const [i, e] of ch.edits.entries()) {
         const n = e.find ? text.split(e.find).length - 1 : 0;
         if (n !== 1) throw new Error(`${ch.path} edit ${i + 1}: find occurs ${n} times (must be once)`);
         text = text.replace(e.find, () => e.replace ?? '');
       }
-      return { path: ch.path, text, edited: ch.edits.length };
+      return { path: ch.path, text, edited: ch.edits.length, old };
     }
     throw new Error(`${ch.path}: give content, from, edits or delete`);
   }
+  // The text a write replaces, for the approval card: null when there is no such file yet, undefined when it cannot be read as text.
+  const before = async (repo, ref, path) => {
+    try { const f = await fileAt(repo, path, ref); return f.dir ? undefined : f.text; }
+    catch (e) { return e.status === 404 ? null : undefined; }
+  };
 
   async function commit(a) {
     const repo = repoOf(a);
@@ -142,10 +148,11 @@ export function client(env) {
     const readAt = head ? a.branch : base;
     const files = [];
     for (const ch of a.changes) files.push(await resolve(repo, readAt, ch));
+    for (const f of files) if (!f.delete && !f.b64 && !f.edited) f.old = await before(repo, readAt, f.path);
     const summary = {
       what: 'commit', repo, branch: a.branch, newBranchFrom: head ? null : base, message: a.message,
       files: files.map(f => f.delete ? `delete ${f.path}` : f.b64 ? `write ${f.path} (binary, ${f.binary} bytes)` : `${f.edited ? 'edit' : 'write'} ${f.path} (${f.text.length} chars${f.edited ? ', ' + f.edited + ' edits' : ''})`),
-      preview: files.filter(f => !f.delete && !f.b64).map(f => ({ path: f.path, text: f.text })),
+      preview: files.filter(f => !f.delete && !f.b64).map(f => ({ path: f.path, text: f.text, old: f.old, edited: f.edited || 0 })),
     };
     if (!(await env.confirm(summary))) return 'Not committed: the user declined.';
     if (!head) {
