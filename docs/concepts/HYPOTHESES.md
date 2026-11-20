@@ -193,3 +193,34 @@ What it taught
 9. From the code, not exercised here: the approval card previews the first 20,000 chars of each file, and `app/main.js` is about 250,000, so an edit at line 2568 would not be on the card. The held tool-call card carries the find and replace strings.
 
 Verdict: `retest`. H1 is untested: no green run and no valid blue. The rerun needs a one-file defect that reproduces, from work still open.
+
+### Live stepped session 1 · 2026-11-20 · a harness change made through the harness, shell on a host container
+
+Not a silo pair: one session, no arms. It is recorded here because it is the first real model run of the host shell (`README.md`, Host shell) and the first record that lets F1 be retested on spec-first work.
+
+Setup. Model `tencent/hy4-flash`, `strat-serial-2.0`, `pace both` (every model request and every tool call held, read by the operator and released one at a time), watcher and helper off. The page ran in the installed Chrome with a visible window on the Windows machine, served from a checkout at `160bd59`. `shellOn: host:box`: the session's shell ran in a Podman container (user `dev`, the repository at `/work/Web`, a clone at `160bd59`). The task was one message (1,590 chars): make `app/validators.js` use `perTurn[n].args`, checks first in a `Spec:` commit, then the implementation, `node scripts/ci.mjs validators profile` green, no push.
+
+| Outcome | Turns / requests / tool calls | Operator messages | Result classes | Tokens | Cost (ledger) |
+| --- | --- | --- | --- | --- | --- |
+| completed: three commits in the container, `validators ok (32/32), profile ok (23/23)`; the same three apply unchanged on `dev` at `5e791be` (`b7a5c1e`, `f29dacc`, `8c8bb8d`; 2 files, +21 -3) with the same result | 18 / 125 / 145 (119 `shell`, 21 `output_read`, 5 `run_js`) | 1 steering (739 chars); 14 `continue` after a round-limit stop; 2 `continue` after a turn that stopped `failed` (HTTP 502 from the provider); 173 held steps released, 1 skipped | ok 138, error 4, find-absent 2, refused 1 | 4,716,396 prompt, 4,644,864 cached (98%), 18,442 out (3,401 reasoning); prompt per request grew from 3.3k to 55.4k | $0.01206; per request median $0.00009, max $0.00026 |
+
+Profile (metadata only; command lines kept to their first line, content as size and hash): `docs/concepts/profile-live1-2026-11-20.json`.
+
+Order of work, read from the command lines in the profile: the checks were written and run red, the implementation was set aside (`git checkout -- app/validators.js`), the suite was run again, the checks were committed alone as `Spec:`, then the implementation was restored and committed. The second `Spec:` commit (the one the steering message allowed) was amended once before the implementation commit.
+
+What the model was told about where it ran. The first request's body held none of these terms: WebHarness, browser, page, tab, bridge, Alpine, wh-install, harness, in-page (checked in the saved trace; the only matches were in trace metadata, not in what was sent). It was offered 17 tools.
+
+F1 retest on this record (`node scripts/validators.mjs .claude/skills/spec-first/SKILL.md --records docs/concepts/profile-live1-2026-11-20.json`, with the reader this session wrote): 11 of 11 checkable validators resolved from the profile alone (0 of 66 on the earlier profiles). Pass 1 (`ci-record.json | scripts/ci.mjs`), fail 10, all `absent`. Four of the ten are the `Spec:` message shapes: the session made three `Spec:` commits, but each message sits inside `git commit -m '...'` on a shell command line and the pattern is anchored at the start of an argument, so it is not seen. The other six name paths or commands the task did not call for (the skill says `node scripts/ci.mjs main git`; the task said `validators profile`). There is still no flow attribution, so a fail does not say the step applied.
+
+What it taught
+
+1. A provider 5xx ends the turn. Two requests of 125 came back `HTTP 502: Provider returned error`; nothing retried, and `wh say` / `wh step` printed nothing that named the failure. The operator found it by reading the last message.
+2. `run_js` does not run where the shell runs. 4 of its 5 calls were errors: the model reached for the file system from it. With the shell on a host, a second tool that executes code somewhere else is a split view of the machine, and its errors are the nearest thing in the session to a tell.
+3. There is no edit tool for files on the host. The model changed files by writing patch scripts (10 `python3` and 7 `node -e` command lines, 13 with a here-document) and re-read regions with `sed -n` (44 command lines) to copy exact text.
+4. A shell result over about 1,500 chars comes back as a head and a tail, so reading a file region took a `shell` call and then `output_read` calls (21 in all).
+5. The 8-round stop cut the work 14 times; 14 of the 17 follow-up messages were `continue` after it. Each cost a request and an operator action and carried no information.
+6. The profile misreads this kind of session in two places: `calls before first write` says no write (a write made through `shell` is not seen), and `steering 3` counts the two `continue` messages after failed turns as steering. The real steering count is 1.
+7. The one steering message fixed the operator's brief, not the model: the brief said "do not edit existing checks", and one existing check built its record with `profile(good)`, which the task itself changes. The model stopped and reported the contradiction instead of breaking the rule. Run a brief's rules against the repository before sending it.
+8. Weight: 4.7M prompt tokens (98% cached) for a 21-line change. The serial strategy re-sent a prompt that grew to 55k tokens on each of 125 requests; the cost stayed at about a cent only because nearly all of it was read from cache.
+
+Verdict for F1: `retest`, narrowed. A profile with argument summaries resolves every checkable validator; what is left is evidence inside a command line (a commit message in `git commit -m`) and flow attribution.

@@ -1,0 +1,3936 @@
+{
+ "at": "2026-11-20T15:15:12.414Z",
+ "sessions": [
+  {
+   "id": "smwp2tg8jlagg",
+   "title": "validators read profile args",
+   "rows": [
+    {
+     "i": 0,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 3304,
+     "cached": 0,
+     "write": 0,
+     "out": 115,
+     "reasoning": 0,
+     "cost": 0.0001317975,
+     "cachePct": 0
+    },
+    {
+     "i": 1,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 4596,
+     "cached": 3072,
+     "write": 0,
+     "out": 205,
+     "reasoning": 29,
+     "cost": 0.0000867505,
+     "cachePct": 67
+    },
+    {
+     "i": 2,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 6808,
+     "cached": 4352,
+     "write": 0,
+     "out": 120,
+     "reasoning": 14,
+     "cost": 0.000109348,
+     "cachePct": 64
+    },
+    {
+     "i": 3,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 0,
+     "cached": 0,
+     "write": 0,
+     "out": 0,
+     "reasoning": 0,
+     "cost": 0,
+     "cachePct": null
+    },
+    {
+     "i": 4,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 11603,
+     "cached": 6656,
+     "write": 0,
+     "out": 232,
+     "reasoning": 75,
+     "cost": 0.000215725,
+     "cachePct": 57
+    },
+    {
+     "i": 5,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 0,
+     "cached": 0,
+     "write": 0,
+     "out": 0,
+     "reasoning": 0,
+     "cost": 0,
+     "cachePct": null
+    },
+    {
+     "i": 6,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 13895,
+     "cached": 11520,
+     "write": 0,
+     "out": 107,
+     "reasoning": 0,
+     "cost": 0.0001154385,
+     "cachePct": 83
+    },
+    {
+     "i": 7,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 17513,
+     "cached": 13824,
+     "write": 0,
+     "out": 165,
+     "reasoning": 15,
+     "cost": 0.0001730335,
+     "cachePct": 79
+    },
+    {
+     "i": 8,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 18505,
+     "cached": 17408,
+     "write": 0,
+     "out": 202,
+     "reasoning": 43,
+     "cost": 0.000092888,
+     "cachePct": 94
+    },
+    {
+     "i": 9,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 19812,
+     "cached": 18432,
+     "write": 0,
+     "out": 918,
+     "reasoning": 600,
+     "cost": 0.000204927,
+     "cachePct": 93
+    },
+    {
+     "i": 10,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 20622,
+     "cached": 19712,
+     "write": 0,
+     "out": 367,
+     "reasoning": 307,
+     "cost": 0.0001129815,
+     "cachePct": 96
+    },
+    {
+     "i": 11,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 21099,
+     "cached": 20480,
+     "write": 0,
+     "out": 53,
+     "reasoning": 0,
+     "cost": 0.0000598315,
+     "cachePct": 97
+    },
+    {
+     "i": 12,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 21568,
+     "cached": 20992,
+     "write": 0,
+     "out": 50,
+     "reasoning": 0,
+     "cost": 0.000058673,
+     "cachePct": 97
+    },
+    {
+     "i": 13,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 22133,
+     "cached": 21504,
+     "write": 0,
+     "out": 37,
+     "reasoning": 0,
+     "cost": 0.0000594695,
+     "cachePct": 97
+    },
+    {
+     "i": 14,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 22589,
+     "cached": 22016,
+     "write": 0,
+     "out": 31,
+     "reasoning": 0,
+     "cost": 0.0000574345,
+     "cachePct": 97
+    },
+    {
+     "i": 15,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 25771,
+     "cached": 22528,
+     "write": 0,
+     "out": 815,
+     "reasoning": 0,
+     "cost": 0.0002618045,
+     "cachePct": 87
+    },
+    {
+     "i": 16,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 25849,
+     "cached": 25600,
+     "write": 0,
+     "out": 499,
+     "reasoning": 0,
+     "cost": 0.0001172245,
+     "cachePct": 99
+    },
+    {
+     "i": 17,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 26248,
+     "cached": 25600,
+     "write": 0,
+     "out": 30,
+     "reasoning": 0,
+     "cost": 0.000065295,
+     "cachePct": 98
+    },
+    {
+     "i": 18,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 26856,
+     "cached": 26112,
+     "write": 0,
+     "out": 1060,
+     "reasoning": 1025,
+     "cost": 0.000214138,
+     "cachePct": 97
+    },
+    {
+     "i": 19,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 26917,
+     "cached": 26624,
+     "write": 0,
+     "out": 264,
+     "reasoning": 0,
+     "cost": 0.000087283,
+     "cachePct": 99
+    },
+    {
+     "i": 20,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 27197,
+     "cached": 26880,
+     "write": 0,
+     "out": 648,
+     "reasoning": 0,
+     "cost": 0.000142459,
+     "cachePct": 99
+    },
+    {
+     "i": 21,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 27547,
+     "cached": 27136,
+     "write": 0,
+     "out": 29,
+     "reasoning": 0,
+     "cost": 0.0000591635,
+     "cachePct": 99
+    },
+    {
+     "i": 22,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 27665,
+     "cached": 27392,
+     "write": 0,
+     "out": 54,
+     "reasoning": 0,
+     "cost": 0.00005823,
+     "cachePct": 99
+    },
+    {
+     "i": 23,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 27745,
+     "cached": 27648,
+     "write": 0,
+     "out": 406,
+     "reasoning": 0,
+     "cost": 0.00010191,
+     "cachePct": 100
+    },
+    {
+     "i": 24,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 27801,
+     "cached": 27648,
+     "write": 0,
+     "out": 30,
+     "reasoning": 0,
+     "cost": 0.000051042,
+     "cachePct": 99
+    },
+    {
+     "i": 25,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 27857,
+     "cached": 27648,
+     "write": 0,
+     "out": 304,
+     "reasoning": 0,
+     "cost": 0.000091499,
+     "cachePct": 99
+    },
+    {
+     "i": 26,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 28057,
+     "cached": 27648,
+     "write": 0,
+     "out": 688,
+     "reasoning": 0,
+     "cost": 0.000152451,
+     "cachePct": 99
+    },
+    {
+     "i": 27,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 28225,
+     "cached": 27904,
+     "write": 0,
+     "out": 59,
+     "reasoning": 0,
+     "cost": 0.0000613805,
+     "cachePct": 99
+    },
+    {
+     "i": 28,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 28685,
+     "cached": 28160,
+     "write": 0,
+     "out": 31,
+     "reasoning": 0,
+     "cost": 0.0000649705,
+     "cachePct": 98
+    },
+    {
+     "i": 29,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 28739,
+     "cached": 28672,
+     "write": 0,
+     "out": 50,
+     "reasoning": 0,
+     "cost": 0.000052378,
+     "cachePct": 100
+    },
+    {
+     "i": 30,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 29176,
+     "cached": 28672,
+     "write": 0,
+     "out": 30,
+     "reasoning": 0,
+     "cost": 0.000064863,
+     "cachePct": 98
+    },
+    {
+     "i": 31,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 29507,
+     "cached": 28928,
+     "write": 0,
+     "out": 288,
+     "reasoning": 230,
+     "cost": 0.000104121,
+     "cachePct": 98
+    },
+    {
+     "i": 32,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 29771,
+     "cached": 29440,
+     "write": 0,
+     "out": 29,
+     "reasoning": 0,
+     "cost": 0.0000598195,
+     "cachePct": 99
+    },
+    {
+     "i": 33,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 30235,
+     "cached": 29696,
+     "write": 0,
+     "out": 57,
+     "reasoning": 0,
+     "cost": 0.0000714175,
+     "cachePct": 98
+    },
+    {
+     "i": 34,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 30367,
+     "cached": 30208,
+     "write": 0,
+     "out": 61,
+     "reasoning": 0,
+     "cost": 0.0000594475,
+     "cachePct": 99
+    },
+    {
+     "i": 35,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 30854,
+     "cached": 30208,
+     "write": 0,
+     "out": 29,
+     "reasoning": 0,
+     "cost": 0.0000719965,
+     "cachePct": 98
+    },
+    {
+     "i": 36,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 31180,
+     "cached": 30720,
+     "write": 0,
+     "out": 29,
+     "reasoning": 0,
+     "cost": 0.0000662545,
+     "cachePct": 99
+    },
+    {
+     "i": 37,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 31235,
+     "cached": 30976,
+     "write": 0,
+     "out": 45,
+     "reasoning": 0,
+     "cost": 0.0000618515,
+     "cachePct": 99
+    },
+    {
+     "i": 38,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 31711,
+     "cached": 31232,
+     "write": 0,
+     "out": 34,
+     "reasoning": 0,
+     "cost": 0.00006839,
+     "cachePct": 98
+    },
+    {
+     "i": 39,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 32027,
+     "cached": 31488,
+     "write": 0,
+     "out": 29,
+     "reasoning": 0,
+     "cost": 0.0000701715,
+     "cachePct": 98
+    },
+    {
+     "i": 40,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 32194,
+     "cached": 32000,
+     "write": 0,
+     "out": 30,
+     "reasoning": 0,
+     "cost": 0.000059005,
+     "cachePct": 99
+    },
+    {
+     "i": 41,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 32250,
+     "cached": 32000,
+     "write": 0,
+     "out": 541,
+     "reasoning": 0,
+     "cost": 0.0001327605,
+     "cachePct": 99
+    },
+    {
+     "i": 42,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 32719,
+     "cached": 32000,
+     "write": 0,
+     "out": 30,
+     "reasoning": 0,
+     "cost": 0.00007738,
+     "cachePct": 98
+    },
+    {
+     "i": 43,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 33254,
+     "cached": 32512,
+     "write": 0,
+     "out": 35,
+     "reasoning": 0,
+     "cost": 0.0000796555,
+     "cachePct": 98
+    },
+    {
+     "i": 44,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 33591,
+     "cached": 33024,
+     "write": 0,
+     "out": 41,
+     "reasoning": 0,
+     "cost": 0.0000751415,
+     "cachePct": 98
+    },
+    {
+     "i": 45,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 33773,
+     "cached": 33536,
+     "write": 0,
+     "out": 36,
+     "reasoning": 0,
+     "cost": 0.000063657,
+     "cachePct": 99
+    },
+    {
+     "i": 46,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 34142,
+     "cached": 33536,
+     "write": 0,
+     "out": 31,
+     "reasoning": 0,
+     "cost": 0.0000758695,
+     "cachePct": 98
+    },
+    {
+     "i": 47,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 34261,
+     "cached": 34048,
+     "write": 0,
+     "out": 41,
+     "reasoning": 0,
+     "cost": 0.0000642875,
+     "cachePct": 99
+    },
+    {
+     "i": 48,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 34534,
+     "cached": 34048,
+     "write": 0,
+     "out": 39,
+     "reasoning": 0,
+     "cost": 0.0000735615,
+     "cachePct": 99
+    },
+    {
+     "i": 49,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 34999,
+     "cached": 34304,
+     "write": 0,
+     "out": 187,
+     "reasoning": 0,
+     "cost": 0.0001020545,
+     "cachePct": 98
+    },
+    {
+     "i": 50,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 35290,
+     "cached": 34816,
+     "write": 0,
+     "out": 39,
+     "reasoning": 0,
+     "cost": 0.0000742935,
+     "cachePct": 99
+    },
+    {
+     "i": 51,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 35510,
+     "cached": 35072,
+     "write": 0,
+     "out": 38,
+     "reasoning": 0,
+     "cost": 0.000073277,
+     "cachePct": 99
+    },
+    {
+     "i": 52,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 35781,
+     "cached": 35328,
+     "write": 0,
+     "out": 125,
+     "reasoning": 0,
+     "cost": 0.0000864095,
+     "cachePct": 99
+    },
+    {
+     "i": 53,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 36034,
+     "cached": 35584,
+     "write": 0,
+     "out": 42,
+     "reasoning": 0,
+     "cost": 0.000075027,
+     "cachePct": 99
+    },
+    {
+     "i": 54,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 36252,
+     "cached": 35840,
+     "write": 0,
+     "out": 735,
+     "reasoning": 0,
+     "cost": 0.0001714475,
+     "cachePct": 99
+    },
+    {
+     "i": 55,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 36722,
+     "cached": 36096,
+     "write": 0,
+     "out": 28,
+     "reasoning": 0,
+     "cost": 0.000079988,
+     "cachePct": 98
+    },
+    {
+     "i": 56,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 37328,
+     "cached": 36608,
+     "write": 0,
+     "out": 434,
+     "reasoning": 0,
+     "cost": 0.000141089,
+     "cachePct": 98
+    },
+    {
+     "i": 57,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 37411,
+     "cached": 37120,
+     "write": 0,
+     "out": 29,
+     "reasoning": 0,
+     "cost": 0.0000699395,
+     "cachePct": 99
+    },
+    {
+     "i": 58,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 37459,
+     "cached": 37376,
+     "write": 0,
+     "out": 35,
+     "reasoning": 0,
+     "cost": 0.0000638865,
+     "cachePct": 100
+    },
+    {
+     "i": 59,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 37864,
+     "cached": 37376,
+     "write": 0,
+     "out": 30,
+     "reasoning": 0,
+     "cost": 0.000077359,
+     "cachePct": 99
+    },
+    {
+     "i": 60,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 38086,
+     "cached": 37632,
+     "write": 0,
+     "out": 35,
+     "reasoning": 0,
+     "cost": 0.0000772555,
+     "cachePct": 99
+    },
+    {
+     "i": 61,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 38355,
+     "cached": 37888,
+     "write": 0,
+     "out": 29,
+     "reasoning": 0,
+     "cost": 0.0000772515,
+     "cachePct": 99
+    },
+    {
+     "i": 62,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 38414,
+     "cached": 38144,
+     "write": 0,
+     "out": 37,
+     "reasoning": 0,
+     "cost": 0.0000718645,
+     "cachePct": 99
+    },
+    {
+     "i": 63,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 38800,
+     "cached": 38400,
+     "write": 0,
+     "out": 635,
+     "reasoning": 0,
+     "cost": 0.0001608175,
+     "cachePct": 99
+    },
+    {
+     "i": 64,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 39214,
+     "cached": 38656,
+     "write": 0,
+     "out": 29,
+     "reasoning": 0,
+     "cost": 0.0000815885,
+     "cachePct": 99
+    },
+    {
+     "i": 65,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 39727,
+     "cached": 39168,
+     "write": 0,
+     "out": 69,
+     "reasoning": 0,
+     "cost": 0.0000880115,
+     "cachePct": 99
+    },
+    {
+     "i": 66,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 39865,
+     "cached": 39680,
+     "write": 0,
+     "out": 143,
+     "reasoning": 0,
+     "cost": 0.0000860865,
+     "cachePct": 100
+    },
+    {
+     "i": 67,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 40138,
+     "cached": 39680,
+     "write": 0,
+     "out": 66,
+     "reasoning": 0,
+     "cost": 0.000084823,
+     "cachePct": 99
+    },
+    {
+     "i": 68,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 40514,
+     "cached": 39936,
+     "write": 0,
+     "out": 521,
+     "reasoning": 0,
+     "cost": 0.0001533345,
+     "cachePct": 99
+    },
+    {
+     "i": 69,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 40926,
+     "cached": 40448,
+     "write": 0,
+     "out": 30,
+     "reasoning": 0,
+     "cost": 0.000081617,
+     "cachePct": 99
+    },
+    {
+     "i": 70,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 41461,
+     "cached": 40704,
+     "write": 0,
+     "out": 75,
+     "reasoning": 0,
+     "cost": 0.0000980885,
+     "cachePct": 98
+    },
+    {
+     "i": 71,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 41729,
+     "cached": 41216,
+     "write": 0,
+     "out": 30,
+     "reasoning": 0,
+     "cost": 0.000083994,
+     "cachePct": 99
+    },
+    {
+     "i": 72,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 41785,
+     "cached": 41728,
+     "write": 0,
+     "out": 338,
+     "reasoning": 0,
+     "cost": 0.000112076,
+     "cachePct": 100
+    },
+    {
+     "i": 73,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 42204,
+     "cached": 41728,
+     "write": 0,
+     "out": 30,
+     "reasoning": 0,
+     "cost": 0.000083467,
+     "cachePct": 99
+    },
+    {
+     "i": 74,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 42700,
+     "cached": 41984,
+     "write": 0,
+     "out": 90,
+     "reasoning": 0,
+     "cost": 0.000100681,
+     "cachePct": 98
+    },
+    {
+     "i": 75,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 42863,
+     "cached": 42496,
+     "write": 0,
+     "out": 101,
+     "reasoning": 0,
+     "cost": 0.0000907795,
+     "cachePct": 99
+    },
+    {
+     "i": 76,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 43035,
+     "cached": 42752,
+     "write": 0,
+     "out": 69,
+     "reasoning": 0,
+     "cost": 0.0000837275,
+     "cachePct": 99
+    },
+    {
+     "i": 77,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 43530,
+     "cached": 43008,
+     "write": 0,
+     "out": 42,
+     "reasoning": 0,
+     "cost": 0.000088683,
+     "cachePct": 99
+    },
+    {
+     "i": 78,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 43683,
+     "cached": 43520,
+     "write": 0,
+     "out": 103,
+     "reasoning": 0,
+     "cost": 0.0000854565,
+     "cachePct": 100
+    },
+    {
+     "i": 79,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 43812,
+     "cached": 43520,
+     "write": 0,
+     "out": 56,
+     "reasoning": 0,
+     "cost": 0.000083368,
+     "cachePct": 99
+    },
+    {
+     "i": 80,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 44327,
+     "cached": 43776,
+     "write": 0,
+     "out": 58,
+     "reasoning": 0,
+     "cost": 0.000093098,
+     "cachePct": 99
+    },
+    {
+     "i": 81,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 44794,
+     "cached": 44288,
+     "write": 0,
+     "out": 95,
+     "reasoning": 0,
+     "cost": 0.0000974895,
+     "cachePct": 99
+    },
+    {
+     "i": 82,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 45327,
+     "cached": 44544,
+     "write": 0,
+     "out": 53,
+     "reasoning": 0,
+     "cost": 0.0001016675,
+     "cachePct": 98
+    },
+    {
+     "i": 83,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 45579,
+     "cached": 45312,
+     "write": 0,
+     "out": 111,
+     "reasoning": 0,
+     "cost": 0.0000929085,
+     "cachePct": 99
+    },
+    {
+     "i": 84,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 46074,
+     "cached": 45568,
+     "write": 0,
+     "out": 50,
+     "reasoning": 0,
+     "cost": 0.000093087,
+     "cachePct": 99
+    },
+    {
+     "i": 85,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 46550,
+     "cached": 45824,
+     "write": 0,
+     "out": 46,
+     "reasoning": 0,
+     "cost": 0.000100609,
+     "cachePct": 98
+    },
+    {
+     "i": 86,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 47210,
+     "cached": 46336,
+     "write": 0,
+     "out": 202,
+     "reasoning": 140,
+     "cost": 0.000128475,
+     "cachePct": 98
+    },
+    {
+     "i": 87,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 47472,
+     "cached": 47104,
+     "write": 0,
+     "out": 28,
+     "reasoning": 0,
+     "cost": 0.00008747,
+     "cachePct": 99
+    },
+    {
+     "i": 88,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 47525,
+     "cached": 47360,
+     "write": 0,
+     "out": 248,
+     "reasoning": 0,
+     "cost": 0.000111659,
+     "cachePct": 100
+    },
+    {
+     "i": 89,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 47781,
+     "cached": 47360,
+     "write": 0,
+     "out": 29,
+     "reasoning": 0,
+     "cost": 0.0000898495,
+     "cachePct": 99
+    },
+    {
+     "i": 90,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 47835,
+     "cached": 47616,
+     "write": 0,
+     "out": 38,
+     "reasoning": 0,
+     "cost": 0.000084428,
+     "cachePct": 100
+    },
+    {
+     "i": 91,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 47984,
+     "cached": 47616,
+     "write": 0,
+     "out": 30,
+     "reasoning": 0,
+     "cost": 0.000088519,
+     "cachePct": 99
+    },
+    {
+     "i": 92,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 48040,
+     "cached": 47872,
+     "write": 0,
+     "out": 28,
+     "reasoning": 0,
+     "cost": 0.000081622,
+     "cachePct": 100
+    },
+    {
+     "i": 93,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 48087,
+     "cached": 47872,
+     "write": 0,
+     "out": 369,
+     "reasoning": 0,
+     "cost": 0.0001311775,
+     "cachePct": 100
+    },
+    {
+     "i": 94,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 48418,
+     "cached": 47872,
+     "write": 0,
+     "out": 30,
+     "reasoning": 0,
+     "cost": 0.000095133,
+     "cachePct": 99
+    },
+    {
+     "i": 95,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 48745,
+     "cached": 48384,
+     "write": 0,
+     "out": 86,
+     "reasoning": 0,
+     "cost": 0.000097294,
+     "cachePct": 99
+    },
+    {
+     "i": 96,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 48922,
+     "cached": 48640,
+     "write": 0,
+     "out": 51,
+     "reasoning": 0,
+     "cost": 0.0000899955,
+     "cachePct": 99
+    },
+    {
+     "i": 97,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 49059,
+     "cached": 48896,
+     "write": 0,
+     "out": 42,
+     "reasoning": 0,
+     "cost": 0.00008495,
+     "cachePct": 100
+    },
+    {
+     "i": 98,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 49170,
+     "cached": 48896,
+     "write": 0,
+     "out": 428,
+     "reasoning": 401,
+     "cost": 0.000143068,
+     "cachePct": 99
+    },
+    {
+     "i": 99,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 49637,
+     "cached": 49152,
+     "write": 0,
+     "out": 63,
+     "reasoning": 0,
+     "cost": 0.0000995545,
+     "cachePct": 99
+    },
+    {
+     "i": 100,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 50097,
+     "cached": 49408,
+     "write": 0,
+     "out": 130,
+     "reasoning": 0,
+     "cost": 0.000116492,
+     "cachePct": 99
+    },
+    {
+     "i": 101,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 50643,
+     "cached": 49920,
+     "write": 0,
+     "out": 33,
+     "reasoning": 0,
+     "cost": 0.0001048215,
+     "cachePct": 99
+    },
+    {
+     "i": 102,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 50969,
+     "cached": 50432,
+     "write": 0,
+     "out": 290,
+     "reasoning": 248,
+     "cost": 0.000135188,
+     "cachePct": 99
+    },
+    {
+     "i": 103,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 51038,
+     "cached": 50944,
+     "write": 0,
+     "out": 295,
+     "reasoning": 0,
+     "cost": 0.0001211535,
+     "cachePct": 100
+    },
+    {
+     "i": 104,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 51222,
+     "cached": 50944,
+     "write": 0,
+     "out": 31,
+     "reasoning": 0,
+     "cost": 0.0000905015,
+     "cachePct": 99
+    },
+    {
+     "i": 105,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 51280,
+     "cached": 51200,
+     "write": 0,
+     "out": 591,
+     "reasoning": 0,
+     "cost": 0.0001626355,
+     "cachePct": 100
+    },
+    {
+     "i": 106,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 51652,
+     "cached": 51200,
+     "write": 0,
+     "out": 34,
+     "reasoning": 0,
+     "cost": 0.000097397,
+     "cachePct": 99
+    },
+    {
+     "i": 107,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 51915,
+     "cached": 51456,
+     "write": 0,
+     "out": 37,
+     "reasoning": 0,
+     "cost": 0.0000984475,
+     "cachePct": 99
+    },
+    {
+     "i": 108,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 51971,
+     "cached": 51712,
+     "write": 0,
+     "out": 36,
+     "reasoning": 0,
+     "cost": 0.000091691,
+     "cachePct": 100
+    },
+    {
+     "i": 109,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 52204,
+     "cached": 51968,
+     "write": 0,
+     "out": 81,
+     "reasoning": 0,
+     "cost": 0.0000975925,
+     "cachePct": 100
+    },
+    {
+     "i": 110,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 52737,
+     "cached": 51968,
+     "write": 0,
+     "out": 40,
+     "reasoning": 0,
+     "cost": 0.000110487,
+     "cachePct": 99
+    },
+    {
+     "i": 111,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 53046,
+     "cached": 52736,
+     "write": 0,
+     "out": 28,
+     "reasoning": 0,
+     "cost": 0.000093888,
+     "cachePct": 99
+    },
+    {
+     "i": 112,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 53099,
+     "cached": 52992,
+     "write": 0,
+     "out": 224,
+     "reasoning": 0,
+     "cost": 0.000114705,
+     "cachePct": 100
+    },
+    {
+     "i": 113,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 53313,
+     "cached": 52992,
+     "write": 0,
+     "out": 86,
+     "reasoning": 0,
+     "cost": 0.000102806,
+     "cachePct": 99
+    },
+    {
+     "i": 114,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 53501,
+     "cached": 53248,
+     "write": 0,
+     "out": 43,
+     "reasoning": 0,
+     "cost": 0.0000947685,
+     "cachePct": 100
+    },
+    {
+     "i": 115,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 53882,
+     "cached": 53248,
+     "write": 0,
+     "out": 39,
+     "reasoning": 0,
+     "cost": 0.0001075415,
+     "cachePct": 99
+    },
+    {
+     "i": 116,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 53990,
+     "cached": 53760,
+     "write": 0,
+     "out": 28,
+     "reasoning": 0,
+     "cost": 0.000092624,
+     "cachePct": 100
+    },
+    {
+     "i": 117,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 54042,
+     "cached": 53760,
+     "write": 0,
+     "out": 156,
+     "reasoning": 0,
+     "cost": 0.000112428,
+     "cachePct": 99
+    },
+    {
+     "i": 118,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 54099,
+     "cached": 54016,
+     "write": 0,
+     "out": 175,
+     "reasoning": 0,
+     "cost": 0.0001085165,
+     "cachePct": 100
+    },
+    {
+     "i": 119,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 54417,
+     "cached": 54016,
+     "write": 0,
+     "out": 35,
+     "reasoning": 0,
+     "cost": 0.0000999765,
+     "cachePct": 99
+    },
+    {
+     "i": 120,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 54503,
+     "cached": 54272,
+     "write": 0,
+     "out": 76,
+     "reasoning": 0,
+     "cost": 0.000100171,
+     "cachePct": 100
+    },
+    {
+     "i": 121,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 54965,
+     "cached": 54272,
+     "write": 0,
+     "out": 49,
+     "reasoning": 0,
+     "cost": 0.0001125475,
+     "cachePct": 99
+    },
+    {
+     "i": 122,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 55120,
+     "cached": 54784,
+     "write": 0,
+     "out": 81,
+     "reasoning": 0,
+     "cost": 0.0001053165,
+     "cachePct": 99
+    },
+    {
+     "i": 123,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 55290,
+     "cached": 55040,
+     "write": 0,
+     "out": 54,
+     "reasoning": 0,
+     "cost": 0.000098897,
+     "cachePct": 100
+    },
+    {
+     "i": 124,
+     "helper": null,
+     "strat": "strat-serial-2.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 55387,
+     "cached": 55040,
+     "write": 0,
+     "out": 411,
+     "reasoning": 274,
+     "cost": 0.0001524505,
+     "cachePct": 99
+    }
+   ],
+   "models": [
+    "tencent/hy4-flash"
+   ],
+   "strategies": [
+    "strat-serial-2.0"
+   ],
+   "slices": [
+    {
+     "group": "strat-serial-2.0 | tencent/hy4-flash",
+     "requests": 125,
+     "cost": 0.012062016999999996,
+     "prompt": 4716396,
+     "cached": 4644864,
+     "out": 18442,
+     "reasoning": 3401,
+     "costs": [
+      0.0001317975,
+      0.0000867505,
+      0.000109348,
+      0,
+      0.000215725,
+      0,
+      0.0001154385,
+      0.0001730335,
+      0.000092888,
+      0.000204927,
+      0.0001129815,
+      0.0000598315,
+      0.000058673,
+      0.0000594695,
+      0.0000574345,
+      0.0002618045,
+      0.0001172245,
+      0.000065295,
+      0.000214138,
+      0.000087283,
+      0.000142459,
+      0.0000591635,
+      0.00005823,
+      0.00010191,
+      0.000051042,
+      0.000091499,
+      0.000152451,
+      0.0000613805,
+      0.0000649705,
+      0.000052378,
+      0.000064863,
+      0.000104121,
+      0.0000598195,
+      0.0000714175,
+      0.0000594475,
+      0.0000719965,
+      0.0000662545,
+      0.0000618515,
+      0.00006839,
+      0.0000701715,
+      0.000059005,
+      0.0001327605,
+      0.00007738,
+      0.0000796555,
+      0.0000751415,
+      0.000063657,
+      0.0000758695,
+      0.0000642875,
+      0.0000735615,
+      0.0001020545,
+      0.0000742935,
+      0.000073277,
+      0.0000864095,
+      0.000075027,
+      0.0001714475,
+      0.000079988,
+      0.000141089,
+      0.0000699395,
+      0.0000638865,
+      0.000077359,
+      0.0000772555,
+      0.0000772515,
+      0.0000718645,
+      0.0001608175,
+      0.0000815885,
+      0.0000880115,
+      0.0000860865,
+      0.000084823,
+      0.0001533345,
+      0.000081617,
+      0.0000980885,
+      0.000083994,
+      0.000112076,
+      0.000083467,
+      0.000100681,
+      0.0000907795,
+      0.0000837275,
+      0.000088683,
+      0.0000854565,
+      0.000083368,
+      0.000093098,
+      0.0000974895,
+      0.0001016675,
+      0.0000929085,
+      0.000093087,
+      0.000100609,
+      0.000128475,
+      0.00008747,
+      0.000111659,
+      0.0000898495,
+      0.000084428,
+      0.000088519,
+      0.000081622,
+      0.0001311775,
+      0.000095133,
+      0.000097294,
+      0.0000899955,
+      0.00008495,
+      0.000143068,
+      0.0000995545,
+      0.000116492,
+      0.0001048215,
+      0.000135188,
+      0.0001211535,
+      0.0000905015,
+      0.0001626355,
+      0.000097397,
+      0.0000984475,
+      0.000091691,
+      0.0000975925,
+      0.000110487,
+      0.000093888,
+      0.000114705,
+      0.000102806,
+      0.0000947685,
+      0.0001075415,
+      0.000092624,
+      0.000112428,
+      0.0001085165,
+      0.0000999765,
+      0.000100171,
+      0.0001125475,
+      0.0001053165,
+      0.000098897,
+      0.0001524505
+     ],
+     "firstHit": 1
+    }
+   ],
+   "messages": 286,
+   "turns": 18,
+   "requests": {
+    "main": 125,
+    "helper": 0,
+    "helperKinds": {}
+   },
+   "tokens": {
+    "prompt": 4716396,
+    "cached": 4644864,
+    "write": 0,
+    "out": 18442,
+    "reasoning": 3401
+   },
+   "cost": {
+    "total": 0.012062016999999996,
+    "main": 0.012062016999999996,
+    "helper": 0,
+    "perRequestMedian": 0.0000907795,
+    "helperMax": 0
+   },
+   "cache": {
+    "overallPct": 98,
+    "firstHitAtRequest": 1,
+    "curve": [
+     0,
+     67,
+     64,
+     null,
+     57,
+     null,
+     83,
+     79,
+     94,
+     93,
+     96,
+     97,
+     97,
+     97,
+     97,
+     87,
+     99,
+     98,
+     97,
+     99,
+     99,
+     99,
+     99,
+     100,
+     99,
+     99,
+     99,
+     99,
+     98,
+     100,
+     98,
+     98,
+     99,
+     98,
+     99,
+     98,
+     99,
+     99,
+     98,
+     98,
+     99,
+     99,
+     98,
+     98,
+     98,
+     99,
+     98,
+     99,
+     99,
+     98,
+     99,
+     99,
+     99,
+     99,
+     99,
+     98,
+     98,
+     99,
+     100,
+     99,
+     99,
+     99,
+     99,
+     99,
+     99,
+     99,
+     100,
+     99,
+     99,
+     99,
+     98,
+     99,
+     100,
+     99,
+     98,
+     99,
+     99,
+     99,
+     100,
+     99,
+     99,
+     99,
+     98,
+     99,
+     99,
+     98,
+     98,
+     99,
+     100,
+     99,
+     100,
+     99,
+     100,
+     100,
+     99,
+     99,
+     99,
+     100,
+     99,
+     99,
+     99,
+     99,
+     99,
+     100,
+     99,
+     100,
+     99,
+     99,
+     100,
+     100,
+     99,
+     99,
+     100,
+     99,
+     100,
+     99,
+     100,
+     99,
+     100,
+     99,
+     100,
+     99,
+     99,
+     100,
+     99
+    ]
+   },
+   "growth": {
+    "promptCurve": [
+     3304,
+     4596,
+     6808,
+     0,
+     11603,
+     0,
+     13895,
+     17513,
+     18505,
+     19812,
+     20622,
+     21099,
+     21568,
+     22133,
+     22589,
+     25771,
+     25849,
+     26248,
+     26856,
+     26917,
+     27197,
+     27547,
+     27665,
+     27745,
+     27801,
+     27857,
+     28057,
+     28225,
+     28685,
+     28739,
+     29176,
+     29507,
+     29771,
+     30235,
+     30367,
+     30854,
+     31180,
+     31235,
+     31711,
+     32027,
+     32194,
+     32250,
+     32719,
+     33254,
+     33591,
+     33773,
+     34142,
+     34261,
+     34534,
+     34999,
+     35290,
+     35510,
+     35781,
+     36034,
+     36252,
+     36722,
+     37328,
+     37411,
+     37459,
+     37864,
+     38086,
+     38355,
+     38414,
+     38800,
+     39214,
+     39727,
+     39865,
+     40138,
+     40514,
+     40926,
+     41461,
+     41729,
+     41785,
+     42204,
+     42700,
+     42863,
+     43035,
+     43530,
+     43683,
+     43812,
+     44327,
+     44794,
+     45327,
+     45579,
+     46074,
+     46550,
+     47210,
+     47472,
+     47525,
+     47781,
+     47835,
+     47984,
+     48040,
+     48087,
+     48418,
+     48745,
+     48922,
+     49059,
+     49170,
+     49637,
+     50097,
+     50643,
+     50969,
+     51038,
+     51222,
+     51280,
+     51652,
+     51915,
+     51971,
+     52204,
+     52737,
+     53046,
+     53099,
+     53313,
+     53501,
+     53882,
+     53990,
+     54042,
+     54099,
+     54417,
+     54503,
+     54965,
+     55120,
+     55290,
+     55387
+    ],
+    "outCurve": [
+     115,
+     205,
+     120,
+     0,
+     232,
+     0,
+     107,
+     165,
+     202,
+     918,
+     367,
+     53,
+     50,
+     37,
+     31,
+     815,
+     499,
+     30,
+     1060,
+     264,
+     648,
+     29,
+     54,
+     406,
+     30,
+     304,
+     688,
+     59,
+     31,
+     50,
+     30,
+     288,
+     29,
+     57,
+     61,
+     29,
+     29,
+     45,
+     34,
+     29,
+     30,
+     541,
+     30,
+     35,
+     41,
+     36,
+     31,
+     41,
+     39,
+     187,
+     39,
+     38,
+     125,
+     42,
+     735,
+     28,
+     434,
+     29,
+     35,
+     30,
+     35,
+     29,
+     37,
+     635,
+     29,
+     69,
+     143,
+     66,
+     521,
+     30,
+     75,
+     30,
+     338,
+     30,
+     90,
+     101,
+     69,
+     42,
+     103,
+     56,
+     58,
+     95,
+     53,
+     111,
+     50,
+     46,
+     202,
+     28,
+     248,
+     29,
+     38,
+     30,
+     28,
+     369,
+     30,
+     86,
+     51,
+     42,
+     428,
+     63,
+     130,
+     33,
+     290,
+     295,
+     31,
+     591,
+     34,
+     37,
+     36,
+     81,
+     40,
+     28,
+     224,
+     86,
+     43,
+     39,
+     28,
+     156,
+     175,
+     35,
+     76,
+     49,
+     81,
+     54,
+     411
+    ],
+    "reasoningShare": 0.18
+   },
+   "calls": {
+    "total": 145,
+    "byTool": {
+     "shell": 119,
+     "output_read": 21,
+     "run_js": 5
+    },
+    "byResultClass": {
+     "ok": 138,
+     "refused": 1,
+     "find-absent": 2,
+     "error": 4
+    },
+    "repeats": 0,
+    "repeatRuns": 0,
+    "callsBeforeFirstWrite": null,
+    "firstWriteTool": null
+   },
+   "perTurn": [
+    {
+     "n": 0,
+     "userChars": 1590,
+     "shortFollowUp": false,
+     "assistantMsgs": 3,
+     "calls": 13,
+     "tools": "shell shell shell shell shell shell shell shell shell output_read output_read output_read output_read",
+     "stop": "failed",
+     "after": null,
+     "args": [
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "pwd && git status --short && ls",
+        "name": {
+         "length": 4,
+         "hash": "20fd0e45"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "cat app/validators.js",
+        "name": {
+         "length": 10,
+         "hash": "fdeab1e6"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "cat scripts/test-validators.mjs",
+        "name": {
+         "length": 5,
+         "hash": "5b22cf22"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "cat app/profile.js && echo '--- CI ---' && cat scripts/ci.mjs",
+        "name": {
+         "length": 10,
+         "hash": "3143b105"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "nl -ba app/validators.js | sed -n '1,100p'",
+        "name": {
+         "length": 4,
+         "hash": "84c44e37"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "nl -ba app/validators.js | sed -n '101,200p'",
+        "name": {
+         "length": 4,
+         "hash": "85c44fca"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "nl -ba scripts/test-validators.mjs | sed -n '1,95p'",
+        "name": {
+         "length": 5,
+         "hash": "992330bc"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "nl -ba scripts/test-validators.mjs | sed -n '96,200p'",
+        "name": {
+         "length": 5,
+         "hash": "9c233575"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "cat CLAUDE.md",
+        "name": {
+         "length": 6,
+         "hash": "e1fc8517"
+        }
+       }
+      },
+      {
+       "name": "output_read",
+       "args": {
+        "handle": "os:1747wlzjkw",
+        "lines": "1-100"
+       }
+      },
+      {
+       "name": "output_read",
+       "args": {
+        "handle": "os:x52lli1ffq",
+        "lines": "101-190"
+       }
+      },
+      {
+       "name": "output_read",
+       "args": {
+        "handle": "os:3fae29y2l0",
+        "lines": "1-96"
+       }
+      },
+      {
+       "name": "output_read",
+       "args": {
+        "handle": "os:1jr7l3316k",
+        "lines": "96-181"
+       }
+      }
+     ]
+    },
+    {
+     "n": 1,
+     "userChars": 8,
+     "shortFollowUp": true,
+     "assistantMsgs": 1,
+     "calls": 5,
+     "tools": "shell shell shell shell:refused shell",
+     "stop": "failed",
+     "after": "failed",
+     "args": [
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "sed -n '94,140p' app/validators.js",
+        "name": {
+         "length": 4,
+         "hash": "86c4515d"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "sed -n '141,186p' app/validators.js",
+        "name": {
+         "length": 4,
+         "hash": "7fc44658"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "sed -n '95,150p' scripts/test-validators.mjs",
+        "name": {
+         "length": 5,
+         "hash": "9b2333e2"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "sed -n '151,181p' scripts/test-validators.mjs",
+        "name": {
+         "length": 5,
+         "hash": "96232c03"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "grep -n 'argSummary' -A 25 -B 10 app/profile.js",
+        "name": {
+         "length": 10,
+         "hash": "d8ca52a1"
+        }
+       }
+      }
+     ]
+    },
+    {
+     "n": 2,
+     "userChars": 8,
+     "shortFollowUp": true,
+     "assistantMsgs": 8,
+     "calls": 17,
+     "tools": "output_read output_read output_read output_read shell shell shell shell shell shell shell:find-absent shell shell:find-absent shell shell shell shell",
+     "stop": "limit",
+     "after": "failed",
+     "args": [
+      {
+       "name": "output_read",
+       "args": {
+        "handle": "os:p1pj7wm6zo",
+        "lines": "1-48"
+       }
+      },
+      {
+       "name": "output_read",
+       "args": {
+        "handle": "os:1wbvo4a1rf",
+        "lines": "1-47"
+       }
+      },
+      {
+       "name": "output_read",
+       "args": {
+        "handle": "os:1ighslc180",
+        "lines": "1-57"
+       }
+      },
+      {
+       "name": "output_read",
+       "args": {
+        "handle": "os:m52o2y3q7v",
+        "lines": "12-48"
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "grep -n 'argSummary\\|args:' app/profile.js",
+        "name": {
+         "length": 11,
+         "hash": "d97ffd69"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "python3 -c \"",
+        "cmd_more": {
+         "length": 166,
+         "hash": "8a33ddee"
+        },
+        "name": {
+         "length": 10,
+         "hash": "72222b3b"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "grep -rn 'perTurn.*args\\|argSummary' docs scripts app | head -50; echo ---; ls docs/concepts/ | head -40",
+        "name": {
+         "length": 10,
+         "hash": "5f3b8418"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "sed -n '45,100p' app/profile.js",
+        "name": {
+         "length": 7,
+         "hash": "1217413f"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "sed -n '75,95p' scripts/test-profile.mjs; echo ---; python3 -c \"",
+        "cmd_more": {
+         "length": 222,
+         "hash": "c6a236ef"
+        },
+        "name": {
+         "length": 12,
+         "hash": "6030ad5f"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "git log --oneline -8 && node scripts/ci.mjs validators profile 2>&1 | tail -20",
+        "name": {
+         "length": 8,
+         "hash": "abf8de42"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "sed -n '10,45p' app/profile.js; echo ---; sed -n '1,60p' scripts/test-profile.mjs",
+        "name": {
+         "length": 11,
+         "hash": "74ebb008"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "node --input-type=module -e \"",
+        "cmd_more": {
+         "length": 776,
+         "hash": "e6256edb"
+        },
+        "name": {
+         "length": 11,
+         "hash": "fe841a07"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "sed -n '20,56p' app/profile.js",
+        "name": {
+         "length": 11,
+         "hash": "0428a37e"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "git status --short && git branch --show-current && git diff --stat",
+        "name": {
+         "length": 6,
+         "hash": "ba4b77ef"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "sed -n '28,46p' app/profile.js; echo '--- shape checks ---'; sed -n '1,60p' scripts/test-profile.mjs",
+        "name": {
+         "length": 13,
+         "hash": "09e4f02b"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "sed -n '36,48p' app/profile.js; echo ---; sed -n '1,48p' scripts/test-profile.mjs",
+        "name": {
+         "length": 14,
+         "hash": "ac65f75b"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "nl -ba scripts/test-profile.mjs | sed -n '1,100p'",
+        "name": {
+         "length": 5,
+         "hash": "2990073b"
+        }
+       }
+      }
+     ]
+    },
+    {
+     "n": 3,
+     "userChars": 8,
+     "shortFollowUp": true,
+     "assistantMsgs": 8,
+     "calls": 8,
+     "tools": "output_read run_js:error shell output_read run_js:error shell shell output_read",
+     "stop": "limit",
+     "after": "limit",
+     "args": [
+      {
+       "name": "output_read",
+       "args": {
+        "handle": "os:1g5g0f2133",
+        "lines": "11-92"
+       }
+      },
+      {
+       "name": "run_js",
+       "args": {
+        "code": {
+         "length": 2576,
+         "hash": "b67e73e0"
+        },
+        "name": {
+         "length": 10,
+         "hash": "dbf0e8a5"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "python3 - <<'PY'",
+        "cmd_more": {
+         "length": 1631,
+         "hash": "c7d73039"
+        },
+        "name": {
+         "length": 8,
+         "hash": "a5167eec"
+        }
+       }
+      },
+      {
+       "name": "output_read",
+       "args": {
+        "handle": "os:1yusyqavmp",
+        "lines": "1-40"
+       }
+      },
+      {
+       "name": "run_js",
+       "args": {
+        "code": {
+         "length": 65,
+         "hash": "883c8000"
+        },
+        "name": {
+         "length": 5,
+         "hash": "7de2adb1"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "node --input-type=module -e \"",
+        "cmd_more": {
+         "length": 732,
+         "hash": "b2ca6f00"
+        },
+        "name": {
+         "length": 13,
+         "hash": "67721821"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "python3 - <<'PY'",
+        "cmd_more": {
+         "length": 2132,
+         "hash": "819aee9b"
+        },
+        "name": {
+         "length": 14,
+         "hash": "13b21047"
+        }
+       }
+      },
+      {
+       "name": "output_read",
+       "args": {
+        "handle": "os:2kfrgk1koy",
+        "find": {
+         "length": 4,
+         "hash": "5c438d2d"
+        }
+       }
+      }
+     ]
+    },
+    {
+     "n": 4,
+     "userChars": 8,
+     "shortFollowUp": true,
+     "assistantMsgs": 8,
+     "calls": 8,
+     "tools": "shell run_js:error shell shell shell shell output_read shell",
+     "stop": "limit",
+     "after": "limit",
+     "args": [
+      {
+       "name": "shell",
+       "args": {
+        "ref": "os:3xb9lm8w8n",
+        "name": {
+         "length": 13,
+         "hash": "73cc49da"
+        }
+       }
+      },
+      {
+       "name": "run_js",
+       "args": {
+        "code": {
+         "length": 1250,
+         "hash": "4a04e99c"
+        },
+        "name": {
+         "length": 8,
+         "hash": "42956e6a"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "ref": "os:6qztwbk3q2",
+        "name": {
+         "length": 15,
+         "hash": "a67e8baa"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "node --input-type=module -e \"",
+        "cmd_more": {
+         "length": 887,
+         "hash": "98086bf6"
+        },
+        "name": {
+         "length": 8,
+         "hash": "318ca734"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "cat > /tmp/patch-check.mjs <<'EOF'",
+        "cmd_more": {
+         "length": 2296,
+         "hash": "500ec0c1"
+        },
+        "name": {
+         "length": 11,
+         "hash": "70576984"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "nl -ba scripts/test-validators.mjs | sed -n '106,132p'",
+        "name": {
+         "length": 6,
+         "hash": "7fc4b8a4"
+        }
+       }
+      },
+      {
+       "name": "output_read",
+       "args": {
+        "handle": "os:1y0h7o61jm",
+        "lines": "131-160"
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "sed -n '132,155p' scripts/test-validators.mjs | cat -A | sed 's/\\$$//' | head -30",
+        "name": {
+         "length": 5,
+         "hash": "946895a4"
+        }
+       }
+      }
+     ]
+    },
+    {
+     "n": 5,
+     "userChars": 8,
+     "shortFollowUp": true,
+     "assistantMsgs": 8,
+     "calls": 8,
+     "tools": "output_read shell shell shell shell output_read shell shell",
+     "stop": "limit",
+     "after": "limit",
+     "args": [
+      {
+       "name": "output_read",
+       "args": {
+        "handle": "os:9xm4ni1fmr",
+        "lines": "1-15"
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "node scripts/ci.mjs validators profile 2>&1 | tail -12",
+        "name": {
+         "length": 7,
+         "hash": "4b5ee084"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "git diff -- scripts/test-validators.mjs",
+        "name": {
+         "length": 9,
+         "hash": "818644ce"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "git add scripts/test-validators.mjs && git commit -m 'Spec: step validators resolve path and command steps from profile argument summaries' && git log -1 --format=%H",
+        "name": {
+         "length": 11,
+         "hash": "fd636710"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "sed -n '94,113p' app/validators.js",
+        "name": {
+         "length": 10,
+         "hash": "fb2416ba"
+        }
+       }
+      },
+      {
+       "name": "output_read",
+       "args": {
+        "handle": "os:1jzejak15m",
+        "lines": "9-21"
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "ref": "os:p3f0u6i39l",
+        "name": {
+         "length": 9,
+         "hash": "18d116c3"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "sed -n '94,113p' app/validators.js | cat -A | sed 's/\\$$//'",
+        "name": {
+         "length": 9,
+         "hash": "a968c3ba"
+        }
+       }
+      }
+     ]
+    },
+    {
+     "n": 6,
+     "userChars": 8,
+     "shortFollowUp": true,
+     "assistantMsgs": 8,
+     "calls": 8,
+     "tools": "shell output_read shell shell output_read shell shell shell",
+     "stop": "limit",
+     "after": "limit",
+     "args": [
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "sed -n '102,111p' app/validators.js",
+        "name": {
+         "length": 10,
+         "hash": "37ebcf18"
+        }
+       }
+      },
+      {
+       "name": "output_read",
+       "args": {
+        "handle": "os:1jzejak15m",
+        "lines": "12-18"
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "ref": "os:iy3w3w9ia3",
+        "name": {
+         "length": 11,
+         "hash": "6d8a33b7"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "cat > /tmp/patch.mjs <<'EOF'",
+        "cmd_more": {
+         "length": 1729,
+         "hash": "1165fc52"
+        },
+        "name": {
+         "length": 11,
+         "hash": "f63d2088"
+        }
+       }
+      },
+      {
+       "name": "output_read",
+       "args": {
+        "handle": "os:1zo95bqwqq",
+        "lines": "1-30"
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "node scripts/ci.mjs validators profile 2>&1 | tail -18",
+        "name": {
+         "length": 9,
+         "hash": "3965a4e4"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "node scripts/ci.mjs validators profile 2>&1 | grep -E '^FAIL|ci:'",
+        "name": {
+         "length": 5,
+         "hash": "db7db43a"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "sed -n '132,147p' scripts/test-validators.mjs",
+        "name": {
+         "length": 14,
+         "hash": "6adbe56c"
+        }
+       }
+      }
+     ]
+    },
+    {
+     "n": 7,
+     "userChars": 8,
+     "shortFollowUp": true,
+     "assistantMsgs": 8,
+     "calls": 8,
+     "tools": "shell shell shell shell shell shell shell shell",
+     "stop": "limit",
+     "after": "limit",
+     "args": [
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "git status --short && git log --oneline -2",
+        "name": {
+         "length": 11,
+         "hash": "ae665263"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "git show HEAD:scripts/test-validators.mjs | sed -n '136,145p'",
+        "name": {
+         "length": 14,
+         "hash": "0b3bb4ef"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "git show HEAD:app/validators.js | sed -n '94,113p'",
+        "name": {
+         "length": 13,
+         "hash": "2c5e6d13"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "node -e \"",
+        "cmd_more": {
+         "length": 361,
+         "hash": "3f72e4a5"
+        },
+        "name": {
+         "length": 10,
+         "hash": "ac022df0"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "sed -n '137,144p' scripts/test-validators.mjs | cat -A",
+        "name": {
+         "length": 11,
+         "hash": "0a82fb84"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "sed -n '136,146p' scripts/test-validators.mjs",
+        "name": {
+         "length": 18,
+         "hash": "af7a960b"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "python3 - <<'PY'",
+        "cmd_more": {
+         "length": 306,
+         "hash": "eef0b26c"
+        },
+        "name": {
+         "length": 7,
+         "hash": "ef6c5f76"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "sed -n '135,144p' scripts/test-validators.mjs | od -c | head -5",
+        "name": {
+         "length": 5,
+         "hash": "65b1d004"
+        }
+       }
+      }
+     ]
+    },
+    {
+     "n": 8,
+     "userChars": 8,
+     "shortFollowUp": true,
+     "assistantMsgs": 8,
+     "calls": 8,
+     "tools": "shell output_read shell shell shell output_read shell shell",
+     "stop": "limit",
+     "after": "limit",
+     "args": [
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "python3 - <<'PY'",
+        "cmd_more": {
+         "length": 2386,
+         "hash": "f988e790"
+        },
+        "name": {
+         "length": 8,
+         "hash": "9a1a90b8"
+        }
+       }
+      },
+      {
+       "name": "output_read",
+       "args": {
+        "handle": "os:19deymrvkg",
+        "lines": "1-40"
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "python3 - <<'PY'",
+        "cmd_more": {
+         "length": 1349,
+         "hash": "7247af7d"
+        },
+        "name": {
+         "length": 13,
+         "hash": "01abed5c"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "git diff -- scripts/test-validators.mjs",
+        "name": {
+         "length": 12,
+         "hash": "e6db1d4a"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "sed -n '128,150p' scripts/test-validators.mjs",
+        "name": {
+         "length": 11,
+         "hash": "f5fdf5b1"
+        }
+       }
+      },
+      {
+       "name": "output_read",
+       "args": {
+        "handle": "os:1xya7o217f",
+        "lines": "9-17"
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "sed -n '135,146p' scripts/test-validators.mjs",
+        "name": {
+         "length": 7,
+         "hash": "327e565d"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "ref": "os:1noqk5shrn",
+        "name": {
+         "length": 13,
+         "hash": "5142b659"
+        }
+       }
+      }
+     ]
+    },
+    {
+     "n": 9,
+     "userChars": 8,
+     "shortFollowUp": true,
+     "assistantMsgs": 8,
+     "calls": 8,
+     "tools": "shell shell output_read shell shell shell shell output_read",
+     "stop": "limit",
+     "after": "limit",
+     "args": [
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "sed -n '130,146p' scripts/test-validators.mjs",
+        "name": {
+         "length": 12,
+         "hash": "c7ff2b91"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "node -e 'const fs=require(\"fs\");const f=\"scripts/test-validators.mjs\";const s=fs.readFileSync(f,\"utf8\");",
+        "cmd_more": {
+         "length": 2063,
+         "hash": "2206f62f"
+        },
+        "name": {
+         "length": 10,
+         "hash": "f9d236b6"
+        }
+       }
+      },
+      {
+       "name": "output_read",
+       "args": {
+        "handle": "os:obsd9l1ent",
+        "lines": "1-35"
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "git diff --stat && git status --short",
+        "name": {
+         "length": 7,
+         "hash": "21cdb0e7"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "git reset --soft HEAD~1 && git restore --staged scripts/test-validators.mjs && git log --oneline -2 && git status --short",
+        "name": {
+         "length": 10,
+         "hash": "312d1580"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "git checkout -- scripts/test-validators.mjs && sed -n '128,142p' scripts/test-validators.mjs",
+        "name": {
+         "length": 12,
+         "hash": "8b1737e7"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "python3 - <<'PY'",
+        "cmd_more": {
+         "length": 1856,
+         "hash": "22a82eaa"
+        },
+        "name": {
+         "length": 10,
+         "hash": "812ad0d4"
+        }
+       }
+      },
+      {
+       "name": "output_read",
+       "args": {
+        "handle": "os:1x9wcq81js",
+        "lines": "1-35"
+       }
+      }
+     ]
+    },
+    {
+     "n": 10,
+     "userChars": 8,
+     "shortFollowUp": true,
+     "assistantMsgs": 8,
+     "calls": 8,
+     "tools": "shell shell shell output_read shell shell shell shell",
+     "stop": "limit",
+     "after": "limit",
+     "args": [
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "git checkout -- scripts/test-validators.mjs && sed -n '130,138p' scripts/test-validators.mjs",
+        "name": {
+         "length": 8,
+         "hash": "84314a59"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "ref": "os:1etj8ov8k4",
+        "name": {
+         "length": 16,
+         "hash": "6a572641"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "python3 - <<'PY'",
+        "cmd_more": {
+         "length": 1134,
+         "hash": "90f79c1e"
+        },
+        "name": {
+         "length": 12,
+         "hash": "dbd693c6"
+        }
+       }
+      },
+      {
+       "name": "output_read",
+       "args": {
+        "handle": "os:grw6tfe71r",
+        "lines": "1-30"
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "cp app/validators.js /tmp/validators.impl.js && git checkout -- app/validators.js && node scripts/ci.mjs validators profile 2>&1 | grep -E '^FAIL|ci:'",
+        "name": {
+         "length": 10,
+         "hash": "d09ebaae"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "git add scripts/test-validators.mjs && git commit -m 'Spec: a profile with argument summaries resolves path and command steps; an old profile stays unresolved' && git log -1 --format=%H && git status --short",
+        "name": {
+         "length": 12,
+         "hash": "057b5a86"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "cp /tmp/validators.impl.js app/validators.js && git diff -- app/validators.js && node scripts/ci.mjs validators profile 2>&1 | tail -3",
+        "name": {
+         "length": 12,
+         "hash": "f56c828e"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "node scripts/ci.mjs validators profile 2>&1 | grep -E '^FAIL|ci:'",
+        "name": {
+         "length": 11,
+         "hash": "a1339c61"
+        }
+       }
+      }
+     ]
+    },
+    {
+     "n": 11,
+     "userChars": 8,
+     "shortFollowUp": true,
+     "assistantMsgs": 8,
+     "calls": 8,
+     "tools": "shell shell shell shell shell shell shell shell",
+     "stop": "limit",
+     "after": "limit",
+     "args": [
+      {
+       "name": "shell",
+       "args": {
+        "ref": "os:1s7vny5kqx",
+        "name": {
+         "length": 13,
+         "hash": "a5bf5820"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "grep -rn 'profile(good)\\|no tool arguments' docs scripts app | head -20; echo ---; grep -rn 'no-arguments' docs | head -20",
+        "name": {
+         "length": 14,
+         "hash": "ed9ba5bb"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "sed -n '128,145p' scripts/test-validators.mjs; echo '--- profile fn signature ---'; grep -n 'export function profile' -A6 app/profile.js",
+        "name": {
+         "length": 7,
+         "hash": "2b3056a8"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "grep -nE '^export function profile|^export const profile|function profile' app/profile.js; sed -n '118,140p' app/profile.js",
+        "name": {
+         "length": 17,
+         "hash": "e7afc111"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "sed -n '71,73p' app/profile.js && git show HEAD:scripts/test-validators.mjs | sed -n '140,148p'",
+        "name": {
+         "length": 4,
+         "hash": "d0bc2d30"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "git show e0a9fe8 --stat | head -40; echo ---; git show e0a9fe8 -- scripts/test-profile.mjs | head -60",
+        "name": {
+         "length": 7,
+         "hash": "4a7181df"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "git show ceacb18 --stat | head -40; echo ---; git show ceacb18 -- app/profile.js | head -100",
+        "name": {
+         "length": 11,
+         "hash": "78a6adb1"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "git show ceacb18 -- app/profile.js | grep -n -A6 -B6 'args:' | head -60",
+        "name": {
+         "length": 12,
+         "hash": "87c1e497"
+        }
+       }
+      }
+     ]
+    },
+    {
+     "n": 12,
+     "userChars": 8,
+     "shortFollowUp": true,
+     "assistantMsgs": 0,
+     "calls": 0,
+     "tools": "",
+     "stop": "held",
+     "after": "limit",
+     "args": []
+    },
+    {
+     "n": 13,
+     "userChars": 739,
+     "shortFollowUp": false,
+     "assistantMsgs": 8,
+     "calls": 8,
+     "tools": "shell shell run_js shell shell shell shell shell",
+     "stop": "limit",
+     "after": "held",
+     "args": [
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "git status --short && sed -n '140,150p' scripts/test-validators.mjs",
+        "name": {
+         "length": 5,
+         "hash": "783132f6"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "ref": "os:hx5q6q58vp",
+        "name": {
+         "length": 12,
+         "hash": "1a27ad8a"
+        }
+       }
+      },
+      {
+       "name": "run_js",
+       "args": {
+        "code": {
+         "length": 830,
+         "hash": "a4a26571"
+        },
+        "name": {
+         "length": 7,
+         "hash": "3cc870dc"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "ref": "os:i6wmbg0kxd",
+        "name": {
+         "length": 16,
+         "hash": "7200aa06"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "sed -n '143,147p' scripts/test-validators.mjs",
+        "name": {
+         "length": 12,
+         "hash": "8f6b93e2"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "ref": "os:1v1hxfy1yt",
+        "name": {
+         "length": 15,
+         "hash": "460758a9"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "ref": "os:1alo7ms1bw",
+        "name": {
+         "length": 12,
+         "hash": "1209b188"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "cat > /tmp/patch-one.mjs <<'EOF'",
+        "cmd_more": {
+         "length": 1224,
+         "hash": "b6dc38a3"
+        },
+        "name": {
+         "length": 16,
+         "hash": "e417b6d4"
+        }
+       }
+      }
+     ]
+    },
+    {
+     "n": 14,
+     "userChars": 8,
+     "shortFollowUp": true,
+     "assistantMsgs": 8,
+     "calls": 8,
+     "tools": "shell shell shell shell shell shell shell shell",
+     "stop": "limit",
+     "after": "limit",
+     "args": [
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "git diff -- scripts/test-validators.mjs",
+        "name": {
+         "length": 17,
+         "hash": "b00084c3"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "git add scripts/test-validators.mjs && git commit -m 'Spec: profile() now writes per-call argument summaries, so strip args from the no-arguments check record to keep what it asserts' && git log -1 --format=%H",
+        "name": {
+         "length": 17,
+         "hash": "39cb9ee1"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "git status --short && node scripts/ci.mjs validators profile 2>&1 | tail -5",
+        "name": {
+         "length": 13,
+         "hash": "f5cc949d"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "node scripts/ci.mjs validators profile 2>&1 | grep -E '^FAIL|ci:'",
+        "name": {
+         "length": 14,
+         "hash": "a48ab6aa"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "git diff -- app/validators.js",
+        "name": {
+         "length": 9,
+         "hash": "defd431d"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "sed -n '103,120p' app/validators.js",
+        "name": {
+         "length": 12,
+         "hash": "46e56427"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "sed -n '138,144p' scripts/test-validators.mjs; echo '--- MD bullet 3 ---'; sed -n '29,31p' scripts/test-validators.mjs; echo '--- order check ---'; sed -n '144,155p' app/validators.js",
+        "name": {
+         "length": 14,
+         "hash": "183a52cc"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "sed -n '138,150p' app/validators.js",
+        "name": {
+         "length": 10,
+         "hash": "3a3fe0d3"
+        }
+       }
+      }
+     ]
+    },
+    {
+     "n": 15,
+     "userChars": 8,
+     "shortFollowUp": true,
+     "assistantMsgs": 8,
+     "calls": 8,
+     "tools": "shell shell shell shell shell shell shell shell",
+     "stop": "limit",
+     "after": "limit",
+     "args": [
+      {
+       "name": "shell",
+       "args": {
+        "ref": "os:2wvvfq9z0y",
+        "name": {
+         "length": 11,
+         "hash": "b354f461"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "node --input-type=module - <<'JS'",
+        "cmd_more": {
+         "length": 882,
+         "hash": "314e8229"
+        },
+        "name": {
+         "length": 10,
+         "hash": "171f1d33"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "ref": "os:1n6nfv4c5j",
+        "name": {
+         "length": 11,
+         "hash": "f4f0d358"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "cat > /tmp/dbg.mjs <<'EOF'",
+        "cmd_more": {
+         "length": 1751,
+         "hash": "e6e6c864"
+        },
+        "name": {
+         "length": 3,
+         "hash": "c64cb42c"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "sed -n '109,116p' app/validators.js",
+        "name": {
+         "length": 9,
+         "hash": "b0a1639e"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "grep -n 'V.reader' scripts/test-validators.mjs | head",
+        "name": {
+         "length": 11,
+         "hash": "c6618e4f"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "sed -n '134,141p' scripts/test-validators.mjs",
+        "name": {
+         "length": 10,
+         "hash": "5fb5f9bd"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "sed -n '1,60p' scripts/ci.mjs; echo ---; grep -rn 'V.reader\\|reader(' scripts/*.mjs app/*.js | head -30",
+        "name": {
+         "length": 8,
+         "hash": "015014d1"
+        }
+       }
+      }
+     ]
+    },
+    {
+     "n": 16,
+     "userChars": 8,
+     "shortFollowUp": true,
+     "assistantMsgs": 8,
+     "calls": 8,
+     "tools": "shell shell shell shell shell shell shell run_js:error",
+     "stop": "limit",
+     "after": "limit",
+     "args": [
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "sed -n '126,136p' scripts/test-validators.mjs | cat -A",
+        "name": {
+         "length": 12,
+         "hash": "7b95f90e"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "ref": "os:5a8p0swiz",
+        "name": {
+         "length": 12,
+         "hash": "c2134025"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "node --input-type=module -e \"",
+        "cmd_more": {
+         "length": 668,
+         "hash": "8bd541cd"
+        },
+        "name": {
+         "length": 6,
+         "hash": "5fe7049c"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "node scripts/test-validators.mjs 2>&1 | grep -E '^FAIL|failed|passed'",
+        "name": {
+         "length": 12,
+         "hash": "173f16a9"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "sed -n '134,137p' scripts/test-validators.mjs | od -c | tail -12",
+        "name": {
+         "length": 11,
+         "hash": "0038673d"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "grep -n \"at_turn === 0\" scripts/test-validators.mjs",
+        "name": {
+         "length": 10,
+         "hash": "90d66a41"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "ref": "os:mzt4kef2y5",
+        "name": {
+         "length": 8,
+         "hash": "bdbef36c"
+        }
+       }
+      },
+      {
+       "name": "run_js",
+       "args": {
+        "code": {
+         "length": 366,
+         "hash": "ef7e1ddb"
+        },
+        "name": {
+         "length": 13,
+         "hash": "2bac96b0"
+        }
+       }
+      }
+     ]
+    },
+    {
+     "n": 17,
+     "userChars": 8,
+     "shortFollowUp": true,
+     "assistantMsgs": 7,
+     "calls": 6,
+     "tools": "shell shell shell shell shell shell",
+     "stop": "done",
+     "after": "limit",
+     "args": [
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "python3 - <<'PY'",
+        "cmd_more": {
+         "length": 426,
+         "hash": "f426fba3"
+        },
+        "name": {
+         "length": 12,
+         "hash": "7a530d0b"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "node scripts/ci.mjs validators profile 2>&1 | tail -3",
+        "name": {
+         "length": 9,
+         "hash": "8a7c77e7"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "git log --oneline -4 && git status --short && git diff",
+        "name": {
+         "length": 13,
+         "hash": "4332408b"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "git add scripts/test-validators.mjs && git commit --amend --no-edit && git log -1 --format=%H",
+        "name": {
+         "length": 16,
+         "hash": "e63ecb37"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "git add app/validators.js && git commit -m 'Validators: resolve path and command steps from a profile per-call argument summaries; old profiles without args stay unresolved' && git log -1 --format=%H && git status --short",
+        "name": {
+         "length": 11,
+         "hash": "98d02a5b"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "node scripts/ci.mjs validators profile 2>&1 | tail -1; echo \"exit: ${PIPESTATUS[0]}\"; git status --short",
+        "name": {
+         "length": 12,
+         "hash": "6b74f96f"
+        }
+       }
+      }
+     ]
+    }
+   ],
+   "followUps": {
+    "limitContinuations": 14,
+    "steering": 3,
+    "unrecorded": 0
+   },
+   "flags": {},
+   "stem": null
+  }
+ ],
+ "groups": [
+  {
+   "group": "strat-serial-2.0 | tencent/hy4-flash",
+   "sessions": 1,
+   "requests": 125,
+   "costTotal": 0.012062016999999996,
+   "costMedian": 0.0000907795,
+   "costP95": 0.0001626355,
+   "costMax": 0.0002618045,
+   "cachePct": 98,
+   "firstHitAtRequest": 1,
+   "outPerRequest": 147.536,
+   "reasoningShare": 0.18
+  }
+ ]
+}

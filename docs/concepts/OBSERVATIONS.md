@@ -40,3 +40,26 @@ Hypotheses touched (description only)
 - H1 (exact brief as directive): silent. It needs the silo runs.
 
 Limits: one strategy, one run per model per task, two of the six sessions by Sonnet or a mid-session model change. Descriptive only.
+
+### 2026-11-20 · live stepped session 1 (host shell in a container) · n = 1 session, 125 requests
+Source: `docs/concepts/profile-live1-2026-11-20.json`.
+
+What it looked like: `strat-serial-2.0 | tencent/hy4-flash`, 18 turns, 125 main requests, 0 helper requests, $0.01206 (median $0.00009 per request, p95 $0.00016, max $0.00026). 145 calls: `shell` 119, `output_read` 21, `run_js` 5. Result classes: ok 138, error 4, find-absent 2, refused 1. 0 byte-identical repeats. Cache 98% overall, first hit at request 1, no request at 0 after a hit except two rows with no usage (the failed requests). Prompt per request 3.3k to 55.4k tokens, rising on every request; output per request 148 tokens on average, max 1.1k; reasoning 18% of output. Stops: 14 turns `limit`, 2 `failed`, 1 `held` (a skipped request), 1 `done`. Follow-ups: 16 of 17 were 8 chars; 14 continue a round-limit stop.
+
+Shell command lines by first word (104 kept, 15 longer than the kept length and stored as size and hash): `sed` 32, `git` 24, `node` 15, `python3` 9, `cat` 8, `grep` 7, `nl` 6, `cp` 2.
+
+Pointers drilled: none by content. The command lines in the profile were read (they are kept by design): the 4 `run_js` errors are in turns 3 (two), 4 and 16; the 2 find-absent and the 1 refused are `shell` results classed by their leading words.
+
+Open questions it raises:
+- How much of the 125 requests is reading? `sed`, `cat`, `nl`, `grep` and `output_read` are 74 of 145 calls for a change of 21 lines in 2 files.
+- Would a host edit tool remove the `python3` and `run_js` calls, and how many requests with them?
+- Is a round limit of 8 the right default when one tool call is one round? 14 limit stops in one task.
+- What does a session of this length cost on a provider that does not cache? The uncached rate for 4.7M prompt tokens was not looked up.
+
+Hypotheses touched (description only):
+- F1: supports the narrow claim (a profile with argument summaries resolves path and command steps): 11 of 11 checkable validators resolved, against 0 of 66 before. Silent on whether a fail is meaningful (no flow attribution).
+- H2 (cache floor): silent: request 0 (3.3k prompt tokens) had no hit and request 1 (4.6k) had one, which a floor near 4,096 and a plain first request both produce.
+- H7 (repeat note): silent, 0 repeats.
+- H10 (templated nudge): silent; every `continue` here followed a limit or a provider failure, none a stall.
+
+Limits: one session, one model, one task, one operator; the operator held and read every step, which a person would not do at this length.
