@@ -1126,6 +1126,9 @@ check('layout: the page itself does not scroll',await page.evaluate(() => docume
     check('strategy wording: a session under a strategy registered before the neutral wording is sent the shell tool it was registered with', s0.ledger.at(-1)?.strat !== 'strat-serial-3.0' && !!sh(r.tools) && JSON.stringify(sh(r.tools)) === JSON.stringify(sh(OLD.defs)), s0.ledger.at(-1)?.strat + ' ' + JSON.stringify(sh(r.tools)?.function?.description).slice(0, 80));
   }
   await paste({ settings: { ghlabel: 'test repos', watchModel: 'mock-1', helper: 'mock-1', strategy: 'strat-serial-3.0' } });
+  // spec correction (own commit): the helper prompts below are read from the requests made under strat-serial-3.0 only;
+  // earlier blocks ran a watcher under strategies that keep their registered line, which names the harness
+  await page.evaluate(async () => { (await import('./app/providers.js')).providers.mock.requests?.splice(0); });
   await page.click('[data-act=new]');
   // this session gets the shell tool and the local tools by its own switches (the in-browser machine is off in this suite)
   await page.evaluate(() => { for (const id of ['vmtools', 'localtools']) { const e = document.querySelector('#' + id); e.checked = true; e.dispatchEvent(new Event('change', { bubbles: true })); } });
