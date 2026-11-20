@@ -38,6 +38,8 @@ export const FIELDS = {
   bpKinds: { check: v => Array.isArray(v) && v.every(k => ['system', 'tail', 'stem'].includes(k)), hint: 'cache checkpoint kinds: system, tail, stem' },
   machineQuota: { check: v => Number.isInteger(v) && v >= 0, hint: 'MB per session home; 0 = none' },
   machineCpu: { check: v => Number.isInteger(v) && v >= 2 && v <= 1024, hint: 'CPU shares per session job, 2 to 1024; 1024 = a normal share' },
+  shellOn: { check: v => v === 'machine' || /^host:[\w-]{1,32}$/.test(v), hint: 'where the shell tool runs: machine (the in-page Linux machine) or host:NAME (an --exec target of the local bridge)' },
+  vmTmux: { check: v => typeof v === 'boolean', hint: 'true/false: the shell tool\'s commands run in one lasting tmux session per session (the "agent pty"), in the in-page machine or on the host' },
   newProfile: { check: v => typeof v === 'string', hint: 'a profile name' },
   metricsLayout: { check: v => validLayout(v).ok, hint: 'a metrics layout: {slots: {slot: [{id}]}} (docs/METRICS-PANEL.md)' },
 };

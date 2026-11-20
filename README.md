@@ -159,7 +159,11 @@ The **Sessions** section of the inspector lists every session side by side from 
 
 ### Tools
 
-Tool definitions make no mention of where they run. Current set: `run_js`, `shell` (when the machine is on), `scratchpad_read`, `scratchpad_write`, `show_widget`, `output_read`, `fan_out`, `branch_read`, `pattern_find`, `pattern_get`, `pattern_put`, `pattern_run`, `entry_read`.
+Tool definitions make no mention of where they run, and nothing else a model is given does either: the core prompt, tool definitions, tool results, injected turns and helper prompts hold none of the identifying terms listed in `app/neutral.js` (the product's and the organisation's names, "harness", "browser", "page", "tab", "this app", "bridge", `wh-local`, "cross-origin", "service worker", "github.io"). The suites collect that text from the same code the provider request is built from and fail on a term (`local` and `main`). A failure of the shell or the local tools reaches the model in plain words ("the machine is not available"); the reason goes to the person as a notice. Text for the person (the UI, this README) is not bound by this, and words the person writes (a system prompt, a credential label) reach the model as written. What wording cannot hide: a model that reads this repository can match its own tool list against `app/tools.js`.
+
+Changing a tool description changes the cached prefix of sessions that have the tool (once), and the steering fingerprint. The neutral wording of `shell`, `concern_file` and `local_*` was such a change, made in place: no new strategy id, the core prompt text is the same.
+
+Current set: `run_js`, `shell` (when the machine is on, or "shell runs on" names a host: see Host shell), `scratchpad_read`, `scratchpad_write`, `show_widget`, `output_read`, `fan_out`, `branch_read`, `pattern_find`, `pattern_get`, `pattern_put`, `pattern_run`, `entry_read`.
 
 - `run_js` runs in a network-less sandbox (see Sandbox); killed after 5 s.
 - An `html` widget runs in an iframe with `sandbox="allow-scripts"`, which cannot read the page or its storage. An `embed` is a third-party page and gets its own origin.
@@ -292,7 +296,7 @@ Settings → Log repo names a private repository (`owner/name`) where the harnes
 
 ### Linux machine
 
-Settings → "Linux machine" gives new sessions a `shell` tool: an x86_64 Alpine 3.20 machine with bash, coreutils, git, python3, gh, curl and jq, emulated in the page ([container2wasm](https://github.com/ktock/container2wasm), Bochs, WASI). There is also a per-session switch under the system prompt.
+Settings → "Linux machine" gives new sessions a `shell` tool: an x86_64 Alpine 3.20 machine with bash, coreutils, git, python3, gh, curl and jq, emulated in the page ([container2wasm](https://github.com/ktock/container2wasm), Bochs, WASI). There is also a per-session switch under the system prompt. The tool's description says only that it runs a bash script on a Linux machine and that what is installed and reachable depends on the machine; the same tool can run on a host of yours instead (Host shell, below).
 
 - **Cost of use:** about 200 MB, downloaded once in 45 MB parts and kept in the browser's Cache API. In headless Chromium here, boot plus a first command took about 30 s, and a `gh api` call about 20 s. It is slow, but it is a real machine.
 - **Isolation:** the emulator needs SharedArrayBuffer, so the switch registers `coi-serviceworker` (MIT), which adds COOP/COEP headers that Pages cannot send. Switching it off removes the service worker. COEP `credentialless` keeps CDN scripts and third-party media loading; Safari falls back to `require-corp`.
@@ -340,6 +344,36 @@ It prints a URL (default `http://127.0.0.1:8791`) and a random token for this ru
 - **The browser.** Chrome asks once to allow "Local network access" for an https page to reach localhost; the bridge answers the Private Network Access preflight so the request can go through. If the bridge is not running, or the browser or an extension blocks the call, the page cannot tell which, and the Settings status says both.
 - **Not the debug bridge.** `scripts/bridge.mjs` pairs an agent with the page through a git branch; this one is a loopback server the page calls directly.
 - **Tests.** `node scripts/test-localbridge.mjs` (suite `local` in `scripts/ci.mjs`) starts the real bridge with a throwaway service and folder. See `docs/TESTING.md` for the other suites and their gotchas.
+
+### Host shell: the shell tool on a host of yours
+
+The `shell` tool can run its commands on a Linux host you name instead of the in-page machine: a WSL distro, a container, or the computer the bridge runs on. The model is sent the same tool (name, schema and description, byte for byte) and reads the same result text either way; where the command ran is harness data and is not in anything the model is given.
+
+```
+node localbridge/wh-local.mjs --exec dev=wsl:Ubuntu:you:/home/you/work/repo
+node localbridge/wh-local.mjs --exec box=wsl-podman:Ubuntu:devbox:dev:/work/repo --exec-max 4
+```
+
+**Security: `--exec` runs commands.** It is off unless you give the flag. With it, a page that holds the bridge token can run any command as the user you named, in the place you named, with everything that user may do there; the bridge adds no sandbox of its own. Name a user and a folder you would hand to the model. A request can name only the target (`NAME`), the command, a folder inside the target's folder and a timeout; the launcher, the user, the distro or container and the folder come from your flag alone.
+
+| `--exec NAME=…` | Runs | Bridge runs on |
+|---|---|---|
+| `local:DIR` | bash here, as the user running the bridge | Linux, macOS (refused on Windows) |
+| `wsl:DISTRO:USER:DIR` | `wsl.exe -d DISTRO -u USER --cd DIR -e bash` | Windows |
+| `podman:CONTAINER:USER:DIR` (`docker:` the same) | `podman exec -i -u USER -w DIR CONTAINER bash` | Linux, macOS |
+| `wsl-podman:DISTRO:CONTAINER:USER:DIR` (`wsl-docker:` the same) | `wsl.exe -d DISTRO -u root -e podman exec -i -u USER -w DIR CONTAINER bash` | Windows |
+
+A launcher is one entry of `LAUNCHERS` in `localbridge/wh-local.mjs`: its fields and the argv that goes in front of `bash`. The container must be running; the bridge does not start it.
+
+- **The page setting.** "shell runs on" (`shellOn`) is `machine` (the in-page machine; also the meaning of blank) or `host:NAME`. It is a harness setting like any other: Defaults, a profile, or one session (the scope editor's "shell runs on" row), and Paste config (`{"settings": {"shellOn": "host:dev"}}`). The bridge's URL and token are the Local bridge settings above. While the resolved value names a host, new sessions get the `shell` tool without the in-page machine being on. The Machine pane says which one the current session uses.
+- **How a command runs.** `POST /exec/NAME` with `{cmd, cwd?, timeout?}`. The command goes to a login bash in the target on stdin, never on a command line, so quoting, non-ASCII text and long scripts arrive intact. It runs with no stdin, both output streams as one in their real order, in a process group of its own. The answer is `{code, output, timed_out, truncated, ms}`.
+- **Limits.** Timeout 1 to 900 s per call (120 when the request names none; the page sends the tool's own). At the timeout, or when the page drops the request, the bridge stops the command's process group inside the target (TERM, then KILL a second later), then the launcher's own process tree if that is still there: stopping `wsl.exe` or the `podman exec` client alone would leave the command running. Output is cut at 4 MB and marked; the command still runs to its end. 4 commands at once over all targets (`--exec-max N`, 1 to 64); one more is refused with 429, not queued. The same protection as the other routes applies (loopback only, token, Origin and Host checks, 5 MB body). The bridge's token is not in the command's environment.
+- **State between calls** matches the in-page machine. Each call is a fresh bash that starts in the target's folder; files stay, `cd` and `export` do not. With the tmux option on (Machine → *agent pty*, or `{"settings": {"vmTmux": true}}` in Paste config) the command is typed into one lasting tmux session of the session tree on the host, `agent-<last 8 characters of the session id>`, made on first use; attach with `tmux attach -t agent-…` to watch or type. tmux must be installed in the target. The *agent pty* tab mirrors only the in-page machine.
+- **What does not apply on a host:** the per-session unix user, quota and CPU shares, the package shelf, the file explorer and its session mark, the injected GitHub credential, and the Machine pane's terminal. The command's output still passes the outbound hooks (known secrets are masked before the model reads it).
+- **When it cannot run.** The model reads `Tool error: the machine is not available` (or busy, or could not start the command); the person gets a notice with the reason (bridge not running, wrong token, unknown target, what the launcher said).
+- **Containers without an init.** When a command is stopped, its orphaned children are reaped by the container's process 1. A container whose process 1 never reaps (for example `sleep infinity`) keeps them as defunct entries until it restarts: nothing is running, but the entries pile up. Start such a container with `--init`.
+- **Measured (2026-11-20, Windows 11, bridge on Windows, WSL2 Ubuntu 24.04, podman 4.9.3, node 22 in both targets).** A call costs about 0.35 s through `wsl:` and about 1.8 s through `wsl-podman:` before the command's own time. `node --check app/main.js`: status 0, no output, 0.37 s / 1.97 s. `git status --short`: status 0, 0.35 s / 1.80 s. `exit 7` after writing to both streams: status 7, both lines in order. A 3 s timeout on a command with a background child: answered after 3.3 s / 4.7 s with the output so far and `timed_out`; two matching processes during, none after, in the distro and in the container. A dropped request: its command gone within 3.5 s. `seq 1 200000` (1.3 MB): whole. `seq 1 3000000` (21 MB): 4,000,000 characters and `truncated`. Five at once: four ran, one refused. From the page (headless Chrome, mock provider, real bridge): a turn with one shell call took 1.0 s / 2.5 s; with the tmux option both calls ran on the same pty of one tmux session.
+- **Tests.** Suite `local` runs the real bridge; its run checks need a bash target: on Linux and macOS they use `local:` in a temporary folder, on Windows set `WH_TEST_EXEC` (for example `wsl:DISTRO:USER:DIR`), else they print one `SKIP` line. Suite `main` checks the page side against a labelled mock of the bridge.
 
 ### Live values through CSS (slots)
 

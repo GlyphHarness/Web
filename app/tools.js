@@ -210,7 +210,7 @@ export const repoTools = [
     { repo: { type: 'string' }, head: { type: 'string' }, base: { type: 'string' }, title: { type: 'string' }, body: { type: 'string' }, draft: { type: 'boolean' } }, ['repo', 'head', 'title'],
     (a, ctx) => ctx.git ? ctx.git.pr(a) : noRepo),
   fn('concern_file',
-    'File a concern about the harness itself as an issue in its repository, for later: a pattern worth keeping or fixing, input formed badly for a tool or an interop, a protocol gap, a policy or cost problem. Give the evidence, not a claim. The user approves each one.',
+    'File a concern about the tools and conventions of this environment, as an issue for later: a pattern worth keeping or fixing, input formed badly for a tool or an interop, a protocol gap, a policy or cost problem. Give the evidence, not a claim. The user approves each one.',
     { kind: { type: 'string', enum: ['pattern', 'interop', 'protocol', 'policy', 'cost', 'ui', 'other'] }, title: { type: 'string' }, what: { type: 'string', description: 'what happened: the call, the output, the evidence' }, expected: { type: 'string' }, intent: { type: 'string' } }, ['kind', 'title', 'what'],
     (a, ctx) => ctx.concern ? ctx.concern(a, 'model') : 'No concerns repository is configured.'),
   fn('repo_create',
@@ -218,10 +218,12 @@ export const repoTools = [
     { name: { type: 'string' }, owner: { type: 'string' }, private: { type: 'boolean' }, description: { type: 'string' }, readme: { type: 'boolean' } }, ['name'],
     (a, ctx) => ctx.git ? ctx.git.create(a) : noRepo),
 ];
-// The Linux machine (vm.js). Only sessions created with it, or switched on, get it.
+// The shell: a Linux machine the session's commands run on. Which one (the in-browser machine, vm.js, or a host
+// through the local bridge) is the session's "shell runs on" setting, resolved by the host page (shellRunner in
+// main.js) and handed in as ctx.vm. The definition is the same bytes for every backend and says nothing of which.
 export const vmTools = [
   fn('shell',
-    'Run a bash script on a Linux machine (Alpine: bash, coreutils, git, python3, gh, curl, jq; more with wh-install <name>, e.g. tmux). State persists between calls until the page is reloaded. Returns the combined output and the exit status. Outbound HTTPS works only for hosts that allow cross-origin requests: the GitHub API does (gh is authenticated), git clone/push over HTTPS does not. If the output may be long, say in `want` what you are looking for.',
+    'Run a bash script on a Linux machine. Returns the combined output and the exit status. Files and other state on the machine persist between calls for as long as the machine runs. What is installed and which hosts the network reaches depend on the machine: check before relying on either. If the output may be long, say in `want` what you are looking for.',
     { cmd: { type: 'string' }, timeout: { type: 'integer', description: 'seconds, default 120, max 600' }, want: { type: 'string' }, ...REF_PROPS }, [],
     async (a, ctx) => {
       if (!ctx.vm) return 'No machine is available.';
@@ -255,19 +257,21 @@ export const valueTools = [
     (a, ctx) => ctx.values ? ctx.values.get(a) : 'Values are not available.'),
 ];
 // Things on this computer, through the local bridge (localbridge.js); only offered when the session has it on and Settings has a URL and token.
+// What the model reads never names the bridge (app/neutral.js).
+const NO_LOCAL = 'No local services or folders are available.';
 export const localTools = [
   fn('local_info',
-    'List what the local bridge exposes on the computer you are running for: services (name -> origin) you can call with local_http, and folders you can read with local_read.',
+    'List what the person has made available on their own computer: services (name -> origin) you can call with local_http, and folders you can read with local_read.',
     {}, [],
-    (a, ctx) => ctx.local ? lb.info(ctx.local) : 'No local bridge is configured.'),
+    (a, ctx) => ctx.local ? lb.info(ctx.local) : NO_LOCAL),
   fn('local_http',
-    'Call a local web service the person exposed through the bridge. service is a name from local_info; path starts with / and may carry a query. Returns [status type, size] then the body. The status is the service itself, not the bridge.',
+    'Call a local web service the person made available. service is a name from local_info; path starts with / and may carry a query. Returns [status type, size] then the body. The status is the one the service itself answered with.',
     { service: { type: 'string' }, method: { type: 'string', enum: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] }, path: { type: 'string' }, body: { description: 'string, or an object sent as JSON' } }, ['service'],
-    (a, ctx) => ctx.local ? lb.http(ctx.local, a) : 'No local bridge is configured.'),
+    (a, ctx) => ctx.local ? lb.http(ctx.local, a) : NO_LOCAL),
   fn('local_read',
-    'Read a file, or list a folder (path ending at a directory), from a folder the person exposed through the bridge (read-only). folder is a name from local_info; path starts with /.',
+    'Read a file, or list a folder (path ending at a directory), from a folder the person made available (read-only). folder is a name from local_info; path starts with /.',
     { folder: { type: 'string' }, path: { type: 'string' } }, ['folder'],
-    (a, ctx) => ctx.local ? lb.read(ctx.local, a) : 'No local bridge is configured.'),
+    (a, ctx) => ctx.local ? lb.read(ctx.local, a) : NO_LOCAL),
 ];
 const all = () => [...tools, ...repoTools, ...vmTools, ...askTools, ...valueTools, ...localTools];
 

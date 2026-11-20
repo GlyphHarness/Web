@@ -9,6 +9,11 @@ import { client, check as bridgeCheck, explain, normalizeUrl, urlOk, run as lbRu
 import * as config from '../app/config.js';
 import { defsFor, execTool } from '../app/tools.js';
 import * as prof from '../app/profiles.js';
+// exec targets, the host shell and the identifying terms: read as namespaces so a missing export is a failed check, not a crash
+import * as bridgeMod from '../localbridge/wh-local.mjs';
+import * as lbMod from '../app/localbridge.js';
+import { buildRequest } from '../app/context.js';
+const neutralMod = await import('../app/neutral.js').catch(() => null);
 
 let fails = 0;
 const check = (name, ok, detail = '') => { console.log((ok ? 'PASS ' : 'FAIL ') + name + (ok ? '' : ' ' + detail)); if (!ok) fails++; };
@@ -157,7 +162,9 @@ try {
   check('run.info names services and folders', /"app"/.test(await lbRun.info(c)) && /"notes"/.test(await lbRun.info(c)));
   const call = (name, args, local) => execTool({ function: { name, arguments: JSON.stringify(args) } }, { local, pads: [], by: () => ({}) });
   check('tools: local_read through execTool', (await call('local_read', { folder: 'notes', path: '/todo.md' }, c)).includes('- one'));
-  check('tools: local_* without a bridge says so', /No local bridge is configured/.test(await call('local_info', {}, null)));
+  // spec change (host-shell work): this check pinned the words "No local bridge is configured", which name the bridge to the model;
+  // the goal is now that no model-visible text does. What stays checked: the call is answered as not available ("No ..." is a failed call in the trail).
+  check('tools: local_* with nothing configured says so', /^No /.test(await call('local_info', {}, null)));
   check('tools: local_http bridge errors come back as Tool error', /^Tool error: /.test(await call('local_http', { service: 'nope', path: '/' }, c)));
   check('tools: offered only when the session has the local tool group', !defsFor({ tools: [] }).some(d => /^local_/.test(d.function.name)) && defsFor({ tools: ['local'] }).filter(d => /^local_/.test(d.function.name)).length === 3);
   check('profile caps: local can be narrowed away', prof.allowedTool('local_http', { local: true }) === true && !prof.allowedTool('local_http', { local: false }));
@@ -209,6 +216,160 @@ const rows = config.planImport(`local bridge token: ${KEY}\nlocal bridge url: ht
 check('import lines: "local bridge token" is a key, the URL a setting; the token is not echoed whole', rows.some(x => x.target?.kind === 'key' && x.target.id === KEY_ID) && rows.some(x => x.target?.kind === 'setting' && x.target.key === 'localBridge') && !JSON.stringify(rows.map(x => ({ ...x, secret: undefined }))).includes(KEY), JSON.stringify(rows.map(x => ({ ...x, secret: '…' }))));
 const snap = JSON.stringify(config.snapshot({ ...cur, keys: { [KEY_ID]: KEY }, settings: { ...cur.settings, localBridge: 'http://127.0.0.1:8791' } }));
 check('copy config: carries the bridge URL, never the token', !snap.includes(KEY) && snap.includes('127.0.0.1:8791'));
+
+// ---- exec targets: commands on a host of the person's, off unless --exec is given (README "Host shell")
+// A check that throws is a failed check (the exports it needs may not exist yet).
+const attempt = async (name, fn) => { let ok = false, d = ''; try { const r = await fn(); if (Array.isArray(r)) { ok = !!r[0]; d = String(r[1] ?? ''); } else ok = !!r; } catch (e) { d = 'threw: ' + (e?.message || e); } check(name, ok, d); };
+const rawTo = (port, p, { method = 'GET', headers = {}, body } = {}) => new Promise((ok, no) => {
+  const r = http.request({ host: '127.0.0.1', port, path: p, method, headers }, res => { const chunks = []; res.on('data', c => chunks.push(c)); res.on('end', () => ok({ status: res.statusCode, headers: res.headers, body: Buffer.concat(chunks).toString() })); });
+  r.on('error', no); if (body) r.write(body); r.end();
+});
+const post = (br, name, body, headers = auth) => rawTo(br.port, '/exec/' + name, { method: 'POST', headers: { ...headers, 'content-type': 'application/json' }, body: typeof body === 'string' ? body : JSON.stringify(body) });
+const J = r => { try { return JSON.parse(r.body); } catch { return {}; } };
+const sleepMs = ms => new Promise(ok => setTimeout(ok, ms));
+
+{
+  const off = await start({ port: 0, token: TOKEN });
+  await attempt('exec: off unless asked for: a bridge started without --exec runs nothing', async () => { const r = await post(off, 'dev', { cmd: 'echo hi' }); const i = J(await rawTo(off.port, '/info', { headers: auth })); return [r.status === 404 && Array.isArray(i.exec) && i.exec.length === 0, r.status + ' ' + JSON.stringify(i.exec)]; });
+  await off.close();
+}
+
+await attempt('cli: --exec NAME=wsl:DISTRO:USER:DIR (a WSL user, from a bridge on Windows)', () => { const t = parseArgs(['--exec', 'dev=wsl:UbuntuBase:wh:/home/wh/work/Web']).exec.dev; return [t.kind === 'wsl' && t.distro === 'UbuntuBase' && t.user === 'wh' && t.dir === '/home/wh/work/Web', JSON.stringify(t)]; });
+await attempt('cli: --exec NAME=podman:CONTAINER:USER:DIR (a container; docker is the same shape)', () => { const o = parseArgs(['--exec', 'box=podman:wh-dev:dev:/work/Web', '--exec', 'd=docker:c1:u1:/srv']).exec; return [o.box.kind === 'podman' && o.box.container === 'wh-dev' && o.box.user === 'dev' && o.box.dir === '/work/Web' && o.d.kind === 'docker' && o.d.container === 'c1', JSON.stringify(o)]; });
+await attempt('cli: --exec NAME=wsl-podman:DISTRO:CONTAINER:USER:DIR (a container inside a WSL distro, from a bridge on Windows)', () => { const t = parseArgs(['--exec', 'box=wsl-podman:UbuntuBase:wh-dev:dev:/work/Web']).exec.box; return [t.kind === 'wsl-podman' && t.distro === 'UbuntuBase' && t.container === 'wh-dev' && t.user === 'dev' && t.dir === '/work/Web', JSON.stringify(t)]; });
+await attempt('cli: --exec NAME=local:DIR (bash on the computer the bridge runs on)', () => { const t = parseArgs(['--exec', 'here=local:/srv/work']).exec.here; return [t.kind === 'local' && t.dir === '/srv/work', JSON.stringify(t)]; });
+await attempt('cli: --exec-max N caps the commands running at once', () => parseArgs(['--exec-max', '2']).execMax === 2);
+for (const bad of [['--exec', 'dev'], ['--exec', 'dev=nope:x'], ['--exec', 'dev=wsl:UbuntuBase:wh'], ['--exec', 'dev=wsl:UbuntuBase:wh:relative/dir'], ['--exec', 'bad name=local:/tmp'], ['--exec', 'dev=podman:box:dev'], ['--exec', 'dev=wsl::wh:/x'], ['--exec-max', '0']])
+  await attempt('cli: refuses ' + bad.join(' '), () => { try { parseArgs(bad); return false; } catch (e) { return [!/unknown option/.test(e.message), e.message]; } });
+
+await attempt('launchers: one small entry each; the command line comes from the flag alone', () => {
+  const L = bridgeMod.LAUNCHERS, a = (k, t) => JSON.stringify(L[k].argv(t, t.dir)), is = (got, want) => got === JSON.stringify(want);
+  const t = { distro: 'U', user: 'wh', container: 'box', dir: '/w' };
+  const got = { wsl: a('wsl', t), podman: a('podman', t), docker: a('docker', t), wp: a('wsl-podman', t), wd: a('wsl-docker', t), local: a('local', { dir: '/w' }) };
+  return [is(got.wsl, ['wsl.exe', '-d', 'U', '-u', 'wh', '--cd', '/w', '-e'])
+    && is(got.podman, ['podman', 'exec', '-i', '-u', 'wh', '-w', '/w', 'box'])
+    && is(got.docker, ['docker', 'exec', '-i', '-u', 'wh', '-w', '/w', 'box'])
+    && is(got.wp, ['wsl.exe', '-d', 'U', '-u', 'root', '-e', 'podman', 'exec', '-i', '-u', 'wh', '-w', '/w', 'box'])
+    && is(got.wd, ['wsl.exe', '-d', 'U', '-u', 'root', '-e', 'docker', 'exec', '-i', '-u', 'wh', '-w', '/w', 'box'])
+    && is(got.local, []), JSON.stringify(got)];
+});
+
+// protection and request shape: a target whose launcher cannot work here, so nothing can actually run
+{
+  const x = await start({ port: 0, token: TOKEN, exec: { t: 'podman:no-such-box-zz:nobody:/' } });
+  await attempt('exec: needs the token', async () => (await post(x, 't', { cmd: 'echo hi' }, {})).status === 401);
+  await attempt('exec: another origin is refused even with the token', async () => (await post(x, 't', { cmd: 'echo hi' }, { ...auth, origin: 'https://evil.example' })).status === 403);
+  await attempt('exec: only POST runs a command', async () => { const r = await rawTo(x.port, '/exec/t', { headers: auth }); return [r.status === 405, r.status]; });
+  await attempt('exec: unknown target: 404 naming the known ones', async () => { const r = await post(x, 'nope', { cmd: 'echo hi' }); return [r.status === 404 && J(r).targets?.[0] === 't', r.status + ' ' + r.body]; });
+  await attempt('exec: the request names only the target, the command, a relative folder and a timeout', async () => {
+    const st = [];
+    for (const body of ['{not json', {}, { cmd: '' }, { cmd: 'pwd', cwd: '/etc' }, { cmd: 'pwd', cwd: 'a/../../b' }, { cmd: 'echo \u0000' }, { cmd: 'id', user: 'root' }, { cmd: 'id', launcher: 'bash' }, { cmd: 'id', timeout: 'soon' }]) st.push((await post(x, 't', body)).status);
+    return [st.every(s => s === 400), st.join(',')];
+  });
+  await attempt('exec: a body over the cap is refused', async () => (await post(x, 't', { cmd: 'x'.repeat(5e6 + 10) })).status === 413);
+  await attempt('exec: info lists targets by name only (no user, folder or container)', async () => { const r = await rawTo(x.port, '/info', { headers: auth }); return [JSON.stringify(J(r).exec) === '["t"]' && !/no-such-box-zz|nobody/.test(r.body), r.body]; });
+  await attempt('exec: a launcher that cannot start the command is a 502, not a result', async () => { const r = await post(x, 't', { cmd: 'echo hi' }); return [r.status === 502 && !!J(r).error && J(r).code === undefined, r.status + ' ' + r.body.slice(0, 200)]; });
+  await attempt('status: the Settings check learns the shell targets', async () => { const s = await bridgeCheck({ url: x.url, token: TOKEN }); return [s.ok && s.info?.exec?.[0] === 't', JSON.stringify(s)]; });
+
+  // what the model is told when the host cannot run a command: nothing about how it is reached; the reason is kept for the person
+  const found = t => neutralMod ? neutralMod.found(String(t)) : ['(app/neutral.js is missing)'];
+  const shellVia = (cl, name, args = { cmd: 'echo hi' }) => execTool({ function: { name: 'shell', arguments: JSON.stringify(args) } }, { vm: lbMod.hostShell(cl, name), pads: [], by: () => ({}) });
+  for (const [what, cl, name] of [['the bridge is not running', client({ url: 'http://127.0.0.1:9', token: TOKEN }), 't'], ['the token is wrong', client({ url: x.url, token: 'nope' }), 't'], ['the target is not one of the bridge\'s', client({ url: x.url, token: TOKEN }), 'zzz'], ['the launcher fails', client({ url: x.url, token: TOKEN }), 't']]) {
+    await attempt(`host shell: when ${what}, the model reads a plain failure with no identifying term`, async () => { const out = await shellVia(cl, name); return [/^Tool error: /.test(out) && found(out).length === 0, out]; });
+    await attempt(`host shell: when ${what}, the reason is kept for the person`, async () => { const e = await lbMod.hostShell(cl, name).run('echo hi', 10).then(() => null, e => e); return [!!e && typeof e.detail === 'string' && e.detail.length > 10, String(e?.detail)]; });
+  }
+  await x.close();
+}
+
+// running for real needs a bash target: the bridge's own computer on Linux/macOS (CI), or the one named in WH_TEST_EXEC
+const work = path.join(tmp, 'work'); fs.mkdirSync(path.join(work, 'sub'), { recursive: true });
+const EXEC_SPEC = process.env.WH_TEST_EXEC || (process.platform === 'win32' ? '' : 'local:' + work);
+if (!EXEC_SPEC) console.log('SKIP exec run checks (no bash target on this computer; set WH_TEST_EXEC, e.g. wsl:DISTRO:USER:DIR)');
+else {
+  const x = await start({ port: 0, token: TOKEN, exec: { t: EXEC_SPEC }, execMax: 2, execOut: 10000 });
+  const dir = process.env.WH_TEST_EXEC ? EXEC_SPEC.split(':').at(-1) : fs.realpathSync(work);
+  const run = async body => { const r = await post(x, 't', body); return { status: r.status, ...J(r) }; };
+  const n = () => 3000 + Math.floor(Math.random() * 6000);
+  const left = async k => (await run({ cmd: `pgrep -f "[s]leep ${k}" | wc -l` })).output?.trim();
+  await attempt('exec: runs the command; both streams come back as one, in order, with the exit status', async () => { const r = await run({ cmd: 'echo out; echo err >&2; echo end' }); return [r.status === 200 && r.code === 0 && r.output === 'out\nerr\nend\n' && r.timed_out === false && r.truncated === false && typeof r.ms === 'number', JSON.stringify(r)]; });
+  await attempt('exec: a non-zero exit is a result', async () => { const r = await run({ cmd: 'echo nope; exit 7' }); return [r.status === 200 && r.code === 7 && r.output === 'nope\n' && r.timed_out === false, JSON.stringify(r)]; });
+  await attempt('exec: the command has no stdin', async () => { const r = await run({ cmd: 'cat; echo after', timeout: 8 }); return [r.code === 0 && r.output === 'after\n' && r.timed_out === false, JSON.stringify(r)]; });
+  await attempt('exec: quotes, dollars, backslashes and several lines arrive as written', async () => { const r = await run({ cmd: 'cat <<\'EOF\'\na "b" \'c\' $HOME \\ `d`\nEOF\necho $((6*7))' }); return [r.output === 'a "b" \'c\' $HOME \\ `d`\n42\n', JSON.stringify(r)]; });
+  await attempt('exec: every call starts in the target\'s folder with nothing carried over', async () => { await run({ cmd: 'cd /tmp; export CARRIED=1; pwd' }); const r = await run({ cmd: 'pwd; echo ${CARRIED:-unset}' }); return [r.output === dir + '\nunset\n', JSON.stringify(r) + ' want ' + dir]; });
+  if (!process.env.WH_TEST_EXEC) await attempt('exec: a relative folder inside the target', async () => { const r = await run({ cmd: 'pwd', cwd: 'sub' }); return [r.output === dir + '/sub\n', JSON.stringify(r)]; });
+  await attempt('exec: a command over its time is stopped with everything it started', async () => { const k = n(), r = await run({ cmd: `sleep ${k} & sleep ${k}`, timeout: 2 }); const l = await left(k); return [r.status === 200 && r.timed_out === true && r.ms < 15000 && l === '0', JSON.stringify(r) + ' left ' + l]; });
+  await attempt('exec: output over the cap is cut and marked', async () => { const r = await run({ cmd: 'head -c 50000 /dev/zero | tr \'\\0\' x; echo; echo done' }); return [r.truncated === true && r.output.length === 10000 && r.code === 0, JSON.stringify({ ...r, output: r.output?.length })]; });
+  await attempt('exec: no more commands at once than the cap; the rest are refused, not queued', async () => { const st = (await Promise.all([1, 2, 3].map(() => run({ cmd: 'sleep 3' })))).map(r => r.status).sort().join(','); const after = await run({ cmd: 'echo free' }); return [st === '200,200,429' && after.output === 'free\n', st + ' ' + JSON.stringify(after)]; });
+  await attempt('exec: a call the page gives up on is stopped too', async () => {
+    const k = n();
+    await new Promise(ok => { const q = http.request({ host: '127.0.0.1', port: x.port, path: '/exec/t', method: 'POST', headers: { ...auth, 'content-type': 'application/json' } }, () => {}); q.on('error', () => {}); q.end(JSON.stringify({ cmd: `sleep ${k}` })); setTimeout(() => { q.destroy(); ok(); }, 4000); });
+    await sleepMs(5000);
+    const l = await left(k); return [l === '0', 'left ' + l];
+  });
+
+  // the page's client, and the shell tool on this runner
+  const c2 = client({ url: x.url, token: TOKEN });
+  await attempt('client: exec returns the exit status and the output', async () => { const o = await c2.exec('t', { cmd: 'echo hi; exit 2' }); return [o.code === 2 && o.out === 'hi\n' && o.timedOut === false && o.truncated === false, JSON.stringify(o)]; });
+  const sh = (args, vm) => execTool({ function: { name: 'shell', arguments: JSON.stringify(args) } }, { vm, pads: [], by: () => ({}) });
+  // labelled stand-in for the in-browser machine's runner (app/vm.js through main.js): the shape the shell tool is handed there
+  const machineLike = r => ({ run: async () => r });
+  await attempt('shell tool: the same call reads the same on the host as on the machine', async () => { const a = await sh({ cmd: 'echo hi; exit 4' }, lbMod.hostShell(c2, 't')), b2 = await sh({ cmd: 'echo hi; exit 4' }, machineLike({ out: 'hi', code: 4 })); return [a === b2 && a === 'hi\n[exit 4]', JSON.stringify([a, b2])]; });
+  await attempt('shell tool: no output reads the same', async () => { const a = await sh({ cmd: 'true' }, lbMod.hostShell(c2, 't')), b2 = await sh({ cmd: 'true' }, machineLike({ out: '', code: 0 })); return [a === b2 && a === '(no output)\n[exit 0]', JSON.stringify([a, b2])]; });
+  await attempt('shell tool: a timeout reads the same', async () => { const a = await sh({ cmd: 'echo partial; sleep 300', timeout: 5 }, lbMod.hostShell(c2, 't')), b2 = await sh({ cmd: 'x', timeout: 5 }, machineLike({ out: 'partial', code: null, timedOut: true })); return [a === b2 && a === 'partial\n[timed out after 5s; interrupted]', JSON.stringify([a, b2])]; });
+  await attempt('host shell: output cut at the cap is said in the output itself', async () => { const r = await lbMod.hostShell(c2, 't').run('head -c 50000 /dev/zero | tr \'\\0\' x', 30); return [r.code === 0 && r.out.length > 10000 && r.out.length < 10100 && r.out.slice(0, 10000) === 'x'.repeat(10000), JSON.stringify({ code: r.code, n: r.out.length, tail: r.out.slice(-60) })]; });
+  await x.close();
+}
+
+// ---- where the shell runs is harness data: a setting (defaults, a profile, a session), never part of what the model is sent
+await attempt('shell runs on: a setting resolved from the defaults, then a profile, then the session', () => {
+  const ps = [{ id: 'p', name: 'p', settings: { shellOn: 'host:dev' } }];
+  return prof.SETTING_KEYS.includes('shellOn') && prof.AUDIENCE.shellOn === 'harness' && prof.effective(ps, 'p', { shellOn: 'machine' }).settings.shellOn === 'host:dev'
+    && prof.effective(ps, 'p', {}, { shellOn: 'machine' }).settings.shellOn === 'machine' && prof.effective([], undefined, { shellOn: 'host:box' }).settings.shellOn === 'host:box';
+});
+await attempt('config: shellOn takes machine or host:NAME and nothing else', () => {
+  const p = v => config.plan(JSON.stringify({ settings: { shellOn: v } }), cur);
+  return [p('host:dev').next.settings.shellOn === 'host:dev' && p('host:dev').refused.length === 0 && p('machine').refused.length === 0 && p('host:bad name').refused.length === 1 && p('elsewhere').refused.length === 1 && p('host:').refused.length === 1, JSON.stringify(p('host:dev'))];
+});
+// the tmux option's switch sits in the in-page machine's panel; a session on a host must not need that panel to use it
+await attempt('config: the tmux option (vmTmux) is true or false in Paste config', () => {
+  const p = v => config.plan(JSON.stringify({ settings: { vmTmux: v } }), cur);
+  return [p(true).next.settings.vmTmux === true && p(true).refused.length === 0 && p(false).refused.length === 0 && p('yes').refused.length === 1, JSON.stringify(p(true))];
+});
+
+// ---- nothing the harness gives a model says what runs it (app/neutral.js: the identifying terms)
+{
+  const found = t => neutralMod ? neutralMod.found(String(t)) : ['(app/neutral.js is missing)'];
+  await attempt('neutral: the documented terms are found, and ordinary words that contain them are not', () => [
+    ['WebHarness', 'GlyphHarness', 'the harness', 'glyphharness.github.io', 'a browser', 'this page', 'another tab', 'the tabs', 'this app', 'the bridge', 'in-browser', 'cross-origin', 'service worker', 'wh-local'].every(t => neutralMod.found(t).length)
+      && neutralMod.found('a table in a side pane, with pagination, on a stable machine; the application').length === 0, neutralMod.TERMS.join(' | ')]);
+  // every request shape a session can have: both log forms, every core prompt level, every tool group
+  const variants = ['calls', 'notes'].flatMap(wire => [0, 1, 2, 3].flatMap(core => ['off', 'marks'].map(edge => ({ wire, core, edge, keep: true, system: '', tools: ['ask', 'values', 'repo', 'vm', 'local'], messages: [] }))));
+  const hits = variants.flatMap(s => found(JSON.stringify(buildRequest(s, 'm', defsFor(s)))));
+  check('neutral: no request the harness builds (core prompt, every tool definition) holds an identifying term', hits.length === 0, [...new Set(hits)].join(', '));
+  // the helper prompts and fixed lines kept as module data (the watcher's and the filter's prompts are checked on the page, suite main)
+  const fixed = [];
+  for (const [file, key] of [['../app/policy.js', 'FIX_SYSTEM'], ['../app/smells.js', 'REVIEW_SYSTEM'], ['../app/term.js', 'SCRATCH_SYSTEM'], ['../app/context.js', 'KEEP_NOTE'], ['../app/context.js', 'HANDOFF_LINE'], ['../app/values.js', 'INDEX_HEAD']])
+    fixed.push(key + ': ' + String((await import(file).catch(e => ({ [key]: 'import failed: ' + e.message })))[key] ?? ''));
+  const badFixed = fixed.filter(p => p.length < 40 || /import failed/.test(p) || found(p).length);
+  check('neutral: helper prompts and fixed lines kept as module data hold no identifying term', badFixed.length === 0, badFixed.map(p => p.slice(0, 120) + ' [' + found(p).join(',') + ']').join(' | '));
+  // what each tool answers when what it needs is not there
+  const bare = { pads: [], savePads() {}, by: () => ({}), depth: 1 };
+  const answers = [];
+  for (const d of defsFor({ tools: ['ask', 'values', 'repo', 'vm', 'local'] }).filter(d => /^(shell|local_|repo_|concern_file|ask|value_|fan_out)/.test(d.function.name)))
+    answers.push(d.function.name + ': ' + await execTool({ function: { name: d.function.name, arguments: '{}' } }, bare).catch(e => String(e)));
+  const bad = answers.filter(a => found(a).length);
+  check('neutral: what a tool answers when it is not set up holds no identifying term', answers.length >= 12 && bad.length === 0, bad.join(' | '));
+  // local tools against a real bridge, when things go wrong
+  const nb = await start({ port: 0, token: TOKEN, http: { app: 'http://127.0.0.1:9' }, dir: { notes } });
+  const good = client({ url: nb.url, token: TOKEN }), viaTool = (name, args, local) => execTool({ function: { name, arguments: JSON.stringify(args) } }, { local, pads: [], by: () => ({}) });
+  const outs = [
+    await viaTool('local_http', { service: 'nope', path: '/' }, good), await viaTool('local_http', { service: 'app', path: '/' }, good), await viaTool('local_read', { folder: 'zzz', path: '/x' }, good),
+    await viaTool('local_read', { folder: 'notes', path: '/nothere' }, good), await viaTool('local_info', {}, client({ url: nb.url, token: 'nope' })), await viaTool('local_info', {}, client({ url: 'http://127.0.0.1:9', token: TOKEN })),
+  ];
+  await nb.close();
+  const badOuts = outs.filter(o => !/^Tool error: /.test(o) || found(o).length);
+  check('neutral: local tool failures come back as tool errors with no identifying term', badOuts.length === 0, badOuts.join(' | '));
+}
 
 fs.rmSync(tmp, { recursive: true, force: true });
 console.log(fails ? `\n${fails} failed` : '\nall passed');

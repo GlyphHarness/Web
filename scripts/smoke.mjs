@@ -1065,6 +1065,97 @@ await say('long script');
 }
 
 check('layout: the page itself does not scroll',await page.evaluate(() => document.documentElement.scrollHeight <= innerHeight && scrollY === 0));
+// ---- host shell: the shell tool on an exec target of the local bridge; what the model is given stays the same and names nothing (README "Host shell") ----
+{
+  const neutralMod = await import('../app/neutral.js').catch(() => null);
+  const found = t => neutralMod ? neutralMod.found(String(t)) : ['(app/neutral.js is missing)'];
+  const paste = block => page.evaluate(() => document.querySelector('[data-act=cfgpaste]').click()).then(() => page.fill('.modal textarea', JSON.stringify(block))).then(() => page.click('.modal .primary'));
+  const sess = () => page.evaluate(() => { const id = sessionStorage.getItem('wh:tab-active'); return JSON.parse(localStorage['wh:s:' + id]); });
+  const lastReq = () => page.evaluate(() => JSON.parse(document.querySelector('#req').textContent || '{}'));
+  const lastTool = async () => String((await sess()).messages.filter(m => m.role === 'tool').at(-1)?.content);
+  const setHere = v => page.evaluate(v => { const tr = document.querySelector('#scope .scope-edit[data-row="shellOn"]'); if (!tr) return false; tr.querySelector('[data-sv]').value = v; tr.querySelector('[data-act="scope-set"]').click(); return true; }, v);
+  // labelled mock: stands in for localbridge/wh-local.mjs at 127.0.0.1:8791 (the real bridge and real targets are checked in node: scripts/test-localbridge.mjs)
+  const BR = 'http://127.0.0.1:8791', TOK = 'smoke-bridge-' + 'k9'.repeat(8), execs = [];
+  let unreachable = false;
+  await bctx.route(BR + '/**', async r => {
+    const q = r.request(), cors = { 'access-control-allow-origin': new URL(url).origin, 'access-control-allow-headers': 'authorization, content-type', 'access-control-allow-methods': 'GET, POST, OPTIONS', 'access-control-allow-private-network': 'true' };
+    if (unreachable) return r.abort();
+    if (q.method() === 'OPTIONS') return r.fulfill({ status: 204, headers: cors });
+    const json = (status, o) => r.fulfill({ status, contentType: 'application/json', headers: cors, body: JSON.stringify(o) });
+    if (q.headers().authorization !== 'Bearer ' + TOK) return json(401, { error: 'token missing or wrong' });
+    const m = /^\/exec\/([\w-]+)$/.exec(new URL(q.url()).pathname);
+    if (!m || q.method() !== 'POST') return json(404, { error: 'unknown path' });
+    if (m[1] !== 'dev') return json(404, { error: 'no such target', targets: ['dev'] });
+    const b = q.postDataJSON(); execs.push({ target: m[1], ...b });
+    if (/^slow/.test(b.cmd)) return json(200, { code: 143, output: 'partial\n', timed_out: true, truncated: false, ms: 5 });
+    const ex = /^exit (\d+)/.exec(b.cmd);
+    return json(200, { code: ex ? Number(ex[1]) : 0, output: ex ? '' : 'ran: ' + b.cmd + '\n', timed_out: false, truncated: false, ms: 5 });
+  });
+  // spec correction (own commit): the credential label is the person's own words and goes into the first message as they wrote it
+  // (this suite's earlier label names an organisation), so the session here gets a plain one; and the helper prompts are
+  // counted from requests made in this block (an earlier reload empties what the mock provider keeps): a watcher and a filter.
+  await paste({ settings: { ghlabel: 'test repos', watchModel: 'mock-1', helper: 'mock-1' } });
+  await page.click('[data-act=new]');
+  // this session gets the shell tool and the local tools by its own switches (the in-browser machine is off in this suite)
+  await page.evaluate(() => { for (const id of ['vmtools', 'localtools']) { const e = document.querySelector('#' + id); e.checked = true; e.dispatchEvent(new Event('change', { bubbles: true })); } });
+  await say('shell: echo nv-one');
+  const offText = await lastTool(), reqMachine = await lastReq();
+  check('neutral: a shell call that cannot run says so to the model without saying what runs it', /^Tool error: /.test(offText) && found(offText).length === 0, offText);
+
+  await paste({ settings: { localBridge: BR, shellOn: 'host:dev' }, keys: { localbridge: TOK } });
+  check('host shell: where the shell runs is a setting (harness data); the token stays in the key store', await page.evaluate(() => { const m = localStorage['wh:meta']; return JSON.parse(m).settings.shellOn === 'host:dev' && !m.includes('smoke-bridge-'); }));
+  const errsBefore = await visible().locator('.msg[data-role=error]').count();
+  await say('shell: echo nv-two');
+  const reqHost = await lastReq();
+  check('host shell: the command goes to the named target with the tool\'s own timeout, and nothing else', execs.length === 1 && execs[0].target === 'dev' && execs[0].cmd === 'echo nv-two' && execs[0].timeout === 600 && Object.keys(execs[0]).sort().join() === 'cmd,target,timeout', JSON.stringify(execs));
+  check('host shell: the result reads as the machine\'s does: the output, then the exit status', await lastTool() === 'ran: echo nv-two\n[exit 0]', await lastTool());
+  await say('shell: exit 3');
+  check('host shell: a non-zero exit reads the same', await lastTool() === '(no output)\n[exit 3]', await lastTool());
+  await say('shell: slow nv');
+  check('host shell: a timeout reads the same', await lastTool() === 'partial\n[timed out after 600s; interrupted]', await lastTool());
+  // the tmux option on a host (set by Paste config: the in-page machine's panel is not needed): the command is typed into
+  // one lasting tmux session of this session there. The mock only shows what was sent; a real run is in docs/TESTING.md.
+  await paste({ settings: { vmTmux: true } });
+  await say('shell: echo nv-pty');
+  await paste({ settings: { vmTmux: false } });
+  const ptyCmd = String(execs.at(-1)?.cmd || '');
+  check('host shell: with the tmux option the command is typed into the session\'s own tmux session on the host', /tmux new-session -d -s agent-[a-z0-9]+ /.test(ptyCmd) && /tmux send-keys -t agent-[a-z0-9]+ /.test(ptyCmd) && ptyCmd.includes('\necho nv-pty\n') && found(ptyCmd).length === 0 && !/WH_|\.wh\b/.test(ptyCmd), ptyCmd.slice(0, 160));
+  check('host shell: the tools and the prompt the model is sent are byte-identical whichever backend runs the shell', (reqMachine.tools || []).some(t => t.function.name === 'shell') && JSON.stringify(reqMachine.tools) === JSON.stringify(reqHost.tools) && JSON.stringify(reqMachine.messages[0]) === JSON.stringify(reqHost.messages[0]));
+
+  // for one session: set at the session level, this session runs on the machine again while the defaults still say host
+  await setHere('machine');
+  const ran = execs.length;
+  await say('shell: echo nv-three');
+  const s3 = await sess();
+  check('host shell: the choice can be made for one session', s3.over?.shellOn === 'machine' && execs.length === ran && await page.evaluate(() => JSON.parse(localStorage['wh:meta']).settings.shellOn) === 'host:dev', JSON.stringify(s3.over) + ' ' + execs.length);
+  await setHere('');
+
+  // the host cannot be reached: the model reads a plain failure; the person gets the reason on the page
+  unreachable = true;
+  await say('shell: echo nv-four');
+  unreachable = false;
+  const downText = await lastTool();
+  check('host shell: when the host cannot be reached the model reads a plain failure and the person is told why', /^Tool error: /.test(downText) && found(downText).length === 0 && await visible().locator('.msg[data-role=error]').count() > errsBefore, downText);
+
+  // a long result with a stated want goes through the filter helper; the watcher sees every call
+  await say('long script');
+  await page.waitForTimeout(600);
+  // everything this session's model was given: the prompt, the tool definitions, every result and injected turn
+  const reqEnd = await lastReq(), names = (reqEnd.tools || []).map(t => t.function.name), hits = found(JSON.stringify(reqEnd));
+  const where = hits.length ? JSON.stringify(reqEnd).split(/(?<=[.!?\n])\s|\\n/).filter(x => found(x).length).map(x => x.slice(0, 160)).slice(0, 4).join(' ~ ') : '';
+  check('neutral: nothing in the session\'s request (core prompt, tool definitions with shell and local_*, results) holds an identifying term', names.includes('shell') && names.includes('local_info') && reqEnd.messages.length > 8 && hits.length === 0, [...new Set(hits)].join(', ') + ' ' + where);
+  // the helper prompts the mock provider was sent here (the watcher's and the filter's; the other helper prompts are checked in node)
+  const sys = await page.evaluate(async () => { const m = (await import('./app/providers.js')).providers.mock; return m.requests ? [...new Set(m.requests.map(b => b.messages?.[0]?.role === 'system' ? String(b.messages[0].content) : '').filter(t => /^(WATCH\.|You condense|You filter|You repair|You review|TERMINAL SCRATCH)/.test(t)))] : null; });
+  const sysHits = sys ? sys.flatMap(found) : ['(the mock provider keeps no requests)'];
+  check('neutral: no helper prompt sent here (the watcher\'s, the filter\'s) holds an identifying term', !!sys && sys.some(t => t.startsWith('WATCH.')) && sys.some(t => t.startsWith('You filter')) && sysHits.length === 0, [...new Set(sysHits)].join(', ') + ' in ' + (sys || []).length + ' prompts');
+
+  await page.click('[data-act=new]');
+  check('host shell: new sessions get the shell tool while the defaults name a host', await page.isChecked('#vmtools'));
+  await paste({ settings: { localBridge: '', shellOn: 'machine', watchModel: '' }, keys: { localbridge: '' } });
+  await bctx.unroute(BR + '/**');
+}
+
+check('layout: the page itself does not scroll', await page.evaluate(() => document.documentElement.scrollHeight <= innerHeight && scrollY === 0));
 if (shot) await page.screenshot({ path: shot });
 check('no page errors', errors.filter(e => !/schema 99|ERR_TUNNEL|Failed to load resource/.test(e)).length === 0, errors.join(' | '));
 check('tests: no OpenRouter model request was made (mock only)', !orCalls.some(u => /chat\/completions|completions|responses/.test(u)), orCalls.join(' '));
