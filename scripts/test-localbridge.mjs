@@ -266,6 +266,18 @@ await attempt('launchers: one small entry each; the command line comes from the 
     for (const body of ['{not json', {}, { cmd: '' }, { cmd: 'pwd', cwd: '/etc' }, { cmd: 'pwd', cwd: 'a/../../b' }, { cmd: 'echo \u0000' }, { cmd: 'id', user: 'root' }, { cmd: 'id', launcher: 'bash' }, { cmd: 'id', timeout: 'soon' }]) st.push((await post(x, 't', body)).status);
     return [st.every(s => s === 400), st.join(',')];
   });
+  // spec (judge, bridge): the folder reaches the launcher's command line (wsl.exe --cd, podman -w), so it is plain characters only
+  await attempt('exec: a folder is letters, digits and . _ - / only, relative, and does not start with -', async () => {
+    const st = [];
+    for (const cwd of ['a b', '-x', 'a;b', 'a$b', 'a\\b', 'a"b', "a'b", 'a\nb', '~/x', 'a*b']) st.push((await post(x, 't', { cmd: 'pwd', cwd })).status);
+    return [st.every(s => s === 400), st.join(',')];
+  });
+  await attempt('exec: an ordinary relative folder still passes the request check', async () => { const r = await post(x, 't', { cmd: 'pwd', cwd: 'sub/dir-1_x.y' }); return [r.status === 502, r.status + ' ' + r.body.slice(0, 120)]; });
+  // spec (judge, bridge): a command on this computer (local:) gets a small environment, not the bridge's own
+  await attempt('exec: a local target\'s command gets PATH, HOME, LANG and TERM, and no other variable of the bridge', () => {
+    const e = bridgeMod.commandEnv?.({ kind: 'local' }, { PATH: '/bin', HOME: '/h', LANG: 'C.UTF-8', TERM: 'xterm', USER: 'u', TMPDIR: '/t', WH_BRIDGE_TOKEN: 'tok', AWS_SECRET_ACCESS_KEY: 'k', SOME_VAR: 'v' });
+    return [!!e && e.PATH === '/bin' && e.HOME === '/h' && e.LANG === 'C.UTF-8' && e.TERM === 'xterm' && e.TMPDIR === '/t' && !('WH_BRIDGE_TOKEN' in e) && !('AWS_SECRET_ACCESS_KEY' in e) && !('SOME_VAR' in e), JSON.stringify(e)];
+  });
   await attempt('exec: a body over the cap is refused', async () => (await post(x, 't', { cmd: 'x'.repeat(5e6 + 10) })).status === 413);
   await attempt('exec: info lists targets by name only (no user, folder or container)', async () => { const r = await rawTo(x.port, '/info', { headers: auth }); return [JSON.stringify(J(r).exec) === '["t"]' && !/no-such-box-zz|nobody/.test(r.body), r.body]; });
   await attempt('exec: a launcher that cannot start the command is a 502, not a result', async () => { const r = await post(x, 't', { cmd: 'echo hi' }); return [r.status === 502 && !!J(r).error && J(r).code === undefined, r.status + ' ' + r.body.slice(0, 200)]; });
@@ -293,6 +305,7 @@ else {
   const left = async k => (await run({ cmd: `pgrep -f "[s]leep ${k}" | wc -l` })).output?.trim();
   await attempt('exec: runs the command; both streams come back as one, in order, with the exit status', async () => { const r = await run({ cmd: 'echo out; echo err >&2; echo end' }); return [r.status === 200 && r.code === 0 && r.output === 'out\nerr\nend\n' && r.timed_out === false && r.truncated === false && typeof r.ms === 'number', JSON.stringify(r)]; });
   await attempt('exec: a non-zero exit is a result', async () => { const r = await run({ cmd: 'echo nope; exit 7' }); return [r.status === 200 && r.code === 7 && r.output === 'nope\n' && r.timed_out === false, JSON.stringify(r)]; });
+  await attempt('exec: a variable of the bridge\'s own environment does not reach the command', async () => { process.env.WH_TEST_BRIDGE_ONLY = 'leak-' + 'me'; const r = await run({ cmd: 'echo ${WH_TEST_BRIDGE_ONLY:-unset}' }); delete process.env.WH_TEST_BRIDGE_ONLY; return [r.output === 'unset\n', JSON.stringify(r)]; });
   await attempt('exec: the command has no stdin', async () => { const r = await run({ cmd: 'cat; echo after', timeout: 8 }); return [r.code === 0 && r.output === 'after\n' && r.timed_out === false, JSON.stringify(r)]; });
   await attempt('exec: quotes, dollars, backslashes and several lines arrive as written', async () => { const r = await run({ cmd: 'cat <<\'EOF\'\na "b" \'c\' $HOME \\ `d`\nEOF\necho $((6*7))' }); return [r.output === 'a "b" \'c\' $HOME \\ `d`\n42\n', JSON.stringify(r)]; });
   await attempt('exec: every call starts in the target\'s folder with nothing carried over', async () => { await run({ cmd: 'cd /tmp; export CARRIED=1; pwd' }); const r = await run({ cmd: 'pwd; echo ${CARRIED:-unset}' }); return [r.output === dir + '\nunset\n', JSON.stringify(r) + ' want ' + dir]; });
