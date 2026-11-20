@@ -13,6 +13,7 @@ Three append-only catalogs, one JSON object per line. Ids: 6 lowercase letters, 
 ## faults.jsonl (what models get wrong)
 `{"id","model","fault","class","seen" (date),"handled" (what the harness does now),"evidence"}`
 - `class`: common (typical, expected) | uncommon (advanced, rare) | provider (route, not model).
+- A fault of the page, the harness or the operator (not of a model) is recorded here too, with `model` starting `none (` and saying what it was; its `evidence` names the issue or the CI runs.
 
 ## Rules
 - Append only. A change is a new line with `"supersedes": "<id>"`. The current view is the last line of each chain.
