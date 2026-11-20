@@ -62,16 +62,22 @@ Stance as FLOWS.md: state and transition, no person comparison, no rigid baselin
 - Invariants. (a) A structural edit names a node, never a text position found by searching. (b) Codegen output is a normal diff and goes through the same approval and specs as any commit. (c) The symbol view is a capture: the has/has-not rule applies (a symbol entry is not a read of the body).
 - Relations. Today's edit path is `repo_commit` with `edits` [{find, replace}] (app/tools.js CHANGE and repo_commit; app/git.js ~lines 110-130): each find must occur exactly once in the file at the branch head, else it throws "find occurs N times (must be once)". The measure "first-try edit success" and H1 are in docs/concepts/HYPOTHESES.md; find strings copied wrongly are the failure a structural edit removes. The seams list in .claude/agents/seams.md is the first target for seam selection. The semantic-entry handler of FLOWS.md picks entries; symbol entries are such entries. No language service or codegen exists in app/ today.
 
-## Open (QI series; the person's wording where given)
-- QI1 Who builds the inventory and when: policy-driven, autonomous, or both; at session start or on demand.
-- QI2 Staleness after a write: the source_hash differs; does the view mark stale only, or re-capture.
-- QI3 How much capture goes to the model versus stays queryable behind the query shape.
-- QI4 Trust in the autonomous route: how its asserted seams are checked.
-- QI5 Network sources: which IaC and datapoint formats, and which captures are allowed.
-- QI6 Which engine and where it runs: in the page, in the machine (app/vm.js), or outside.
-- QI7 Fidelity of comments and formatting through codegen.
-- QI8 Languages beyond JS.
-- QI9 How a structural edit is shown for approval (as a node-level description, the diff, or both).
+## Questions and answers (QI series; source: person = verbatim direction, recommended = the orchestrator's recommendation, asked for by the person)
+- QI1 Who builds and when (recommended). Both routes. Extraction with no model at session start for pinned folders and repos in scope; on demand for the rest; policy decides which capture features run. Open: none beyond QI6.
+- QI2 Staleness (recommended). A differing source hash marks the entry stale; it is re-captured on the next query. A check record keeps the hash it saw, so "checked" is always "checked at this hash". Open: none.
+- QI3 How much the model sees (recommended). The query shape and counts only; captures come back through queries; nothing is preloaded. Open: none.
+- QI4 Trust in asserted seams (recommended). An asserted seam is a hypothesis until a spec check exercises it (.claude/skills/spec-first/SKILL.md); a mismatch with .claude/agents/seams.md becomes a concern queue entry. Open: none.
+- QI5 Network sources (recommended). Start from what the harness holds: profile repo allowlists (app/profiles.js repoAllowed, verified), the machine's network path (app/vm.js net proxy, app/vm/stack.js fetch through the page, verified), and the environment proxy's allowed hosts where readable (not verified). IaC formats later, each as a provider. Open: whether proxy hosts are readable.
+- QI6 Engine and where (person + recommended). Person: "In a pluggable solution, anything can run from anywhere." No fixed engine or place. A capture provider is anything meeting the seam contract below. Recommended first provider: the TypeScript language service (handles plain JS), run wherever Node runs. Open: how a provider registers and where its records are stored.
+- QI7 Comments (person + recommended). Person: comments can be associated with the concerns in the graph, outside files, no need to bloat the files. Comments live as annotations on nodes and concerns; on ingestion existing comments are lifted; codegen emits none, except functional comments (invariant d). Open: showing annotations to a person reading generated files.
+- QI8 Languages (person + recommended). Each language has its own AST or node graph; one provider per language. Only the cross-language records are neutral: symbol entry, reference edge, node path, structural edit, annotation. No common AST. Open: none.
+- QI9 Approval (recommended). Show the operation (node path, operation, payload) above the generated diff; approval stays on the diff, through the existing approval card. Open: none.
+
+## Capture provider and annotations
+- node path: the address of a node in a language's own graph (container chain plus node kind and name).
+- annotation: id, target (node path or concern id), text, kind (note|doc|functional), source (lifted|written), t.
+- capture provider seam: params {language, scope (paths or labels), op (capture|edit|generate), edit (structural edit, for edit)}; returns {symbol entries[], reference edges[], annotations[]} for capture, {applied (node paths), preconditions_met} for edit, a codegen result for generate.
+- Invariant d: functional comments (license headers, shebangs, tool directives such as // @ts-check or lint disables) survive codegen verbatim, because removing them changes behaviour or legal standing; all other comments are annotations outside the files.
 
 ## First order of work (hypotheses; smallest first; none built)
 - I1 Capture only: from state "app/*.js not inventoried", an inventory of exports and function names can be built by extraction alone (no model); the transition to "inventoried" occurs for every file. Falsified if any file needs a model to yield its names. Needs: a parser pass, one capture feature.
@@ -82,3 +88,4 @@ Stance as FLOWS.md: state and transition, no person comparison, no rigid baselin
 - I6 Language service: from state "app/*.js not inventoried", a language service yields symbol entries and reference edges for every file with no file read by a model; the transition to "inventoried" occurs. Falsified if any symbol or edge needs a model read. Needs: one service, I1's check records.
 - I7 Structural edit: from state "symbol selected", a rename or signature change expressed as a structural edit regenerates files whose diff is exactly the intended change, with the suites green. Falsified if the diff has any unintended hunk or a suite fails. Needs: I6, a codegen path, a mock-provider session.
 - I8 Select then fetch: given symbol entries in the query shape, state "seam selected", the projected edit lands at the right seam and first-try edit success is recorded as data per strategy and model, not a contest. Falsified if the recorded rate does not move. Needs: I6, I7, one strategy id, silo canary (PROGRAMME.md).
+- I9 Annotations: lifting the comments of one app/*.js file into annotations and regenerating it leaves the suites green and the file's behaviour unchanged, with functional comments intact. Falsified if a suite fails, behaviour differs, or a functional comment is lost. Needs: I6, I7, one provider, one file.

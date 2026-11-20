@@ -65,6 +65,7 @@ Everything below reads from this; where a later line contradicts it, this wins.
 Policies (the data we procure) indicate what a model should do, and so where the seams are. Catalog the seams by breaking policies into principles, in the manner of hexagonal architecture and SOLID, applied to policies and flows, not OOP.
 - Record: seam id, policy ids, principle (my reading, open: one aim per policy; policy in, filler out; new flows without changing policies; fillers interchangeable; policies depend on tags not turn text), params, return payload shape.
 - Candidate seams: route (rubric, case -> flow id, confidence), snap (tags, state -> flow ids), fill (template, context -> turn payload), validate (turn, step -> result, carried_to), guard (scope exit -> resolution, rejoin), handler (state, semantic entries -> entries chosen, turns to stack), projection (state -> projected transition, confidence).
+- Capture provider (params, return shape): see INVENTORY.md "Capture provider and annotations".
 
 ## Relation to what exists
 - C1 policy directives (STEMS.md 5c): snap policies are the tag-driven form; directives remain the wording side.
