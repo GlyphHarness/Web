@@ -907,6 +907,13 @@ await say('hello reasoning');
   check('host shell: a non-zero exit reads the same', await lastTool() === '(no output)\n[exit 3]', await lastTool());
   await say('shell: slow nv');
   check('host shell: a timeout reads the same', await lastTool() === 'partial\n[timed out after 600s; interrupted]', await lastTool());
+  // the tmux option on a host (set by Paste config: the in-page machine's panel is not needed): the command is typed into
+  // one lasting tmux session of this session there. The mock only shows what was sent; a real run is in docs/TESTING.md.
+  await paste({ settings: { vmTmux: true } });
+  await say('shell: echo nv-pty');
+  await paste({ settings: { vmTmux: false } });
+  const ptyCmd = String(execs.at(-1)?.cmd || '');
+  check('host shell: with the tmux option the command is typed into the session\'s own tmux session on the host', /tmux new-session -d -s agent-[a-z0-9]+ /.test(ptyCmd) && /tmux send-keys -t agent-[a-z0-9]+ /.test(ptyCmd) && ptyCmd.includes('\necho nv-pty\n') && found(ptyCmd).length === 0 && !/WH_|\.wh\b/.test(ptyCmd), ptyCmd.slice(0, 160));
   check('host shell: the tools and the prompt the model is sent are byte-identical whichever backend runs the shell', (reqMachine.tools || []).some(t => t.function.name === 'shell') && JSON.stringify(reqMachine.tools) === JSON.stringify(reqHost.tools) && JSON.stringify(reqMachine.messages[0]) === JSON.stringify(reqHost.messages[0]));
 
   // for one session: set at the session level, this session runs on the machine again while the defaults still say host

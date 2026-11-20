@@ -330,6 +330,11 @@ await attempt('config: shellOn takes machine or host:NAME and nothing else', () 
   const p = v => config.plan(JSON.stringify({ settings: { shellOn: v } }), cur);
   return [p('host:dev').next.settings.shellOn === 'host:dev' && p('host:dev').refused.length === 0 && p('machine').refused.length === 0 && p('host:bad name').refused.length === 1 && p('elsewhere').refused.length === 1 && p('host:').refused.length === 1, JSON.stringify(p('host:dev'))];
 });
+// the tmux option's switch sits in the in-page machine's panel; a session on a host must not need that panel to use it
+await attempt('config: the tmux option (vmTmux) is true or false in Paste config', () => {
+  const p = v => config.plan(JSON.stringify({ settings: { vmTmux: v } }), cur);
+  return [p(true).next.settings.vmTmux === true && p(true).refused.length === 0 && p(false).refused.length === 0 && p('yes').refused.length === 1, JSON.stringify(p(true))];
+});
 
 // ---- nothing the harness gives a model says what runs it (app/neutral.js: the identifying terms)
 {
