@@ -9,7 +9,11 @@
 //   wh new [title]                        a new session; becomes current
 //   wh use <id>                           make a session current
 //   wh say [-i id] <text…>                send; returns at the end of the turn or at a hold
+//   wh sayfile [-i id] <file>             send the text of a file as the message (line ends as LF)
+//   wh system [-i id] <file>              set the session's system prompt from a file (line ends as LF); answers size and hash
+//   wh paste <file>                       paste a config block (settings, profiles, keys) through the page's Paste config
 //   wh step [-i id] [--all] | wh skip     release (or skip) the held step(s)
+//   wh held [-i id]                       what is held or waiting for approval, in full
 //   wh pace run|requests|tools|both       hold model requests and/or tool calls
 //   wh stem [-i id] [-a turn] <goal…>     work a goal in a stem from a turn (default: the last)
 //   wh fold [-i stemId]                   fold a stem back
@@ -23,22 +27,32 @@
 //   wh raw [-i id] [-n 40]                the last request's raw stream (tool-call and finish chunks)
 //   wh allow [-i id] | wh deny            answer the approval card for a write (commit, PR, repo, concern); say/step show it as APPROVE?
 //   wh trace [-i id] [-o file]            save the page's .trace (live evidence)
+//   wh dump [-i id] [-o file]             save the session's record (messages, ledger; holds message text, keys masked)
+//   wh log [-i id] [-n 20]                the command log: what the operator sent, in order (sizes and hashes, no text)
+//   wh forget                             remove the stored keys from this browser profile (names what was there, never a value)
 //   wh concerns <owner/name>              set the concerns repository
 //   wh down                               stop the daemon
-// Options: --url (default http://localhost:8787/), --port (daemon, default 8790), --json
-// Env: WH_CHROME=1 real Chrome (channel chrome), WH_HEADED=1 show it, OPENROUTER_API_KEY and WH_GITHUB_PAT stored by `init`, WH_PORT
+// Options: --url (default http://localhost:8787/), --port (daemon, default 8790), --json,
+//   --dir <path> (state: browser profile, current session, log; default .wh), and, read when the daemon starts
+//   (wh down first to change them): --channel chrome (the installed Chrome instead of the bundled browser), --headed (show the window)
+// Env: WH_CHANNEL=chrome (or WH_CHROME=1), WH_HEADED=1, WH_DIR, WH_PORT, WH_URL; OPENROUTER_API_KEY and WH_GITHUB_PAT stored by `init`
+// Every command is appended to <dir>/log.jsonl: time, command, session id, outcome, sizes and hashes. Never message text, never a key.
 import { createRequire } from 'node:module';
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import http from 'node:http';
 import { fileURLToPath } from 'node:url';
+import { createHash } from 'node:crypto';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const DIR = path.join(ROOT, '.wh'), STATE = path.join(DIR, 'state.json');
 const argv = process.argv.slice(2);
 const opt = (n, d) => { const i = argv.indexOf('--' + n); return i >= 0 ? argv.splice(i, 2)[1] : d; };
 const PORT = Number(opt('port', process.env.WH_PORT || 8790)), URL0 = opt('url', process.env.WH_URL || 'http://localhost:8787/');
+const DIR = path.resolve(opt('dir', process.env.WH_DIR || path.join(ROOT, '.wh'))), STATE = path.join(DIR, 'state.json'), LOG = path.join(DIR, 'log.jsonl');
+// read when the daemon starts: which browser, and whether its window shows
+const CHANNEL = opt('channel', process.env.WH_CHANNEL || (process.env.WH_CHROME ? 'chrome' : ''));
+const HEADED = (argv.includes('--headed') && !!argv.splice(argv.indexOf('--headed'), 1)) || !!process.env.WH_HEADED;
 const JSONOUT = argv.includes('--json') && argv.splice(argv.indexOf('--json'), 1);
 fs.mkdirSync(DIR, { recursive: true });
 const readState = () => { try { return JSON.parse(fs.readFileSync(STATE, 'utf8')); } catch { return { current: '', assessed: {} }; } };
@@ -47,7 +61,7 @@ const writeState = s => fs.writeFileSync(STATE, JSON.stringify(s, null, 1));
 // ---------------- client ----------------
 if (argv[0] !== 'daemon') {
   const [cmd = 'help', ...rest] = argv;
-  if (cmd === 'help') { console.log(fs.readFileSync(fileURLToPath(import.meta.url), 'utf8').split('\n').slice(1, 30).map(l => l.replace(/^\/\/ ?/, '')).join('\n')); process.exit(0); }
+  if (cmd === 'help') { const src = fs.readFileSync(fileURLToPath(import.meta.url), 'utf8').split(/\r?\n/).slice(1); console.log(src.slice(0, src.findIndex(l => !l.startsWith('//'))).map(l => l.replace(/^\/\/ ?/, '')).join('\n')); process.exit(0); }
   const call = () => new Promise((ok, no) => {
     const req = http.request({ host: '127.0.0.1', port: PORT, method: 'POST', path: '/', headers: { 'content-type': 'application/json' } }, res => { let b = ''; res.on('data', d => b += d); res.on('end', () => ok(JSON.parse(b))); });
     req.on('error', no); req.end(JSON.stringify({ cmd, args: rest, json: !!JSONOUT }));
@@ -56,7 +70,7 @@ if (argv[0] !== 'daemon') {
   try { r = await call(); }
   catch {
     if (cmd === 'down') { console.log('not running'); process.exit(0); }
-    spawn(process.execPath, [fileURLToPath(import.meta.url), 'daemon', '--port', String(PORT), '--url', URL0], { detached: true, stdio: 'ignore', cwd: ROOT }).unref();
+    spawn(process.execPath, [fileURLToPath(import.meta.url), 'daemon', '--port', String(PORT), '--url', URL0, '--dir', DIR, ...(CHANNEL ? ['--channel', CHANNEL] : []), ...(HEADED ? ['--headed'] : [])], { detached: true, stdio: 'ignore', cwd: ROOT }).unref();
     for (let i = 0; i < 60 && !r; i++) { await new Promise(s => setTimeout(s, 500)); try { r = await call(); } catch {} }
     if (!r) { console.error('wh: the daemon did not start'); process.exit(2); }
   }
@@ -68,8 +82,8 @@ if (argv[0] !== 'daemon') {
 const { chromium } = createRequire(import.meta.url)('playwright');
 const up = async () => { try { return (await fetch(URL0)).ok; } catch { return false; } };
 if (!(await up())) { spawn(process.platform === 'win32' ? 'python' : 'python3', ['-m', 'http.server', new globalThis.URL(URL0).port || '8787'], { cwd: ROOT, detached: true, stdio: 'ignore' }).unref(); for (let i = 0; i < 40 && !(await up()); i++) await new Promise(s => setTimeout(s, 250)); }
-// WH_CHROME=1 drives the installed Google Chrome (channel "chrome") instead of bundled Chromium; WH_HEADED=1 shows it.
-const ctx = await chromium.launchPersistentContext(path.join(DIR, 'profile'), { headless: !process.env.WH_HEADED, ...(process.env.WH_HEADED ? { viewport: null, args: ['--start-maximized'] } : { viewport: { width: 1400, height: 900 } }), ...(process.env.WH_CHROME ? { channel: 'chrome' } : {}) });
+// --channel chrome (WH_CHANNEL, WH_CHROME=1) drives the installed Google Chrome instead of bundled Chromium; --headed (WH_HEADED=1) shows it.
+const ctx = await chromium.launchPersistentContext(path.join(DIR, 'profile'), { headless: !HEADED, ...(HEADED ? { viewport: null, args: ['--start-maximized'] } : { viewport: { width: 1400, height: 900 } }), ...(CHANNEL ? { channel: CHANNEL } : {}) });
 const tabs = new Map(); // session id -> page
 const ready = async p => { await p.waitForSelector('#app #composer', { state: 'attached', timeout: 30000 }); return p; };
 async function main() { const p = ctx.pages()[0] || await ctx.newPage(); if (!p.url().startsWith(URL0)) { await p.goto(URL0); await ready(p); } return p; }
@@ -90,6 +104,12 @@ const money = n => '$' + (Number(n) || 0).toFixed(5);
 const line = (m, i) => `#${i} ${m.role}${m.tool_calls?.length ? ' [' + m.tool_calls.map(t => t.function.name).join(',') + ']' : ''}: ${String(m.content ?? '').replace(/\s+/g, ' ').slice(0, 110)}`;
 const costOf = s => s.ledger.reduce((n, e) => n + (Number(e.cost) || 0), 0);
 const openFlags = s => (s.flags || []).filter(f => !f.handled);
+// What is kept of a text in the log and in answers: its size and a short hash, never the text.
+const sha = s => createHash('sha256').update(String(s)).digest('hex').slice(0, 12);
+const readText = f => fs.readFileSync(f, 'utf8').replace(/\r\n/g, '\n');
+// Keys never leave: anything shaped like one, and the keys this process was given, are masked in every answer, dump and log line.
+const SECRET = /\b(sk-[A-Za-z0-9_-]{16,}|github_pat_[A-Za-z0-9_]{16,}|gh[pousr]_[A-Za-z0-9]{16,})/g;
+const mask = t => { let s = String(t ?? '').replace(SECRET, m => m.slice(0, 5) + '...(masked)'); for (const v of [process.env.OPENROUTER_API_KEY, process.env.WH_GITHUB_PAT]) if (v && v.length > 8) s = s.split(v).join('(masked)'); return s; };
 const pasteSettings = async (p, settings) => { await p.evaluate(() => document.querySelector('[data-act=cfgpaste]').click()); await p.fill('.modal textarea', JSON.stringify({ settings })); const txt = await p.textContent('.modal'); await p.click('.modal .primary'); return txt; };
 
 // a turn: wait until it ends, or a step is held (pacing), or it asks something
@@ -159,11 +179,72 @@ const CMDS = {
   async say(a) {
     const id = flagOf(a, 'i') || readState().current;
     if (!id) return { ok: false, text: 'no session: wh new' };
-    const p = await tab(id), s0 = await sess(p, id), before = { n: s0.messages.length, l: s0.ledger.length };
-    await p.fill('#input', a.join(' ')); await p.click('#send');
+    const p = await tab(id), s0 = await sess(p, id), before = { n: s0.messages.length, l: s0.ledger.length }, text = a.join(' ');
+    await p.fill('#input', text); await p.click('#send');
     const st = await settle(p);
     const r = await turnReport(p, id, before);
-    return { text: fmtTurn(r, st), data: { ...r, state: st } };
+    return { text: fmtTurn(r, st), data: { ...r, state: st }, log: { id, chars: text.length, hash: sha(text) } };
+  },
+  // The text of a file as the message: the same bytes every run (line ends as LF), nothing lost to a shell.
+  async sayfile(a) {
+    const id = flagOf(a, 'i') || readState().current;
+    if (!a[0]) return { ok: false, text: 'wh sayfile [-i id] <file>' };
+    return CMDS.say([...(id ? ['-i', id] : []), readText(a[0])]);
+  },
+  // Set the session's system prompt (the page's own field) from a file. The answer and the log carry size and hash, not the text.
+  async system(a) {
+    const id = flagOf(a, 'i') || readState().current;
+    if (!id || !a[0]) return { ok: false, text: 'wh system [-i id] <file>' };
+    const text = readText(a[0]), p = await tab(id);
+    if (await p.evaluate(() => sessionStorage.getItem('wh:tab-active')) !== id) return { ok: false, text: `the tab does not show ${id}` };
+    await p.evaluate(t => { const el = document.querySelector('#system'); el.value = t; el.dispatchEvent(new Event('change')); }, text);
+    const s = await sess(p, id), stored = s?.system === text, d = { id, chars: text.length, lines: text.split('\n').length, hash: sha(text), stored };
+    return { ok: stored, text: `system of ${id}: ${d.chars} chars · ${d.lines} lines · hash ${d.hash}${stored ? '' : ' · NOT stored as given'}`, data: d, log: { id, chars: d.chars, hash: d.hash } };
+  },
+  // Paste a whole config block (settings, profiles, keys) from a file through the page's own Paste config, which shows keys masked.
+  async paste([file]) {
+    if (!file) return { ok: false, text: 'wh paste <file>' };
+    const text = fs.readFileSync(file, 'utf8'), p = await main();
+    await p.evaluate(() => document.querySelector('[data-act=cfgpaste]').click());
+    await p.fill('.modal textarea', text);
+    await p.waitForTimeout(300);
+    const plan = (await p.textContent('.modal')).replace(/\s+/g, ' ').slice(0, 1500);
+    await p.click('.modal .primary');
+    await p.waitForTimeout(300);
+    const m = await meta(p), profiles = (m.profiles || []).map(x => ({ name: x.name, repos: x.repos || [] }));
+    return { text: `${plan}\nprofiles now: ${profiles.map(x => `${x.name}[${x.repos.join('|')}]`).join(', ') || '-'} · new sessions use ${(m.profiles || []).find(x => x.id === m.settings.newProfile)?.name || '-'}`, data: { settings: m.settings, profiles }, log: { chars: text.length, hash: sha(text) } };
+  },
+  // What is held (pacing) or waiting for approval, whole: say and step show only the first characters.
+  async held(a) {
+    const id = flagOf(a, 'i') || readState().current, p = await tab(id);
+    const st = await p.evaluate(() => ({
+      held: [...document.querySelectorAll('.msg[data-role=held]:not([data-done])')].map(c => c.querySelector('pre')?.textContent || ''),
+      approve: [...document.querySelectorAll('.msg[data-role=approve]:not([data-done])')].map(c => ({ what: c.querySelector('pre')?.textContent || '', files: [...c.querySelectorAll('details')].map(d => ({ path: d.querySelector('summary')?.textContent || '', chars: (d.querySelector('pre')?.textContent || '').length })) })),
+    }));
+    return { text: [...st.held.map(h => 'HELD ' + h), ...st.approve.map(c => 'APPROVE? ' + c.what + (c.files.length ? '\nshown: ' + c.files.map(f => `${f.path} (${f.chars} chars)`).join(', ') : ''))].join('\n') || 'nothing is held', data: st, log: { id, held: st.held.length, approve: st.approve.length } };
+  },
+  // The session's record as stored (messages with their text, ledger, flags): for validators and write-ups. Keys are masked.
+  async dump(a) {
+    const id = flagOf(a, 'i') || readState().current, o = flagOf(a, 'o'), p = await main(), s = await sess(p, id);
+    if (!s) return { ok: false, text: 'no session ' + id };
+    const out = path.resolve(o || path.join(DIR, 'dumps', id + '.json')), text = mask(JSON.stringify(s, null, 1));
+    fs.mkdirSync(path.dirname(out), { recursive: true }); fs.writeFileSync(out, text);
+    return { text: `${out}\n${s.messages.length} messages · ${s.ledger.length} ledger rows · ${text.length} chars (holds message text; keys masked)`, data: { out, id, messages: s.messages.length, ledger: s.ledger.length }, log: { id, chars: text.length, hash: sha(text) } };
+  },
+  // Remove the stored keys from this browser profile. Pages are loaded again so none keeps a copy in memory.
+  async forget() {
+    const p = await main();
+    if (await p.evaluate(() => document.querySelector('#app')?.hasAttribute('data-busy'))) return { ok: false, text: 'a turn is running; forget when it has ended' };
+    const had = await p.evaluate(() => { let k = {}; try { k = JSON.parse(localStorage['wh:keys'] || '{}'); } catch {} localStorage.removeItem('wh:keys'); return Object.keys(k).filter(n => k[n]); });
+    for (const pg of ctx.pages()) if (!pg.isClosed()) { await pg.reload(); await ready(pg); }
+    const left = await p.evaluate(() => { try { return Object.values(JSON.parse(localStorage['wh:keys'] || '{}')).some(Boolean); } catch { return true; } });
+    return { ok: !left, text: `key store ${left ? 'NOT cleared' : 'cleared'} (was: ${had.join(', ') || 'none'})`, data: { had, cleared: !left }, log: { had: had.length } };
+  },
+  // The command log: one line per command sent, oldest first. Sizes and hashes stand for text.
+  async log(a) {
+    const id = flagOf(a, 'i'), n = Number(flagOf(a, 'n') || 20);
+    const rows = readLog().filter(e => !id || e.id === id);
+    return { text: rows.slice(-n).map(e => `${e.t} ${e.ok ? 'ok ' : 'no '} ${e.cmd}${e.id ? ' ' + e.id : ''}${e.chars != null ? ` ${e.chars}ch` : ''}${e.hash ? ' ' + e.hash : ''}`).join('\n') || 'no commands logged', data: { rows: rows.slice(-n), total: rows.length } };
   },
   async step(a) {
     const id = flagOf(a, 'i') || readState().current, all = has(a, '--all');
@@ -303,18 +384,25 @@ const CMDS = {
 };
 
 // commands that drive a session run in order per session; others (and other sessions) run at once
-const locks = new Map(), DRIVE = new Set(['say', 'step', 'skip', 'stem', 'fold', 'new', 'init', 'pace']);
+const locks = new Map(), DRIVE = new Set(['say', 'sayfile', 'system', 'step', 'skip', 'stem', 'fold', 'new', 'init', 'pace', 'paste', 'allow', 'deny', 'forget']);
+const MAIN = ['new', 'init', 'pace', 'paste', 'forget'], NOSESSION = new Set([...MAIN, 'models', 'ls', 'cost', 'concerns', 'profile', 'log', 'down', 'use']);
+// The command log (wh log). A line holds what was sent as sizes and hashes; arguments are never copied, since a message is one.
+function logLine(e) { try { fs.appendFileSync(LOG, mask(JSON.stringify(e)) + '\n'); } catch {} }
+function readLog() { try { return fs.readFileSync(LOG, 'utf8').split('\n').filter(Boolean).map(l => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean); } catch { return []; } }
 http.createServer((req, res) => {
   let b = ''; req.on('data', d => b += d);
   req.on('end', () => {
     const { cmd, args } = JSON.parse(b || '{}');
-    const ai = (args || []).indexOf('-i'), key = DRIVE.has(cmd) ? (['new', 'init', 'pace'].includes(cmd) ? '(main)' : ai >= 0 ? args[ai + 1] : readState().current) : null;
+    const ai = (args || []).indexOf('-i'), key = DRIVE.has(cmd) ? (MAIN.includes(cmd) ? '(main)' : ai >= 0 ? args[ai + 1] : readState().current) : null;
     const prev = key ? locks.get(key) || Promise.resolve() : Promise.resolve();
     const run = prev.then(async () => {
       let out;
+      const t0 = Date.now(), sid = NOSESSION.has(cmd) ? undefined : ai >= 0 ? args[ai + 1] : readState().current || undefined;
       try { out = CMDS[cmd] ? await CMDS[cmd]([...(args || [])]) : { ok: false, text: `unknown command ${cmd} (wh help)` }; }
       catch (e) { out = { ok: false, text: 'wh: ' + String(e.message || e).split('\n')[0] }; }
-      res.end(JSON.stringify({ ok: out.ok !== false, text: out.text, data: out.data }));
+      const text = mask(out.text), data = out.data === undefined ? undefined : JSON.parse(mask(JSON.stringify(out.data)));
+      if (CMDS[cmd] && cmd !== 'log') logLine({ t: new Date(t0).toISOString(), cmd, ...(out.log?.id || out.data?.id || sid ? { id: out.log?.id || out.data?.id || sid } : {}), ok: out.ok !== false, ms: Date.now() - t0, ...out.log });
+      res.end(JSON.stringify({ ok: out.ok !== false, text, data }));
     });
     if (key) locks.set(key, run.catch(() => {}));
   });
