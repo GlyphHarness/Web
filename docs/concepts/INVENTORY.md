@@ -20,11 +20,11 @@ Stance as FLOWS.md: state and transition, no person comparison, no rigid baselin
 - Two routes: policy-driven (a policy says what to extract and consolidate) and autonomous (built unaided); after the autonomous route what is left is asserting seams and inferring interface points and domain contracts.
 
 ## Records (fields only; harness data, stored beside turns)
-- inventory entry: id, label, kind, domain, metadata{size, mtime, path|uri}, captures[{feature_id, payload_handle}], source, captured_at.
+- inventory entry: id, label, kind, domain, metadata{size, mtime, path|uri, hash (raw content hash), checksum (line-ending-normalized, the identity: QI10)}, captures[{feature_id, payload_handle}], source, captured_at.
 - capture feature: id, applies_to (domain or kind), extracts, how (ast|regex|parser|metadata|iac|lsp), cost.
 - query shape: id, policy_id, over (domains or labels), asks[{what, returns_fields}], rendered_text (what the model is given).
-- check record: id, session, entry_id, read (whole|slice|capture only), range, at_turn, t, source_hash.
-- has/has-not view: derived, not stored: per entry {entry_id, held (captures), checked (read kinds), stale (hash differs)}.
+- check record: id, session, entry_id, read (whole|slice|capture only), range, at_turn, t, source_hash (raw), source_checksum (normalized, QI10).
+- has/has-not view: derived, not stored: per entry {entry_id, held (captures), checked (read kinds), stale (hash differs)}. Joined form (QI10), `view(inv, {join: true})`: per checksum {checksum, entry_ids[], labels[], held, checked, stale}; entries whose checksum is equal are one row that lists all their labels (a file path and a git path), held from whichever entry has captures, checked from whichever has check records.
 - network entry: an inventory entry with domain network and captures such as ranges, rules, allow/deny lists.
 
 ## Invariants
@@ -33,6 +33,7 @@ Stance as FLOWS.md: state and transition, no person comparison, no rigid baselin
 3. A capture never stands in for content that was not read: the view says which (held vs checked).
 4. Captures are extracted by code or parsers; a model-made capture is flagged as such.
 5. A change to the data is a new record; nothing is rewritten.
+6. Identity is the content checksum, not the label (QI10): joining is done in the derived view, never by rewriting stored entries or labels.
 
 ## Relation to what exists (paths verified by grep, 2026-11-20)
 - app/explorer.js: lists a session's pinned directories as new/modified/existing against a baseline, files opened on demand. It marks change, not what was read or captured; the inventory extends its listing.
@@ -72,6 +73,14 @@ Stance as FLOWS.md: state and transition, no person comparison, no rigid baselin
 - QI7 Comments (person + recommended). Person: comments can be associated with the concerns in the graph, outside files, no need to bloat the files. Comments live as annotations on nodes and concerns; on ingestion existing comments are lifted; codegen emits none, except functional comments (invariant d). Person: assume agents infer from generated files; people reading them is not a concern. If it ever matters, a model can take everything and explain it for the person; that is not built and not planned. Nothing open.
 - QI8 Languages (person + recommended). Each language has its own AST or node graph; one provider per language. Only the cross-language records are neutral: symbol entry, reference edge, node path, structural edit, annotation. No common AST. Open: none.
 - QI9 Approval (recommended). Show the operation (node path, operation, payload) above the generated diff; approval stays on the diff, through the existing approval card. Open: none.
+- QI10 One file, two labels (person; closes the label question left open in the I1 result row of HYPOTHESES.md). The build labels a file by its file path (`app/x.js`) and a read through `repo_read` labels it by its git path (`owner/name:path`), so what is held and what was checked for one file sat in two rows. Person's direction, verbatim: "can use the file/git blob path, keep both, checksum the file, its fine, they are the same thing, the checksum will indicate that." And on the normalization: "conventional cross-os format of file comparisons being normalized so we dont have mismatches on identical files (aside from endings)". Resolved as follows.
+  - Both labels are kept as they are; no label is rewritten and no convention is chosen. Identity is the file's checksum: entries whose checksum is equal are the same thing, and the joined has/has-not view shows them as one row that lists every label.
+  - The checksum is `contentHash` (app/handles.js) over the text with CRLF turned into LF, the way git normalizes text. A lone CR, a BOM and trailing white space are not touched (they are real differences). A file git would treat as binary, a NUL byte in its first 8,000 bytes, is hashed raw. It is computed by one function, `checksum(text)` in app/inventory.js, used by the build (`metadata.checksum`) and by the repo_read check record (`source_checksum`; the entry made by the read gets `metadata.checksum` the same way). The raw `hash` and `source_hash` keep their meaning (append only: no existing field changes) and still decide the per-entry stale flag.
+  - Join key: the entry's current `metadata.checksum` (an entry made before this field exists falls back to its `hash`). held is the union of the joined entries' capture features, checked the union of the read kinds in their check records (one session when given), entry_ids and labels list every joined entry in the order first seen.
+  - Stale in the joined row: some joined entry's last check saw another checksum than the entry holds (the QI2 rule, on checksums, so CRLF against LF is never stale).
+  - A change un-joins. When a file changes, its rebuilt entry has a new checksum, which no longer equals the other label's entry: the rows part, the changed label is held and not checked (checked is "at this checksum", QI2), the other label keeps what was checked at the old content. A repo_read entry keeps the checksum it was first made with (I3: a read of a changed source adds a check record, not a new entry), so after the file changed and was read again that label's row is stale and stays apart from the rebuilt file path; it is not re-joined by a later read. Known limit, not worked around: it needs the read to start a new entry record when the checksum moves, which changes the I3 contract.
+  - Known limit: different files with identical content (two empty files, two copies of a template) have the same checksum and join into one row. The row keeps every label, so nothing is hidden; no path heuristics are added to tell them apart.
+  - Known limit: `contentHash` is a short non-cryptographic hash (about 50 bits), enough for a project's files and not an integrity guarantee; a stronger digest is a later change of the one function.
 
 ## Capture provider and annotations
 - node path: the address of a node in a language's own graph (container chain plus node kind and name).
