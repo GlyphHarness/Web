@@ -53,3 +53,12 @@ Each hypothesis states its own thresholds. Common measures:
 ## Reporting
 
 Each result is a row in `HYPOTHESES.md`: arm outcomes, costs, verdict (`promote`, `retest`, `drop`), the link to branch or trace, and what the failure or surprise taught. Failures stay in the file.
+
+## Isolation
+
+Added 2026-11-20 after the H1 canary, where both arms shared one sandbox repository and blue listed the branches and read green's (`HYPOTHESES.md`, Results, lesson 6). This is how a run is set up. It is not a restriction in the harness: no allowlist, no gate.
+
+- **A working copy per arm.** Each arm works in its own copy, seeded from the same commit: its own clone directory on the host, or its own throwaway repository. For new experiments this replaces the Silo table's one repository with two branches.
+- **Operator state per arm.** Each arm has its own `wh` state directory and daemon (`--dir`, `--port`), so browser profile, sessions and command log are separate.
+- **A distinct salt per arm and per run** (the salt line of `HYPOTHESES.md` (b) 2), so no run reads a cache another run wrote.
+- **The record says what each arm could see.** Each result names, per arm: the working copy (path, or repository and seed commit), the repositories the token in use lists, the salt, and whether the other arm's copy existed and was reachable while it ran. An arm that could see the other's work is reported as such; its run is not dropped silently.
