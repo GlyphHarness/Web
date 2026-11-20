@@ -98,3 +98,24 @@ Hypotheses touched (description only):
 - H2 (cache floor): request 1 hit the cache at 3.8k prompt tokens in blue, below 4,096; that does not fit a floor at 4,096 for this route.
 
 Limits: two sessions, one task, one model; blue ran first.
+
+### 2026-11-20 · H12 full stage, written as it runs (task 4 pair done, task 5 blue done, task 5 green running) · n = 3 sessions so far, 67 requests
+Source: `docs/concepts/profile-h12-t4-green-2026-11-20.json`, `docs/concepts/profile-h12-t4-blue-2026-11-20.json`, `docs/concepts/profile-h12-t5-blue-2026-11-20.json`; event lines in `docs/concepts/h12-full-progress.jsonl`.
+
+What it looked like, `strat-serial-3.0 | tencent/hy4-flash`, page at `73b2d89`, live and stepped:
+- Task 4 (doc edit, one file), green then blue: requests 8 and 11; calls 10 and 15; cost $0.00211 and $0.00150; prompt 140.8k and 141.3k tokens (84% and 85% cached); output 8.2k and 4.1k tokens; one turn each, no operator message; scripted file writes 0 and 1 (one `python3` here-document); both completed as asked, one commit each, only `docs/PROTOCOL.md` changed.
+- Task 5 (checks first, then three files), blue: 48 requests, 54 calls (44 `shell`, 10 `output_read`), two turns (a 40-round limit stop, then the operator sent "continue"), cost $0.00536, prompt 1.31M tokens (97% cached), output 13.4k; two commits (Spec, red 38/67; then the implementation), `profile` 67/67 and `validators` 46/46 re-run in the clone. Calls before first commit 31. 11 shell command lines have an inline-program shape on the kept first line; read by hand, at least 3 of them read a file or test a string rather than write one, so the shape count over-reads writes.
+- The profile reports `held` results in all three sessions (2, 1, 1) where nothing was held: the classifier matches the word "held" in the first 120 characters of a result, and the repository text printed by `git log` and `cat` contains it. Results other than ok, held excluded: 0, 0 and 4 (2 `find-absent`, 2 `No stored call`).
+- Two blue calls of task 5 were `shell {"ref": "os:..."}` with handles no earlier call held. The held step showed the handle and "the stored arguments are not in this browser's store"; released, each came back as `No stored call` and cost a round. The profile counted both as ok.
+
+Pointers drilled: `dump` of each session for the held-class check and for the two refs (message text stays out of the repository).
+
+Open questions it raises:
+- The held step's note for an unknown handle is true; is it enough? An operator reading it cannot tell a handle the page lost from one the model made up. Here both were made up (each appears only in the call and its answer). A gap to specify before changing: say that no call of this session holds the handle and that releasing it will fail.
+- Task 5 blue took 48 requests against 11 for the doc edit; is the multi-file shape what the file tools help most, or not? Green's task 5 answers.
+- Blue's 4 stored-by-handle shell calls cannot be counted from the profile; the count of scripted writes is a floor.
+
+Hypotheses touched (description only):
+- H12: task 4 requests 8 (green) against 11 (blue) and calls 10 against 15 support the claim on a doc edit; cost was 1.41 times higher in green, so the claim holds on requests and calls and fails on cost there. Task 5 not complete.
+
+Limits: one model, one run per cell, blue and green not interleaved within a task beyond the order given (task 4 green first, task 5 blue first).

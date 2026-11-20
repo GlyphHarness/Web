@@ -1,0 +1,415 @@
+{
+ "at": "2026-11-20T18:52:01.608Z",
+ "sessions": [
+  {
+   "id": "smwpc30gki2c5",
+   "title": "H12 full, task 4, blue",
+   "rows": [
+    {
+     "i": 0,
+     "helper": null,
+     "strat": "strat-serial-3.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 3168,
+     "cached": 0,
+     "write": 0,
+     "out": 68,
+     "reasoning": 0,
+     "cost": 0.000120434,
+     "cachePct": 0
+    },
+    {
+     "i": 1,
+     "helper": null,
+     "strat": "strat-serial-3.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 4024,
+     "cached": 3072,
+     "write": 0,
+     "out": 26,
+     "reasoning": 4,
+     "cost": 0.000041581,
+     "cachePct": 76
+    },
+    {
+     "i": 2,
+     "helper": null,
+     "strat": "strat-serial-3.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 4910,
+     "cached": 3840,
+     "write": 0,
+     "out": 84,
+     "reasoning": 30,
+     "cost": 0.000055012,
+     "cachePct": 78
+    },
+    {
+     "i": 3,
+     "helper": null,
+     "strat": "strat-serial-3.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 7896,
+     "cached": 4864,
+     "write": 0,
+     "out": 112,
+     "reasoning": 76,
+     "cost": 0.000129152,
+     "cachePct": 62
+    },
+    {
+     "i": 4,
+     "helper": null,
+     "strat": "strat-serial-3.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 11629,
+     "cached": 7680,
+     "write": 0,
+     "out": 57,
+     "reasoning": 21,
+     "cost": 0.0001577435,
+     "cachePct": 66
+    },
+    {
+     "i": 5,
+     "helper": null,
+     "strat": "strat-serial-3.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 15370,
+     "cached": 11520,
+     "write": 0,
+     "out": 51,
+     "reasoning": 15,
+     "cost": 0.0001591955,
+     "cachePct": 75
+    },
+    {
+     "i": 6,
+     "helper": null,
+     "strat": "strat-serial-3.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 17326,
+     "cached": 15360,
+     "write": 0,
+     "out": 2189,
+     "reasoning": 1625,
+     "cost": 0.0003994045,
+     "cachePct": 89
+    },
+    {
+     "i": 7,
+     "helper": null,
+     "strat": "strat-serial-3.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 18077,
+     "cached": 17152,
+     "write": 0,
+     "out": 224,
+     "reasoning": 141,
+     "cost": 0.000089575,
+     "cachePct": 95
+    },
+    {
+     "i": 8,
+     "helper": null,
+     "strat": "strat-serial-3.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 18928,
+     "cached": 17920,
+     "write": 0,
+     "out": 187,
+     "reasoning": 59,
+     "cost": 0.0000884335,
+     "cachePct": 95
+    },
+    {
+     "i": 9,
+     "helper": null,
+     "strat": "strat-serial-3.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 19841,
+     "cached": 18688,
+     "write": 0,
+     "out": 954,
+     "reasoning": 801,
+     "cost": 0.000202424,
+     "cachePct": 94
+    },
+    {
+     "i": 10,
+     "helper": null,
+     "strat": "strat-serial-3.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 20124,
+     "cached": 19712,
+     "write": 0,
+     "out": 121,
+     "reasoning": 33,
+     "cost": 0.0000609885,
+     "cachePct": 98
+    }
+   ],
+   "models": [
+    "tencent/hy4-flash"
+   ],
+   "strategies": [
+    "strat-serial-3.0"
+   ],
+   "slices": [
+    {
+     "group": "strat-serial-3.0 | tencent/hy4-flash",
+     "requests": 11,
+     "cost": 0.0015039435000000002,
+     "prompt": 141293,
+     "cached": 119808,
+     "out": 4073,
+     "reasoning": 2805,
+     "costs": [
+      0.000120434,
+      0.000041581,
+      0.000055012,
+      0.000129152,
+      0.0001577435,
+      0.0001591955,
+      0.0003994045,
+      0.000089575,
+      0.0000884335,
+      0.000202424,
+      0.0000609885
+     ],
+     "firstHit": 1
+    }
+   ],
+   "messages": 27,
+   "turns": 1,
+   "requests": {
+    "main": 11,
+    "helper": 0,
+    "helperKinds": {}
+   },
+   "tokens": {
+    "prompt": 141293,
+    "cached": 119808,
+    "write": 0,
+    "out": 4073,
+    "reasoning": 2805
+   },
+   "cost": {
+    "total": 0.0015039435000000002,
+    "main": 0.0015039435000000002,
+    "helper": 0,
+    "perRequestMedian": 0.000120434,
+    "helperMax": 0
+   },
+   "cache": {
+    "overallPct": 85,
+    "firstHitAtRequest": 1,
+    "curve": [
+     0,
+     76,
+     78,
+     62,
+     66,
+     75,
+     89,
+     95,
+     95,
+     94,
+     98
+    ]
+   },
+   "growth": {
+    "promptCurve": [
+     3168,
+     4024,
+     4910,
+     7896,
+     11629,
+     15370,
+     17326,
+     18077,
+     18928,
+     19841,
+     20124
+    ],
+    "outCurve": [
+     68,
+     26,
+     84,
+     112,
+     57,
+     51,
+     2189,
+     224,
+     187,
+     954,
+     121
+    ],
+    "reasoningShare": 0.69
+   },
+   "calls": {
+    "total": 15,
+    "byTool": {
+     "shell": 9,
+     "output_read": 6
+    },
+    "byResultClass": {
+     "ok": 14,
+     "held": 1
+    },
+    "repeats": 0,
+    "repeatRuns": 0,
+    "callsBeforeFirstWrite": null,
+    "callsBeforeFirstCommit": 14,
+    "firstWriteTool": null
+   },
+   "perTurn": [
+    {
+     "n": 0,
+     "userChars": 1721,
+     "shortFollowUp": false,
+     "assistantMsgs": 11,
+     "calls": 15,
+     "tools": "shell shell shell output_read output_read output_read output_read output_read output_read shell shell shell shell shell:held shell",
+     "stop": "done",
+     "after": null,
+     "args": [
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "pwd && git status --short && git branch --show-current && ls"
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "cat docs/PROTOCOL.md"
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "cat scripts/wh.mjs"
+       }
+      },
+      {
+       "name": "output_read",
+       "args": {
+        "handle": "os:1jeqdg3hb5"
+       }
+      },
+      {
+       "name": "output_read",
+       "args": {
+        "handle": "os:1jeqdg3hb5",
+        "offset": 2950
+       }
+      },
+      {
+       "name": "output_read",
+       "args": {
+        "handle": "os:fpz17hddg7",
+        "length": 9000
+       }
+      },
+      {
+       "name": "output_read",
+       "args": {
+        "handle": "os:fpz17hddg7",
+        "offset": 9000,
+        "length": 14000
+       }
+      },
+      {
+       "name": "output_read",
+       "args": {
+        "handle": "os:fpz17hddg7",
+        "offset": 21000,
+        "length": 16000
+       }
+      },
+      {
+       "name": "output_read",
+       "args": {
+        "handle": "os:fpz17hddg7",
+        "offset": 32900,
+        "length": 6400
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "python3 - <<'PY'",
+        "cmd_more": {
+         "length": 1699,
+         "hash": "93fee478"
+        },
+        "want": {
+         "length": 80,
+         "hash": "9c4c03bc"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "git status --short && echo '--- DIFF ---' && git diff && echo '--- STAT ---' && git diff --stat"
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "sed -n '1,8p;40,70p' docs/PROTOCOL.md | cat -A | head -50"
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "git diff -- docs/PROTOCOL.md | sed -n '1,80p'"
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "sed -n '/^## 4\\./,/^## Adding a tool/p' docs/PROTOCOL.md && echo '--- ASCII CHECK ---' && LC_ALL=C grep -n '[^ -~]' docs/PROTOCOL.md | head || echo 'all ASCII'"
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "git diff --stat && echo '--- final diff check ---' && git diff --numstat && git add docs/PROTOCOL.md && git commit -m \"docs/PROTOCOL: add section 4 on the held, stepped command line\" && echo '--- HASH ---' && git rev-parse HEAD && echo '--- STATUS ---' && git status --short",
+        "want": {
+         "length": 80,
+         "hash": "edc7c8b2"
+        }
+       }
+      }
+     ]
+    }
+   ],
+   "followUps": {
+    "limitContinuations": 0,
+    "failedContinuations": 0,
+    "steering": 0,
+    "unrecorded": 0
+   },
+   "flags": {},
+   "stem": null
+  }
+ ],
+ "groups": [
+  {
+   "group": "strat-serial-3.0 | tencent/hy4-flash",
+   "sessions": 1,
+   "requests": 11,
+   "costTotal": 0.0015039435000000002,
+   "costMedian": 0.000120434,
+   "costP95": 0.0003994045,
+   "costMax": 0.0003994045,
+   "cachePct": 85,
+   "firstHitAtRequest": 1,
+   "outPerRequest": 370.27272727272725,
+   "reasoningShare": 0.69
+  }
+ ]
+}
