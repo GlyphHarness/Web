@@ -1,0 +1,1571 @@
+{
+ "at": "2026-11-20T19:12:23.289Z",
+ "sessions": [
+  {
+   "id": "smwpck2bhnnie",
+   "title": "H12 full, task 5, green",
+   "rows": [
+    {
+     "i": 0,
+     "helper": null,
+     "strat": "strat-serial-3.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 3916,
+     "cached": 0,
+     "write": 0,
+     "out": 42,
+     "reasoning": 0,
+     "cost": 0.000142961,
+     "cachePct": 0
+    },
+    {
+     "i": 1,
+     "helper": null,
+     "strat": "strat-serial-3.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 4367,
+     "cached": 3584,
+     "write": 0,
+     "out": 29,
+     "reasoning": 6,
+     "cost": 0.0000368555,
+     "cachePct": 82
+    },
+    {
+     "i": 2,
+     "helper": null,
+     "strat": "strat-serial-3.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 4905,
+     "cached": 4096,
+     "write": 0,
+     "out": 31,
+     "reasoning": 14,
+     "cost": 0.0000388145,
+     "cachePct": 84
+    },
+    {
+     "i": 3,
+     "helper": null,
+     "strat": "strat-serial-3.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 6089,
+     "cached": 4608,
+     "write": 0,
+     "out": 93,
+     "reasoning": 77,
+     "cost": 0.0000718135,
+     "cachePct": 76
+    },
+    {
+     "i": 4,
+     "helper": null,
+     "strat": "strat-serial-3.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 12033,
+     "cached": 5632,
+     "write": 0,
+     "out": 18,
+     "reasoning": 0,
+     "cost": 0.000235012,
+     "cachePct": 47
+    },
+    {
+     "i": 5,
+     "helper": null,
+     "strat": "strat-serial-3.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 17543,
+     "cached": 11776,
+     "write": 0,
+     "out": 57,
+     "reasoning": 12,
+     "cost": 0.0002275175,
+     "cachePct": 67
+    },
+    {
+     "i": 6,
+     "helper": null,
+     "strat": "strat-serial-3.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 18038,
+     "cached": 17408,
+     "write": 0,
+     "out": 26,
+     "reasoning": 0,
+     "cost": 0.000051815,
+     "cachePct": 97
+    },
+    {
+     "i": 7,
+     "helper": null,
+     "strat": "strat-serial-3.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 19181,
+     "cached": 17408,
+     "write": 0,
+     "out": 98,
+     "reasoning": 53,
+     "cost": 0.000101936,
+     "cachePct": 91
+    },
+    {
+     "i": 8,
+     "helper": null,
+     "strat": "strat-serial-3.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 19623,
+     "cached": 18944,
+     "write": 0,
+     "out": 72,
+     "reasoning": 34,
+     "cost": 0.000062297,
+     "cachePct": 97
+    },
+    {
+     "i": 9,
+     "helper": null,
+     "strat": "strat-serial-3.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 20072,
+     "cached": 19456,
+     "write": 0,
+     "out": 29,
+     "reasoning": 0,
+     "cost": 0.0000548185,
+     "cachePct": 97
+    },
+    {
+     "i": 10,
+     "helper": null,
+     "strat": "strat-serial-3.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 20721,
+     "cached": 19456,
+     "write": 0,
+     "out": 163,
+     "reasoning": 18,
+     "cost": 0.0000963605,
+     "cachePct": 94
+    },
+    {
+     "i": 11,
+     "helper": null,
+     "strat": "strat-serial-3.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 20979,
+     "cached": 20480,
+     "write": 0,
+     "out": 136,
+     "reasoning": 0,
+     "cost": 0.000067293,
+     "cachePct": 98
+    },
+    {
+     "i": 12,
+     "helper": null,
+     "strat": "strat-serial-3.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 21214,
+     "cached": 20480,
+     "write": 0,
+     "out": 259,
+     "reasoning": 84,
+     "cost": 0.0000927995,
+     "cachePct": 97
+    },
+    {
+     "i": 13,
+     "helper": null,
+     "strat": "strat-serial-3.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 21565,
+     "cached": 20992,
+     "write": 0,
+     "out": 24,
+     "reasoning": 0,
+     "cost": 0.000054915,
+     "cachePct": 97
+    },
+    {
+     "i": 14,
+     "helper": null,
+     "strat": "strat-serial-3.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 21617,
+     "cached": 20992,
+     "write": 0,
+     "out": 2074,
+     "reasoning": 2037,
+     "cost": 0.00034476,
+     "cachePct": 97
+    },
+    {
+     "i": 15,
+     "helper": null,
+     "strat": "strat-serial-3.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 22062,
+     "cached": 20992,
+     "write": 0,
+     "out": 77,
+     "reasoning": 22,
+     "cost": 0.0000797565,
+     "cachePct": 95
+    },
+    {
+     "i": 16,
+     "helper": null,
+     "strat": "strat-serial-3.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 22590,
+     "cached": 21504,
+     "write": 0,
+     "out": 31,
+     "reasoning": 0,
+     "cost": 0.0000746215,
+     "cachePct": 95
+    },
+    {
+     "i": 17,
+     "helper": null,
+     "strat": "strat-serial-3.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 23064,
+     "cached": 22016,
+     "write": 0,
+     "out": 41,
+     "reasoning": 0,
+     "cost": 0.0000754645,
+     "cachePct": 95
+    },
+    {
+     "i": 18,
+     "helper": null,
+     "strat": "strat-serial-3.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 23250,
+     "cached": 22528,
+     "write": 0,
+     "out": 459,
+     "reasoning": 389,
+     "cost": 0.0001235515,
+     "cachePct": 97
+    },
+    {
+     "i": 19,
+     "helper": null,
+     "strat": "strat-serial-3.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 23729,
+     "cached": 23040,
+     "write": 0,
+     "out": 34,
+     "reasoning": 0,
+     "cost": 0.000063452,
+     "cachePct": 97
+    },
+    {
+     "i": 20,
+     "helper": null,
+     "strat": "strat-serial-3.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 24150,
+     "cached": 23552,
+     "write": 0,
+     "out": 43,
+     "reasoning": 0,
+     "cost": 0.0000622995,
+     "cachePct": 98
+    },
+    {
+     "i": 21,
+     "helper": null,
+     "strat": "strat-serial-3.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 24636,
+     "cached": 23552,
+     "write": 0,
+     "out": 10673,
+     "reasoning": 9225,
+     "cost": 0.0015728245,
+     "cachePct": 96
+    },
+    {
+     "i": 22,
+     "helper": null,
+     "strat": "strat-serial-3.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 24728,
+     "cached": 24064,
+     "write": 0,
+     "out": 56,
+     "reasoning": 0,
+     "cost": 0.000067204,
+     "cachePct": 97
+    },
+    {
+     "i": 23,
+     "helper": null,
+     "strat": "strat-serial-3.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 25276,
+     "cached": 24576,
+     "write": 0,
+     "out": 26,
+     "reasoning": 0,
+     "cost": 0.000065017,
+     "cachePct": 97
+    },
+    {
+     "i": 24,
+     "helper": null,
+     "strat": "strat-serial-3.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 26877,
+     "cached": 25088,
+     "write": 0,
+     "out": 72,
+     "reasoning": 0,
+     "cost": 0.000110363,
+     "cachePct": 93
+    },
+    {
+     "i": 25,
+     "helper": null,
+     "strat": "strat-serial-3.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 27135,
+     "cached": 26624,
+     "write": 0,
+     "out": 64,
+     "reasoning": 0,
+     "cost": 0.000066813,
+     "cachePct": 98
+    },
+    {
+     "i": 26,
+     "helper": null,
+     "strat": "strat-serial-3.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 27436,
+     "cached": 26624,
+     "write": 0,
+     "out": 60,
+     "reasoning": 0,
+     "cost": 0.000076786,
+     "cachePct": 97
+    },
+    {
+     "i": 27,
+     "helper": null,
+     "strat": "strat-serial-3.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 27597,
+     "cached": 27136,
+     "write": 0,
+     "out": 85,
+     "reasoning": 0,
+     "cost": 0.0000687815,
+     "cachePct": 98
+    },
+    {
+     "i": 28,
+     "helper": null,
+     "strat": "strat-serial-3.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 28131,
+     "cached": 27136,
+     "write": 0,
+     "out": 43,
+     "reasoning": 0,
+     "cost": 0.0000815705,
+     "cachePct": 96
+    },
+    {
+     "i": 29,
+     "helper": null,
+     "strat": "strat-serial-3.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 29153,
+     "cached": 27648,
+     "write": 0,
+     "out": 45,
+     "reasoning": 0,
+     "cost": 0.0001004695,
+     "cachePct": 95
+    },
+    {
+     "i": 30,
+     "helper": null,
+     "strat": "strat-serial-3.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 29653,
+     "cached": 28672,
+     "write": 0,
+     "out": 227,
+     "reasoning": 0,
+     "cost": 0.0001092365,
+     "cachePct": 97
+    },
+    {
+     "i": 31,
+     "helper": null,
+     "strat": "strat-serial-3.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 29718,
+     "cached": 29184,
+     "write": 0,
+     "out": 24,
+     "reasoning": 0,
+     "cost": 0.000065838,
+     "cachePct": 98
+    },
+    {
+     "i": 32,
+     "helper": null,
+     "strat": "strat-serial-3.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 30151,
+     "cached": 29184,
+     "write": 0,
+     "out": 572,
+     "reasoning": 0,
+     "cost": 0.000157987,
+     "cachePct": 97
+    },
+    {
+     "i": 33,
+     "helper": null,
+     "strat": "strat-serial-3.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 30220,
+     "cached": 29696,
+     "write": 0,
+     "out": 24,
+     "reasoning": 0,
+     "cost": 0.000066256,
+     "cachePct": 98
+    },
+    {
+     "i": 34,
+     "helper": null,
+     "strat": "strat-serial-3.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 30861,
+     "cached": 29696,
+     "write": 0,
+     "out": 48,
+     "reasoning": 0,
+     "cost": 0.000092063,
+     "cachePct": 96
+    },
+    {
+     "i": 35,
+     "helper": null,
+     "strat": "strat-serial-3.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 30935,
+     "cached": 30720,
+     "write": 0,
+     "out": 840,
+     "reasoning": 0,
+     "cost": 0.000171625,
+     "cachePct": 99
+    },
+    {
+     "i": 36,
+     "helper": null,
+     "strat": "strat-serial-3.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 30991,
+     "cached": 30720,
+     "write": 0,
+     "out": 24,
+     "reasoning": 0,
+     "cost": 0.000058937,
+     "cachePct": 99
+    },
+    {
+     "i": 37,
+     "helper": null,
+     "strat": "strat-serial-3.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 31524,
+     "cached": 30720,
+     "write": 0,
+     "out": 122,
+     "reasoning": 0,
+     "cost": 0.000091361,
+     "cachePct": 97
+    },
+    {
+     "i": 38,
+     "helper": null,
+     "strat": "strat-serial-3.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 31681,
+     "cached": 31232,
+     "write": 0,
+     "out": 81,
+     "reasoning": 0,
+     "cost": 0.0000739435,
+     "cachePct": 99
+    },
+    {
+     "i": 39,
+     "helper": null,
+     "strat": "strat-serial-3.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 31797,
+     "cached": 31232,
+     "write": 0,
+     "out": 83,
+     "reasoning": 0,
+     "cost": 0.0000782845,
+     "cachePct": 98
+    },
+    {
+     "i": 40,
+     "helper": null,
+     "strat": "strat-serial-3.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 31920,
+     "cached": 31232,
+     "write": 0,
+     "out": 63,
+     "reasoning": 0,
+     "cost": 0.0000797795,
+     "cachePct": 98
+    },
+    {
+     "i": 41,
+     "helper": null,
+     "strat": "strat-serial-3.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 32427,
+     "cached": 31744,
+     "write": 0,
+     "out": 57,
+     "reasoning": 23,
+     "cost": 0.0000795295,
+     "cachePct": 98
+    },
+    {
+     "i": 42,
+     "helper": null,
+     "strat": "strat-serial-3.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 32889,
+     "cached": 32256,
+     "write": 0,
+     "out": 62,
+     "reasoning": 0,
+     "cost": 0.00007925,
+     "cachePct": 98
+    },
+    {
+     "i": 43,
+     "helper": null,
+     "strat": "strat-serial-3.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 33276,
+     "cached": 32256,
+     "write": 0,
+     "out": 94,
+     "reasoning": 0,
+     "cost": 0.000097291,
+     "cachePct": 97
+    },
+    {
+     "i": 44,
+     "helper": null,
+     "strat": "strat-serial-3.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 33405,
+     "cached": 32768,
+     "write": 0,
+     "out": 136,
+     "reasoning": 0,
+     "cost": 0.000090555,
+     "cachePct": 98
+    },
+    {
+     "i": 45,
+     "helper": null,
+     "strat": "strat-serial-3.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 33463,
+     "cached": 32768,
+     "write": 0,
+     "out": 76,
+     "reasoning": 0,
+     "cost": 0.000084155,
+     "cachePct": 98
+    },
+    {
+     "i": 46,
+     "helper": null,
+     "strat": "strat-serial-3.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 33970,
+     "cached": 33280,
+     "write": 0,
+     "out": 80,
+     "reasoning": 0,
+     "cost": 0.00008531,
+     "cachePct": 98
+    },
+    {
+     "i": 47,
+     "helper": null,
+     "strat": "strat-serial-3.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 34534,
+     "cached": 33792,
+     "write": 0,
+     "out": 61,
+     "reasoning": 0,
+     "cost": 0.0000852285,
+     "cachePct": 98
+    },
+    {
+     "i": 48,
+     "helper": null,
+     "strat": "strat-serial-3.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 34662,
+     "cached": 34304,
+     "write": 0,
+     "out": 66,
+     "reasoning": 0,
+     "cost": 0.000073259,
+     "cachePct": 99
+    },
+    {
+     "i": 49,
+     "helper": null,
+     "strat": "strat-serial-3.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 35237,
+     "cached": 34304,
+     "write": 0,
+     "out": 441,
+     "reasoning": 335,
+     "cost": 0.0001460715,
+     "cachePct": 97
+    },
+    {
+     "i": 50,
+     "helper": null,
+     "strat": "strat-serial-3.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 35378,
+     "cached": 34816,
+     "write": 0,
+     "out": 73,
+     "reasoning": 0,
+     "cost": 0.0000821505,
+     "cachePct": 98
+    },
+    {
+     "i": 51,
+     "helper": null,
+     "strat": "strat-serial-3.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 35494,
+     "cached": 34816,
+     "write": 0,
+     "out": 43,
+     "reasoning": 0,
+     "cost": 0.0000819955,
+     "cachePct": 98
+    },
+    {
+     "i": 52,
+     "helper": null,
+     "strat": "strat-serial-3.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 35995,
+     "cached": 35328,
+     "write": 0,
+     "out": 22,
+     "reasoning": 0,
+     "cost": 0.000079428,
+     "cachePct": 98
+    },
+    {
+     "i": 53,
+     "helper": null,
+     "strat": "strat-serial-3.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 36456,
+     "cached": 35840,
+     "write": 0,
+     "out": 127,
+     "reasoning": 0,
+     "cost": 0.0000931635,
+     "cachePct": 98
+    },
+    {
+     "i": 54,
+     "helper": null,
+     "strat": "strat-serial-3.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 36845,
+     "cached": 35840,
+     "write": 0,
+     "out": 112,
+     "reasoning": 0,
+     "cost": 0.000104671,
+     "cachePct": 97
+    },
+    {
+     "i": 55,
+     "helper": null,
+     "strat": "strat-serial-3.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 37003,
+     "cached": 36352,
+     "write": 0,
+     "out": 38,
+     "reasoning": 0,
+     "cost": 0.000082652,
+     "cachePct": 98
+    },
+    {
+     "i": 56,
+     "helper": null,
+     "strat": "strat-serial-3.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 37169,
+     "cached": 36864,
+     "write": 0,
+     "out": 122,
+     "reasoning": 0,
+     "cost": 0.000083112,
+     "cachePct": 99
+    }
+   ],
+   "models": [
+    "tencent/hy4-flash"
+   ],
+   "strategies": [
+    "strat-serial-3.0"
+   ],
+   "slices": [
+    {
+     "group": "strat-serial-3.0 | tencent/hy4-flash",
+     "requests": 57,
+     "cost": 0.006842076,
+     "prompt": 1509331,
+     "cached": 1451008,
+     "out": 18678,
+     "reasoning": 12329,
+     "costs": [
+      0.000142961,
+      0.0000368555,
+      0.0000388145,
+      0.0000718135,
+      0.000235012,
+      0.0002275175,
+      0.000051815,
+      0.000101936,
+      0.000062297,
+      0.0000548185,
+      0.0000963605,
+      0.000067293,
+      0.0000927995,
+      0.000054915,
+      0.00034476,
+      0.0000797565,
+      0.0000746215,
+      0.0000754645,
+      0.0001235515,
+      0.000063452,
+      0.0000622995,
+      0.0015728245,
+      0.000067204,
+      0.000065017,
+      0.000110363,
+      0.000066813,
+      0.000076786,
+      0.0000687815,
+      0.0000815705,
+      0.0001004695,
+      0.0001092365,
+      0.000065838,
+      0.000157987,
+      0.000066256,
+      0.000092063,
+      0.000171625,
+      0.000058937,
+      0.000091361,
+      0.0000739435,
+      0.0000782845,
+      0.0000797795,
+      0.0000795295,
+      0.00007925,
+      0.000097291,
+      0.000090555,
+      0.000084155,
+      0.00008531,
+      0.0000852285,
+      0.000073259,
+      0.0001460715,
+      0.0000821505,
+      0.0000819955,
+      0.000079428,
+      0.0000931635,
+      0.000104671,
+      0.000082652,
+      0.000083112
+     ],
+     "firstHit": 1
+    }
+   ],
+   "messages": 115,
+   "turns": 2,
+   "requests": {
+    "main": 57,
+    "helper": 0,
+    "helperKinds": {}
+   },
+   "tokens": {
+    "prompt": 1509331,
+    "cached": 1451008,
+    "write": 0,
+    "out": 18678,
+    "reasoning": 12329
+   },
+   "cost": {
+    "total": 0.006842076,
+    "main": 0.006842076,
+    "helper": 0,
+    "perRequestMedian": 0.0000815705,
+    "helperMax": 0
+   },
+   "cache": {
+    "overallPct": 96,
+    "firstHitAtRequest": 1,
+    "curve": [
+     0,
+     82,
+     84,
+     76,
+     47,
+     67,
+     97,
+     91,
+     97,
+     97,
+     94,
+     98,
+     97,
+     97,
+     97,
+     95,
+     95,
+     95,
+     97,
+     97,
+     98,
+     96,
+     97,
+     97,
+     93,
+     98,
+     97,
+     98,
+     96,
+     95,
+     97,
+     98,
+     97,
+     98,
+     96,
+     99,
+     99,
+     97,
+     99,
+     98,
+     98,
+     98,
+     98,
+     97,
+     98,
+     98,
+     98,
+     98,
+     99,
+     97,
+     98,
+     98,
+     98,
+     98,
+     97,
+     98,
+     99
+    ]
+   },
+   "growth": {
+    "promptCurve": [
+     3916,
+     4367,
+     4905,
+     6089,
+     12033,
+     17543,
+     18038,
+     19181,
+     19623,
+     20072,
+     20721,
+     20979,
+     21214,
+     21565,
+     21617,
+     22062,
+     22590,
+     23064,
+     23250,
+     23729,
+     24150,
+     24636,
+     24728,
+     25276,
+     26877,
+     27135,
+     27436,
+     27597,
+     28131,
+     29153,
+     29653,
+     29718,
+     30151,
+     30220,
+     30861,
+     30935,
+     30991,
+     31524,
+     31681,
+     31797,
+     31920,
+     32427,
+     32889,
+     33276,
+     33405,
+     33463,
+     33970,
+     34534,
+     34662,
+     35237,
+     35378,
+     35494,
+     35995,
+     36456,
+     36845,
+     37003,
+     37169
+    ],
+    "outCurve": [
+     42,
+     29,
+     31,
+     93,
+     18,
+     57,
+     26,
+     98,
+     72,
+     29,
+     163,
+     136,
+     259,
+     24,
+     2074,
+     77,
+     31,
+     41,
+     459,
+     34,
+     43,
+     10673,
+     56,
+     26,
+     72,
+     64,
+     60,
+     85,
+     43,
+     45,
+     227,
+     24,
+     572,
+     24,
+     48,
+     840,
+     24,
+     122,
+     81,
+     83,
+     63,
+     57,
+     62,
+     94,
+     136,
+     76,
+     80,
+     61,
+     66,
+     441,
+     73,
+     43,
+     22,
+     127,
+     112,
+     38,
+     122
+    ],
+    "reasoningShare": 0.66
+   },
+   "calls": {
+    "total": 56,
+    "byTool": {
+     "shell": 35,
+     "file_read": 10,
+     "file_edit": 11
+    },
+    "byResultClass": {
+     "ok": 53,
+     "find-absent": 2,
+     "held": 1
+    },
+    "repeats": 0,
+    "repeatRuns": 0,
+    "callsBeforeFirstWrite": 21,
+    "callsBeforeFirstCommit": 26,
+    "firstWriteTool": "file_edit"
+   },
+   "perTurn": [
+    {
+     "n": 0,
+     "userChars": 2466,
+     "shortFollowUp": false,
+     "assistantMsgs": 40,
+     "calls": 40,
+     "tools": "shell shell file_read file_read:find-absent file_read:find-absent shell file_read shell:held shell file_read shell shell shell shell shell shell shell shell shell shell shell file_edit shell file_read shell shell shell shell shell shell file_edit file_read file_edit file_read file_edit file_edit file_read file_edit file_edit file_edit",
+     "stop": "limit",
+     "after": null,
+     "args": [
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "pwd && git status --short && git branch --show-current && ls -la"
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "ls -la app scripts && cat CLAUDE.md"
+       }
+      },
+      {
+       "name": "file_read",
+       "args": {
+        "path": "CLAUDE.md"
+       }
+      },
+      {
+       "name": "file_read",
+       "args": {
+        "path": "app/profile.js"
+       }
+      },
+      {
+       "name": "file_read",
+       "args": {
+        "path": "scripts/test-profile.mjs"
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "grep -n \"repeats-flags\" -n app/panels.js && wc -l app/panels.js && cat scripts/ci.mjs"
+       }
+      },
+      {
+       "name": "file_read",
+       "args": {
+        "path": "app/panels.js",
+        "lines": "180-210"
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "git log --oneline -15 && ls docs && grep -rn \"calls before first write\\|scripted\" docs .claude scripts app | head -50"
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "grep -rn \"H12\\|scripted\" docs/concepts catalog .claude 2>/dev/null | head -60"
+       }
+      },
+      {
+       "name": "file_read",
+       "args": {
+        "path": "docs/concepts/OBSERVATIONS.md",
+        "lines": "80-105"
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "node -e \"",
+        "cmd_more": {
+         "length": 425,
+         "hash": "69f6abea"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": {
+         "length": 405,
+         "hash": "dbcc084f"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "node -e \"",
+        "cmd_more": {
+         "length": 547,
+         "hash": "63236421"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "ref": "os:3q4h6j5d0y"
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "ls docs/concepts && head -c 600 docs/concepts/profile-h12-blue-2026-11-20.json"
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "git show --stat HEAD && grep -rn \"python3 -c\\|python -c\\|node -e\" --include=\"*.json*\" docs catalog .claude 2>/dev/null | head -20"
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "git status --short && sed -n '1,60p' scripts/ci.mjs"
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "git config --get user.name && git config --get user.email && node scripts/ci.mjs profile 2>&1 | tail -8"
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "git show 73b2d89 -- docs/concepts/HYPOTHESES.md catalog/concepts.jsonl catalog/faults.jsonl | head -40 && grep -rn \"scriptedWrites\\|scripted file writes\" . --exclude-dir=.git | head -30"
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "git show 73b2d89 -- docs/concepts/HYPOTHESES.md | tail -25"
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "grep -rn \"sed -i\\|--in-place\\|python3 - <<\\|python3 -c\" docs/concepts/*.json | head -30"
+       }
+      },
+      {
+       "name": "file_edit",
+       "args": {
+        "path": "scripts/test-profile.mjs",
+        "find": {
+         "length": 33,
+         "hash": "c87dc8a0"
+        },
+        "replace": {
+         "length": 4143,
+         "hash": "cd57c4b4"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "node scripts/ci.mjs profile 2>&1 | tail -45; echo \"EXIT: ${PIPESTATUS[0]}\"",
+        "want": {
+         "length": 64,
+         "hash": "a112196e"
+        }
+       }
+      },
+      {
+       "name": "file_read",
+       "args": {
+        "path": "scripts/test-profile.mjs",
+        "lines": "137-190"
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "node scripts/ci.mjs profile 2>&1 | grep -E '^FAIL|^ci:' | tail -45",
+        "want": {
+         "length": 29,
+         "hash": "c874824f"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "node scripts/test-profile.mjs 2>&1 | grep -c '^FAIL'; node scripts/test-profile.mjs 2>&1 | grep '^FAIL' | head -8",
+        "want": {
+         "length": 50,
+         "hash": "b2e9db86"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "git add scripts/test-profile.mjs && git commit -m \"Spec: a shell call that writes a file through a script is counted (the profile cannot see it today)\" && git log -1 --format='%H %s'"
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "grep -rn \"cmd\" app/handles.js app/bridge.js app/capture-js.js | head -30 && sed -n '1,60p' app/panels.js"
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "grep -rn \"cmd\" app/*.js | grep -v profile.js | head -40",
+        "want": {
+         "length": 41,
+         "hash": "52bf63b6"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "grep -n \"const kv\\|function kv\\|const table\" app/panels.js && sed -n '60,80p' app/panels.js"
+       }
+      },
+      {
+       "name": "file_edit",
+       "args": {
+        "path": "app/profile.js",
+        "find": {
+         "length": 214,
+         "hash": "bc6d0682"
+        },
+        "replace": {
+         "length": 364,
+         "hash": "2b38073f"
+        }
+       }
+      },
+      {
+       "name": "file_read",
+       "args": {
+        "path": "app/profile.js",
+        "lines": "118-132"
+       }
+      },
+      {
+       "name": "file_edit",
+       "args": {
+        "path": "app/profile.js",
+        "find": {
+         "length": 28,
+         "hash": "44b44cc1"
+        },
+        "replace": {
+         "length": 1312,
+         "hash": "27251875"
+        }
+       }
+      },
+      {
+       "name": "file_read",
+       "args": {
+        "path": "app/profile.js",
+        "lines": "70-90"
+       }
+      },
+      {
+       "name": "file_edit",
+       "args": {
+        "ref": "os:2b5t1csw76"
+       }
+      },
+      {
+       "name": "file_edit",
+       "args": {
+        "path": "app/profile.js",
+        "find": {
+         "length": 942,
+         "hash": "3a115865"
+        },
+        "replace": {
+         "length": 1011,
+         "hash": "55d7431b"
+        }
+       }
+      },
+      {
+       "name": "file_read",
+       "args": {
+        "path": "app/profile.js",
+        "lines": "72-90"
+       }
+      },
+      {
+       "name": "file_edit",
+       "args": {
+        "path": "app/profile.js",
+        "find": {
+         "length": 127,
+         "hash": "e3474c8c"
+        },
+        "replace": {
+         "length": 143,
+         "hash": "8019ec36"
+        }
+       }
+      },
+      {
+       "name": "file_edit",
+       "args": {
+        "path": "app/profile.js",
+        "find": {
+         "length": 76,
+         "hash": "2c4ea561"
+        },
+        "replace": {
+         "length": 121,
+         "hash": "6207f3f6"
+        }
+       }
+      },
+      {
+       "name": "file_edit",
+       "args": {
+        "path": "app/profile.js",
+        "find": {
+         "length": 78,
+         "hash": "8ef0dab1"
+        },
+        "replace": {
+         "length": 132,
+         "hash": "f2149efd"
+        }
+       }
+      }
+     ]
+    },
+    {
+     "n": 1,
+     "userChars": 8,
+     "shortFollowUp": true,
+     "assistantMsgs": 17,
+     "calls": 16,
+     "tools": "shell shell shell file_edit file_edit shell shell shell file_read file_edit shell shell shell shell shell shell",
+     "stop": "done",
+     "after": "limit",
+     "args": [
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "git status --short && sed -n '185,212p' app/profile.js && sed -n '190,198p' app/panels.js"
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "grep -n \"scripted file writes\\|scriptedWrites\" app/profile.js app/panels.js"
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "grep -n \"renderBehaviour\" app/profile.js && sed -n '209,214p' app/profile.js && git log --oneline -3"
+       }
+      },
+      {
+       "name": "file_edit",
+       "args": {
+        "path": "app/profile.js",
+        "find": {
+         "length": 101,
+         "hash": "a60ddf5f"
+        },
+        "replace": {
+         "length": 149,
+         "hash": "f127da22"
+        }
+       }
+      },
+      {
+       "name": "file_edit",
+       "args": {
+        "path": "app/panels.js",
+        "find": {
+         "length": 150,
+         "hash": "8ce2204d"
+        },
+        "replace": {
+         "length": 209,
+         "hash": "cce35e54"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "sed -n '191,199p' app/panels.js && node --check app/panels.js && node scripts/test-profile.mjs 2>&1 | grep -E '^FAIL|^PASS scripted'",
+        "want": {
+         "length": 77,
+         "hash": "a0a38603"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "node --check app/panels.js && node scripts/ci.mjs profile validators 2>&1 | tail -30; echo \"EXIT: ${PIPESTATUS[0]}\"",
+        "want": {
+         "length": 70,
+         "hash": "45eccb30"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "node scripts/ci.mjs profile validators 2>&1 | grep -E '^FAIL|^ci:'; echo \"EXIT: ${PIPESTATUS[0]}\"",
+        "want": {
+         "length": 55,
+         "hash": "252814c7"
+        }
+       }
+      },
+      {
+       "name": "file_read",
+       "args": {
+        "path": "app/profile.js",
+        "lines": "74-92"
+       }
+      },
+      {
+       "name": "file_edit",
+       "args": {
+        "path": "app/profile.js",
+        "find": {
+         "length": 75,
+         "hash": "6cf6b09e"
+        },
+        "replace": {
+         "length": 85,
+         "hash": "e9cd5249"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "node --check app/panels.js && node scripts/ci.mjs profile validators 2>&1 | grep -E '^FAIL|^ci:'; echo \"EXIT: ${PIPESTATUS[0]}\"",
+        "want": {
+         "length": 57,
+         "hash": "2509f0d3"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "git diff -- app/profile.js app/panels.js && git status --short"
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "git diff -- app/profile.js | head -80"
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "git show --stat 80575e7 --format='%H %s' | head -10 && git diff --name-only && git add app/profile.js app/panels.js && git commit -m \"Implement: the turn profile counts scripted file writes from the kept shell command line (python/node inline programs, here-documents, sed -i, redirects and tee)\" && git log -2 --format='%H %s'"
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "node --check app/panels.js && node scripts/ci.mjs profile validators 2>&1 | tail -3; echo \"EXIT: ${PIPESTATUS[0]}\"; git status --short; git log --oneline origin/task5..HEAD 2>/dev/null || true",
+        "want": {
+         "length": 62,
+         "hash": "a913b323"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "git status --short --branch && git log -2 --format='%H%n%s' && git diff HEAD --stat"
+       }
+      }
+     ]
+    }
+   ],
+   "followUps": {
+    "limitContinuations": 1,
+    "failedContinuations": 0,
+    "steering": 0,
+    "unrecorded": 0
+   },
+   "flags": {},
+   "stem": null
+  }
+ ],
+ "groups": [
+  {
+   "group": "strat-serial-3.0 | tencent/hy4-flash",
+   "sessions": 1,
+   "requests": 57,
+   "costTotal": 0.006842076,
+   "costMedian": 0.0000815705,
+   "costP95": 0.000235012,
+   "costMax": 0.0015728245,
+   "cachePct": 96,
+   "firstHitAtRequest": 1,
+   "outPerRequest": 327.6842105263158,
+   "reasoningShare": 0.66
+  }
+ ]
+}

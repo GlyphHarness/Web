@@ -119,3 +119,19 @@ Hypotheses touched (description only):
 - H12: task 4 requests 8 (green) against 11 (blue) and calls 10 against 15 support the claim on a doc edit; cost was 1.41 times higher in green, so the claim holds on requests and calls and fails on cost there. Task 5 not complete.
 
 Limits: one model, one run per cell, blue and green not interleaved within a task beyond the order given (task 4 green first, task 5 blue first).
+
+### 2026-11-20 · H12 full stage, task 5 pair complete (multi-file change, checks first) · n = 2 sessions, 105 requests
+Source: `docs/concepts/profile-h12-t5-blue-2026-11-20.json`, `docs/concepts/profile-h12-t5-green-2026-11-20.json`; event lines in `docs/concepts/h12-full-progress.jsonl`. Completes the entry above (task 4 pair and task 5 blue); the table and verdict are in `HYPOTHESES.md` (H12 full stage).
+
+What it looked like, blue then green, `strat-serial-3.0 | tencent/hy4-flash`, two turns each (a 40-round limit stop, one "continue"), stop done: requests 48 and 57; calls 54 and 56; cost $0.00536 and $0.00684; prompt 1,310.6k and 1,509.3k tokens (97% and 96% cached); output 13.4k and 18.7k (51% and 66% reasoning); calls before first commit 31 and 26; green's first write came at call 21 (a `file_edit`), blue's profile shows no write because its writes were here-documents. Both committed the checks first (red) and the implementation second; suites 67/67 and 70/70 plus `validators` 46/46 in the clones. Results other than ok, `held` excluded: 4 and 4 (2 `find-absent` and 2 `No stored call` each). Green wrote 0 files by script; blue's shape count is 11, of which 7 stand in for an edit.
+
+Pointers drilled: `dump` of both sessions for the `No stored call` handles (each appears only in its call and its answer) and for the classifier's `held` match (a `git log` line).
+
+Open questions it raises:
+- Both arms asked the tool to repeat a call that was never stored. Does the model take an output handle (`os:...`) for a call handle, or is it inventing one? The two namespaces share the `os:` prefix.
+- Would the held step's note be enough if it said that no call of the session holds the handle?
+
+Hypotheses touched (description only):
+- H12: requests 48 and 57 (green more), cost 1.28 times, scripted writes 7 or more and 0. With the task 4 pair and the canary: fewer requests not shown; no scripted writes holds in all three tasks; green dearer on all three.
+
+Limits: one run per cell, one model; green second on this task.
