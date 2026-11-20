@@ -1367,7 +1367,7 @@ async function turnsInner(s, depth, onFirst) {
       }
       // pacing: the call waits as it will run (after any policy repair)
       if (!nameless && !scopeNo && !pol?.refused && co?.halted()) await co.gate(s.id, 'tool');
-      const go = nameless || scopeNo || pol?.refused ? 'release' : await (async v => hold(s, 'tool', v.detail, v.brief))(await heldView(s, tc, pol?.to));
+      const go = nameless || scopeNo || pol?.refused ? 'release' : await (async v => hold(s, 'tool', v.detail, v.brief, v.ref))(await heldView(s, tc, pol?.to));
       if (nameless) { /* content set above */ }
       else if (scopeNo) { content = `Not run: ${tc.function.name} is not available in this session.`; smell(s, { kind: 'scope-refused', tool: tc.function.name, detail: eff(s).path }); }
       else if (go === 'skip') content = 'Not run: skipped by the user.';
@@ -1545,7 +1545,7 @@ function valueEdit(v, fields, why) {
 // release too (bridge directive "release").
 const held = new Map();
 const pace = s => (s ? cfg(s).pace : state.meta.settings.pace) || 'run';
-function hold(s, kind, detail, brief) {
+function hold(s, kind, detail, brief, ref) {
   const p = pace(s);
   if (p === 'run' || (p === 'requests' && kind !== 'request') || (p === 'tools' && kind !== 'tool')) return Promise.resolve('release');
   return new Promise(ok => {
@@ -1558,6 +1558,7 @@ function hold(s, kind, detail, brief) {
       controls: [h('div', { class: 'actions' }, btn('release', { 'data-hold': 'release', class: 'primary' }), btn('release all', { 'data-hold': 'all' }), btn('skip', { 'data-hold': 'skip' }), ...(clip ? [btn('show all', { 'data-hold': 'more' })] : []))] } }, { session: s.id });
     card.setAttribute('data-held', id);
     card.setAttribute('data-brief', brief ?? detail.slice(0, 200)); // the short form: wh say / wh step print it, never a bare handle
+    if (ref) card.setAttribute('data-ref', ref); // a call whose arguments are a handle alone: stored (by a call of this session) | lost | unknown (no call stored it) | other (resolves, not recorded here)
     if (clip) card.setAttribute('data-clip', '');
     const done = (v, by = 'you') => { if (!held.has(id)) return; held.delete(id); card.dataset.done = v === 'skip' ? 'skipped' : 'released'; slot(status, `${card.dataset.done} by ${by}`); for (const b of card.querySelectorAll('button:not([data-hold=more])')) b.disabled = true; link?.emit('held-done', { id, by, v }); ok(v); };
     card.addEventListener('click', e => { const a = e.target.dataset?.hold; if (!a) return; if (a === 'more') slot(e.target, card.toggleAttribute('data-open') ? 'show less' : 'show all'); else if (a === 'all') letLoose(); else done(a); });
@@ -1591,9 +1592,15 @@ async function heldView(s, tc, to) {
   const name = tc.function.name, raw = tc.function.arguments || '{}', ref = to == null ? refOf(raw) : null;
   const text = to ?? await fullArgs(tc);
   if (!ref) return { detail: `${name} ${text}` };
-  if (text !== raw) return { detail: `${name} ${text}`, brief: `${name} ${JSON.stringify(argSummary(name, text))}` };
-  const m = s.messages.findLast(m => m.tool_calls?.some(c => c.id === tc.id)), kept = m?.x?.args?.[m.tool_calls.findIndex(c => c.id === tc.id)];
-  return { detail: `${name} ${raw}\nthe stored arguments are not in this browser's store (${ref})`, brief: kept ? `${name} ${JSON.stringify(kept)}` : `${name} (stored arguments not found: ${ref})` };
+  if (text !== raw) return { ref: storedBy(s, ref) ? 'stored' : 'other', detail: `${name} ${text}`, brief: `${name} ${JSON.stringify(argSummary(name, text))}` };
+  // the arguments are the handle alone and it does not resolve here: a call of this session stored it (summary kept beside that call) and it is lost, or no call did (the model made the handle up)
+  const stored = storedBy(s, ref);
+  if (!stored) return { ref: 'unknown', detail: `${name} ${raw}\nno call in this session stored this handle (${ref}); releasing will fail the call, like a missing handle`, brief: `${name} (no call of this session stored ${ref}; releasing fails the call)` };
+  return { ref: 'lost', detail: `${name} ${raw}\na call in this session stored these arguments, but they are not in this browser's store (${ref}); releasing fails the call unless they come back`, brief: `${name} ${JSON.stringify(stored)} (stored arguments lost: ${ref})` };
+}
+// The summary kept beside a call of this session whose arguments are this handle (the harness stored them, or the model repeated a stored call); nothing when no call of the session stored it
+function storedBy(s, ref) {
+  for (const m of s.messages) for (const [j, c] of (m.tool_calls || []).entries()) { const k = m.x?.args?.[j]; if (k && refOf(c.function.arguments) === ref) return k; }
 }
 
 // ---------- questions to the person (ask.js) ----------
