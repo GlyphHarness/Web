@@ -226,7 +226,7 @@ const mock = {
     else if (/open (os:\w+)/.test(last.content || '')) {
       yield { choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_' + Date.now(), type: 'function', function: { name: 'entry_read', arguments: JSON.stringify({ handle: /open (os:\w+)/.exec(last.content)[1], part: 'transcript', why: 'need the exact wording of the musing' }) } }] } }] };
     } else if (/long script/.test(last.content || '')) {
-      const code = "const out = []; for (let i = 0; i < 300; i++) { out.push('row ' + i + '   '); if (i === 150) out.push('total=4950'); } out.push('same', 'same', 'same'); return out.join('\\n'); // " + 'padding '.repeat(60);
+      const code = "const out = []; for (let i = 0; i < 300; i++) { out.push('row ' + i + '   '); if (i === 150) out.push('total=4950'); } out.push('same', 'same', 'same'); return out.join('\\n'); // " + 'padding '.repeat(/huge/.test(last.content) ? 700 : 60);
       yield { choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_' + Date.now(), type: 'function', function: { name: 'run_js', arguments: JSON.stringify({ code, name: 'sum rows', want: 'total' }) } }] } }] };
     } else if (/request a value|set a value|revise value v\d+|use value v\d+|history of v\d+/.test(last.content || '')) {
       const c = last.content, id = /(v\d+)/.exec(c.replace(/^[^]*?(revise value|use value|history of) /, ''))?.[1];
@@ -250,6 +250,12 @@ const mock = {
     } else if (/loop forever/.test(last.content || '')) {
       const code = /refuse me/.test(last.content) ? 'while (true) {} // refuse me' : 'let i = 0; while (true) { if (++i > 5) break } return i';
       yield { choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_' + Date.now(), type: 'function', function: { name: 'run_js', arguments: JSON.stringify({ code }) } }] } }] };
+    } else if (/^(stored|repeat) edit /.test(last.content || '')) {
+      // "stored edit <path>": one file_edit whose arguments are longer than ARG_MAX (the harness stores them by handle);
+      // "repeat edit os:<handle>": a model repeating a stored call by its handle, written as a model writes JSON (with spaces)
+      const rep = /^repeat edit (os:\w+)/.exec(last.content);
+      const args = rep ? `{"ref": "${rep[1]}"}` : JSON.stringify({ path: /^stored edit (\S+)/.exec(last.content)[1], find: 'hello', replace: 'goodbye '.repeat(200) });
+      yield { choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_' + Date.now(), type: 'function', function: { name: 'file_edit', arguments: args } }] } }] };
     } else if (/^shell: /.test(last.content || '')) {
       yield { choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_' + Date.now(), type: 'function', function: { name: 'shell', arguments: JSON.stringify({ cmd: last.content.slice(7), timeout: 600 }) } }] } }] };
     } else if (/repo (deep edit|rewrite)/.test(last.content || '')) {

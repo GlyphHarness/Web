@@ -78,6 +78,18 @@ try {
   check('held: nothing is listed once the step is released', none.code === 0 && none.data?.held?.length === 0 && none.data?.approve?.length === 0, none.out.slice(0, 200));
   wh('pace', 'run');
 
+  // ---- held: a call whose arguments are stored by handle (longer than ARG_MAX) shows what it will do ----
+  // spec (red): say and step show the tool and the kept fields of the argument summary, never the handle; held prints the arguments whole.
+  // (a file_edit needs a session on a host with the file tools, which wh cannot make; run_js is stored by the same seam: the mock's "long script huge")
+  wh('pace', 'tools');
+  const bigTurn = wh('say', 'long script huge');
+  const big = json('held'), bigText = big.data?.held?.[0] || '';
+  const bigLine = bigTurn.out.split('\n').find(l => /^HELD /.test(l)) || '';
+  check('held: say shows a stored call as the tool and its kept fields (sizes, no text, no handle)', /^HELD run_js \{"code":\{"length":\d+,"hash":"\w+"\}/.test(bigLine) && !/"ref"|padding/.test(bigLine) && bigLine.length < 400, bigLine.slice(0, 300));
+  check('held: wh held prints a stored call whole, resolved from its handle', /^run_js \{"code":"const out/.test(bigText) && bigText.includes('total=4950') && bigText.includes('padding '.repeat(700)) && bigText.endsWith('"want":"total"}') && !/"ref"/.test(bigText), bigText.slice(0, 100) + ' ... ' + bigText.slice(-60) + ` (${bigText.length})`);
+  wh('step');
+  wh('pace', 'run');
+
   // ---- forget: stored keys leave this browser profile; names only are reported ----
   const f1 = json('forget'), f2 = json('forget');
   check('forget: the key store is emptied and the answer names what was there, not its value', f1.code === 0 && f1.data?.had?.includes('openrouter') && f2.data?.had?.length === 0, f1.out.slice(0, 200));
