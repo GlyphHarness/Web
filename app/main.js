@@ -1367,7 +1367,9 @@ async function turnsInner(s, depth, onFirst) {
       }
       // pacing: the call waits as it will run (after any policy repair)
       if (!nameless && !scopeNo && !pol?.refused && co?.halted()) await co.gate(s.id, 'tool');
-      const go = nameless || scopeNo || pol?.refused ? 'release' : await (async v => hold(s, 'tool', v.detail, v.brief, v.ref))(await heldView(s, tc, pol?.to));
+      // the held mark: x.held is written only on a call that waited at a hold (released or skipped); a call that never waited carries no key
+      const gate = nameless || scopeNo || pol?.refused ? null : (v => hold(s, 'tool', v.detail, v.brief, v.ref))(await heldView(s, tc, pol?.to));
+      const go = gate ? await gate : 'release', waited = !!gate?.waited;
       if (nameless) { /* content set above */ }
       else if (scopeNo) { content = `Not run: ${tc.function.name} is not available in this session.`; smell(s, { kind: 'scope-refused', tool: tc.function.name, detail: eff(s).path }); }
       else if (go === 'skip') content = 'Not run: skipped by the user.';
@@ -1388,7 +1390,7 @@ async function turnsInner(s, depth, onFirst) {
       watchCall(s, tc, content); // on-hook check by a small model, for every call (not awaited; flags only)
       if (/\n\[timed out after/.test(content)) smell(s, { kind: 'tool-timeout', tool: tc.function.name, detail: content.slice(-120) });
       const m = { role: 'tool', tool_call_id: tc.id, content };
-      m.x = { tool: tc.function.name, ms: tc._t0 ? Math.round(performance.now() - tc._t0) : 0, ...(tc._used ? { values: tc._used } : {}), ok: !/^(Tool error|Error:|Not run:|Unknown tool|Invalid JSON)/.test(content), ...(ctx.audit ? { audit: ctx.audit } : {}), ...(pol ? { policy: pol } : {}) };
+      m.x = { tool: tc.function.name, ms: tc._t0 ? Math.round(performance.now() - tc._t0) : 0, ...(tc._used ? { values: tc._used } : {}), ok: !/^(Tool error|Error:|Not run:|Unknown tool|Invalid JSON)/.test(content), ...(ctx.audit ? { audit: ctx.audit } : {}), ...(pol ? { policy: pol } : {}), ...(waited ? { held: true } : {}) };
       delete tc._t0; delete tc._used;
       push(s, m);
     }
@@ -1548,7 +1550,7 @@ const pace = s => (s ? cfg(s).pace : state.meta.settings.pace) || 'run';
 function hold(s, kind, detail, brief, ref) {
   const p = pace(s);
   if (p === 'run' || (p === 'requests' && kind !== 'request') || (p === 'tools' && kind !== 'tool')) return Promise.resolve('release');
-  return new Promise(ok => {
+  const waiting = new Promise(ok => {
     const id = uid('h');
     const status = h('span', { class: 'mx', text: 'waiting' }); // the card's status text: a template places it, done() writes it
     const shown = detail; // the whole text: a long one is clipped by CSS (data-clip) and one action (data-hold=more) opens it
@@ -1567,6 +1569,8 @@ function hold(s, kind, detail, brief, ref) {
     scrollDown();
     link?.emit('held', { id, session: s.id, kind, detail: detail.slice(0, 2000) });
   });
+  waiting.waited = true; // a hold card was made and the step waits on it (the held mark reads this); the immediate release above has no such flag
+  return waiting;
 }
 function letLoose(by = 'you') {
   // where the pace comes from a profile, the session gets its own "run" (unless locked)
