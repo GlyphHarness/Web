@@ -10,6 +10,7 @@ const num = v => Number(v) || 0;
 const sum = (a, f) => a.reduce((n, e) => n + num(typeof f === 'function' ? f(e) : e[f]), 0);
 // small pure hash (FNV-1a, 32 bit) so identical arguments can be told apart without keeping them
 const hash = s => { let x = 0x811c9dc5; const t = String(s); for (let i = 0; i < t.length; i++) { x ^= t.charCodeAt(i); x = Math.imul(x, 0x01000193) >>> 0; } return x.toString(16).padStart(8, '0'); };
+const SHORT = 240; // a follow-up shorter than this many characters is short
 const med = a => { if (!a.length) return null; const s = [...a].sort((x, y) => x - y), m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
 const len = c => typeof c === 'string' ? c.length : c == null ? 0 : JSON.stringify(c).length;
 
@@ -98,10 +99,11 @@ export function profile(s) {
   // how each turn's run stopped (session.stops, written by the harness: done, limit, failed, stopped, held, budget);
   // null where nothing was recorded (sessions from before stop reasons, runs cut off by a reload)
   turns.forEach((t, n) => { const end = turns[n + 1]?.start ?? Infinity; t.stop = (s.stops || []).filter(x => x.at > t.start && x.at <= end).at(-1)?.why ?? null; });
-  // follow-up turns by what came before them: after a round-limit stop the message continues the run, otherwise it steers
+  // follow-up turns by what came before them: after a round-limit stop the message continues the run; a short message
+  // after a failed stop (the provider erred, the run ended) does too; otherwise it steers
   const after = n => n > 0 ? turns[n - 1].stop : null;
-  const followUps = { limitContinuations: 0, steering: 0, unrecorded: 0 };
-  turns.forEach((t, n) => { if (n > 0) followUps[after(n) === 'limit' ? 'limitContinuations' : after(n) ? 'steering' : 'unrecorded']++; });
+  const followUps = { limitContinuations: 0, failedContinuations: 0, steering: 0, unrecorded: 0 };
+  turns.forEach((t, n) => { if (n > 0) followUps[after(n) === 'limit' ? 'limitContinuations' : after(n) === 'failed' && t.userChars < SHORT ? 'failedContinuations' : after(n) ? 'steering' : 'unrecorded']++; });
 
   // repeats: the same tool with identical arguments again
   const seen = new Map(); let repeats = 0, repeatRuns = 0, prevRep = false;
@@ -112,6 +114,9 @@ export function profile(s) {
   // order: how many calls before the first write, and how reads and writes interleave
   const READ = /read|ls|list|search|get|fetch/i, WRITE = /commit|pr$|create|file|write|edit/i;
   const firstWrite = calls.findIndex(c => WRITE.test(c.name || '') && !READ.test(c.name || ''));
+  // a commit made through the shell: the first shell call whose kept command line runs git commit (only the first line of a command is kept)
+  const COMMIT = /\bgit(?:\s+(?:-C\s+\S+|-c\s+\S+|--[\w-]+(?:=\S+)?))*\s+commit\b/;
+  const firstCommit = calls.findIndex(c => c.name === 'shell' && typeof c.args?.cmd === 'string' && COMMIT.test(c.args.cmd));
   const byClass = {}; for (const c of calls) byClass[c.cls] = (byClass[c.cls] || 0) + 1;
   const byTool = {}; for (const c of calls) byTool[c.name] = (byTool[c.name] || 0) + 1;
 
@@ -130,9 +135,9 @@ export function profile(s) {
     cost: { total: sum(reqs, 'cost'), main: sum(main, 'cost'), helper: sum(helper, 'cost'), perRequestMedian: med(main.map(r => r.cost)), helperMax: helper.length ? Math.max(...helper.map(r => r.cost)) : 0 },
     cache: { overallPct: sum(main, 'prompt') ? Math.round(100 * sum(main, 'cached') / sum(main, 'prompt')) : null, firstHitAtRequest: firstHit < 0 ? null : firstHit, curve: cacheCurve },
     growth: { promptCurve, outCurve: main.map(r => r.out), reasoningShare: sum(main, 'out') ? +(sum(main, 'reasoning') / sum(main, 'out')).toFixed(2) : 0 },
-    calls: { total: calls.length, byTool, byResultClass: byClass, repeats, repeatRuns, callsBeforeFirstWrite: firstWrite < 0 ? null : firstWrite, firstWriteTool: firstWrite < 0 ? null : calls[firstWrite].name },
-    perTurn: turns.map((t, n) => ({ n, userChars: t.userChars, shortFollowUp: n > 0 && t.userChars < 240, assistantMsgs: t.assistantMsgs, calls: t.calls.length, tools: t.calls.map(c => c.name + (c.cls === 'ok' ? '' : ':' + c.cls)).join(' '), stop: t.stop, after: after(n), args: t.calls.map(c => ({ name: c.name, args: c.args })) })), // args: one argument summary per call, in call order
-    followUps, // turns after the first: after a round-limit stop, steering (after any other recorded stop), or with no stop recorded
+    calls: { total: calls.length, byTool, byResultClass: byClass, repeats, repeatRuns, callsBeforeFirstWrite: firstWrite < 0 ? null : firstWrite, callsBeforeFirstCommit: firstCommit < 0 ? null : firstCommit, firstWriteTool: firstWrite < 0 ? null : calls[firstWrite].name },
+    perTurn: turns.map((t, n) => ({ n, userChars: t.userChars, shortFollowUp: n > 0 && t.userChars < SHORT, assistantMsgs: t.assistantMsgs, calls: t.calls.length, tools: t.calls.map(c => c.name + (c.cls === 'ok' ? '' : ':' + c.cls)).join(' '), stop: t.stop, after: after(n), args: t.calls.map(c => ({ name: c.name, args: c.args })) })), // args: one argument summary per call, in call order
+    followUps, // turns after the first: after a round-limit stop, a short one after a failed stop, steering (after any other recorded stop), or with no stop recorded
     flags: (s.flags || []).reduce((o, f) => (o[f.tool + ':' + String(f.kind || f.why || '').slice(0, 30)] = (o[f.tool + ':' + String(f.kind || f.why || '').slice(0, 30)] || 0) + 1, o), {}),
     stem: s.stem ? { folded: !!s.stem.folded } : null,
   };
@@ -154,7 +159,7 @@ export function across(profiles) {
 }
 // per-session behaviour counts (not tied to one model slice)
 export function behaviour(profiles) {
-  return profiles.map(p => ({ id: p.id, title: p.title, models: p.models, repeats: p.calls.repeats, callsBeforeFirstWrite: p.calls.callsBeforeFirstWrite, failedShare: p.calls.total ? +((p.calls.total - (p.calls.byResultClass.ok || 0)) / p.calls.total).toFixed(2) : null, shortFollowUps: p.perTurn.filter(t => t.shortFollowUp).length, limitContinuations: p.followUps?.limitContinuations ?? null, steeringFollowUps: p.followUps?.steering ?? null, helperShareOfCost: p.cost.total ? +(p.cost.helper / p.cost.total).toFixed(2) : null }));
+  return profiles.map(p => ({ id: p.id, title: p.title, models: p.models, repeats: p.calls.repeats, callsBeforeFirstWrite: p.calls.callsBeforeFirstWrite, callsBeforeFirstCommit: p.calls.callsBeforeFirstCommit ?? null, failedShare: p.calls.total ? +((p.calls.total - (p.calls.byResultClass.ok || 0)) / p.calls.total).toFixed(2) : null, shortFollowUps: p.perTurn.filter(t => t.shortFollowUp).length, limitContinuations: p.followUps?.limitContinuations ?? null, failedContinuations: p.followUps?.failedContinuations ?? null, steeringFollowUps: p.followUps?.steering ?? null, helperShareOfCost: p.cost.total ? +(p.cost.helper / p.cost.total).toFixed(2) : null }));
 }
 
 const k = n => n == null ? '-' : n >= 1000 ? (n / 1000).toFixed(1) + 'k' : String(Math.round(n));
@@ -168,8 +173,8 @@ export function render(p) {
     `  out per request    ${p.growth.outCurve.map(k).join(' ')}`,
     `  cache % per request ${p.cache.curve.map(x => x ?? '-').join(' ')}`,
     `  calls ${p.calls.total}: ${Object.entries(p.calls.byTool).map(([a, b]) => a + '×' + b).join(' ')} | results ${Object.entries(p.calls.byResultClass).map(([a, b]) => a + '×' + b).join(' ')}`,
-    `  repeated identical calls ${p.calls.repeats} in ${p.calls.repeatRuns} runs · calls before first write ${p.calls.callsBeforeFirstWrite ?? 'no write'}${p.calls.firstWriteTool ? ' (' + p.calls.firstWriteTool + ')' : ''}`,
-    ...p.perTurn.map(t => `  turn ${t.n}: user ${t.userChars}ch${t.shortFollowUp ? ' (short follow-up)' : ''}, ${t.assistantMsgs} assistant msgs, ${t.calls} calls ${t.tools ? '[' + t.tools + ']' : ''}${t.stop ? ' · stop ' + t.stop : ''}${t.after === 'limit' ? ' · continues a round-limit stop' : ''}`),
+    `  repeated identical calls ${p.calls.repeats} in ${p.calls.repeatRuns} runs · calls before first write ${p.calls.callsBeforeFirstWrite ?? 'no write'}${p.calls.firstWriteTool ? ' (' + p.calls.firstWriteTool + ')' : ''} · calls before first commit ${p.calls.callsBeforeFirstCommit ?? 'no commit'}`,
+    ...p.perTurn.map(t => `  turn ${t.n}: user ${t.userChars}ch${t.shortFollowUp ? ' (short follow-up)' : ''}, ${t.assistantMsgs} assistant msgs, ${t.calls} calls ${t.tools ? '[' + t.tools + ']' : ''}${t.stop ? ' · stop ' + t.stop : ''}${t.after === 'limit' ? ' · continues a round-limit stop' : ''}${t.after === 'failed' && t.shortFollowUp ? ' · continues a failed stop' : ''}`),
     Object.keys(p.flags).length ? '  flags ' + JSON.stringify(p.flags) : '',
   ].filter(Boolean).join('\n');
 }
@@ -177,7 +182,7 @@ export function renderAcross(rows) {
   return rows.map(r => `${r.group}\n  ${r.sessions} sessions · ${r.requests} req · ${$(r.costTotal)} · cost/req median ${$(r.costMedian)} p95 ${$(r.costP95)} max ${$(r.costMax)} · cache ${r.cachePct ?? '-'}% (first hit at req ${r.firstHitAtRequest ?? '-'}) · out/req ${k(r.outPerRequest)} · reasoning ${Math.round((r.reasoningShare || 0) * 100)}%`).join('\n');
 }
 export function renderBehaviour(rows) {
-  return rows.map(r => `${r.id} ${String(r.title).slice(0, 30).padEnd(30)} repeats ${r.repeats} · calls before first write ${r.callsBeforeFirstWrite ?? '-'} · failed share ${r.failedShare ?? '-'} · short follow-ups ${r.shortFollowUps}${r.limitContinuations != null ? ` · after a round-limit stop ${r.limitContinuations} · steering ${r.steeringFollowUps}` : ''} · helper share of cost ${r.helperShareOfCost ?? '-'}`).join('\n');
+  return rows.map(r => `${r.id} ${String(r.title).slice(0, 30).padEnd(30)} repeats ${r.repeats} · calls before first write ${r.callsBeforeFirstWrite ?? '-'} · calls before first commit ${r.callsBeforeFirstCommit ?? '-'} · failed share ${r.failedShare ?? '-'} · short follow-ups ${r.shortFollowUps}${r.limitContinuations != null ? ` · after a round-limit stop ${r.limitContinuations} · after a failed turn ${r.failedContinuations ?? '-'} · steering ${r.steeringFollowUps}` : ''} · helper share of cost ${r.helperShareOfCost ?? '-'}`).join('\n');
 }
 
 // the one place content appears: a message or a request, by index, truncated
