@@ -2,6 +2,7 @@
 // the cacheable prefix) and are worded without reference to where they run.
 //   { def: <OpenAI tool schema>, run(args, ctx) -> string | Promise<string> }
 import { present, read, slice, get, handlesIn, squeeze, VIEW_MAX } from './outstore.js';
+import { range, capLines, READ_MAX } from './outstore.js'; // ranged reads
 import * as H from './handles.js';
 import * as pat from './patterns.js';
 import { run as lb } from './localbridge.js';
@@ -129,12 +130,13 @@ export const tools = [
     'Read what a handle holds now: stored output (os:...) or an id you were given. Give `find` to get matching lines, or `offset` and `length` for a slice.',
     { handle: { type: 'string' }, find: { type: 'string' }, offset: { type: 'number' }, length: { type: 'number' } }, ['handle'],
     async (args, ctx) => {
-      if (!H.ID.test(String(args.handle || ''))) return read(args);
+      const ranged = ctx?.reads === 'ranged';
+      if (!H.ID.test(String(args.handle || ''))) return read(args, ranged);
       // an opaque id: resolved for this reader as it stands now; the session records it
       const text = await H.resolve(args.handle, ctx?.reader || '*', get);
       if (text == null) return `Nothing is held under "${args.handle}".`;
       ctx?.onResolve?.(args.handle, H.contentHash(text));
-      return slice(text, args);
+      return ranged ? range(text, args) : slice(text, args);
     }),
   fn('fan_out',
     'Work several concerns in parallel, each in its own isolated continuation of this conversation, and get back one compact fold per concern (OUTCOME, RESULT, EVIDENCE, OPEN). Use it for work whose intermediate steps are not needed here. `after` makes a concern wait for the folds of the listed concern ids.',
@@ -274,6 +276,19 @@ const WHOLE = new Set(['ask', 'value_request', 'value_set', 'value_get', 'entry_
 export const toolDefs = tools.map(t => t.def);
 export const defsFor = s => [...toolDefs, ...(s.tools?.includes('ask') ? askTools.map(t => t.def) : []), ...(s.tools?.includes('values') ? valueTools.map(t => t.def) : []), ...(s.tools?.includes('repo') ? repoTools.map(t => t.def) : []), ...(s.tools?.includes('vm') ? vmTools.map(t => t.def) : []), ...(s.tools?.includes('local') ? localTools.map(t => t.def) : [])];
 
+// Ranged reads: how the two reading tools are described to a session whose strategy has `reads: 'ranged'`
+// (strategies.js). A range that is asked for comes back whole up to READ_MAX, and output_read takes a line range.
+// Sessions under any other strategy are sent the definitions above, byte for byte.
+const RANGED = {
+  output_read: f => {
+    const { handle, find, offset, length } = f.parameters.properties;
+    return { ...f, description: 'Read what a handle holds now: stored output (os:...) or an id you were given. Give `find` to get matching lines, `lines` ("a-b", counted from 1) to get those lines, or `offset` and `length` (both in characters) for a slice. A range comes back whole up to ' + READ_MAX + ' characters; when it is cut, the last line says what was left out and how to ask for it.',
+      parameters: { ...f.parameters, properties: { handle, find, lines: { type: 'string', description: 'line range "a-b", counted from 1' }, offset: { ...offset, description: 'characters from the start' }, length: { ...length, description: 'characters' } } } };
+  },
+  repo_read: f => ({ ...f, description: f.description + ' A file read with `lines` returns those lines whole, up to ' + READ_MAX + ' characters; when it is cut, the last line says which lines were left out.' }),
+};
+export const defsAs = (defs, reads) => reads !== 'ranged' ? defs : defs.map(d => RANGED[d.function.name] ? { ...d, function: RANGED[d.function.name](d.function) } : d);
+
 // Every call leaves a trail row written by the harness: tool, argument shape, outcome, size, time.
 export async function execTool(call, ctx, via) {
   const t0 = performance.now();
@@ -298,6 +313,16 @@ async function exec(call, ctx) {
     args = parsed;
   }
   try {
+    if (ctx?.reads === 'ranged') {
+      const name = call.function.name;
+      // a line range asked of a file comes back as asked (whole up to READ_MAX), not as a view; its check record says so
+      if (name === 'repo_read' && (args.op || 'file') === 'file' && args.lines) return capLines(String(await t.run(args, { ...ctx, onRead: f => ctx.onRead?.({ ...f, fits: f.out.length <= READ_MAX }) })), Number(String(args.lines).split('-')[0]) || 1);
+      // code that names a tool as if it were a function there: the error stays, and a line says what the name is
+      if (name === 'run_js') {
+        const res = String(await t.run(args, ctx)), m = /ReferenceError: (\w+) is not defined/.exec(res);
+        return present(m && all().some(x => x.def.function.name === m[1]) ? `${res}\n[${m[1]} is a tool, not a function inside this code: make it a tool call of its own, then pass what you need from its result in \`code\`.]` : res, { want: args.want, helper: ctx.helper });
+      }
+    }
     const out = String(await t.run(args, ctx));
     // Bounded by construction: folds are capped, reads are sliced. Everything else goes through the store.
     return WHOLE.has(call.function.name) ? out : await present(out, { want: args.want, helper: ctx.helper });

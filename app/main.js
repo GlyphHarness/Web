@@ -39,6 +39,7 @@ import * as theme from './theme.js';
 import * as pat from './patterns.js';
 import * as inventory from './inventory.js';
 import { hunks, changed } from './diff.js';
+import { defsAs } from './tools.js'; // tool definitions as the session's strategy has them (ranged reads)
 import { put, get, handlesIn, setFallback } from './outstore.js';
 import { buildRequest, measure, report, padAttachment, inherit, imitatesNote, keptLines, corePrompt, EDGE_MIN, markedOnly, edgeReplies, turnOf, KINDS } from './context.js';
 
@@ -244,7 +245,7 @@ const provider = () => providers[state.meta.settings.provider] || providers.open
 const profiles = () => (state.meta.profiles ??= []);
 const eff = s => prof.effective(profiles(), s?.profile, state.meta.settings, s?.over);
 const cfg = s => eff(s).settings;
-const toolsFor = s => { const c = eff(s).caps; return defsFor(s).filter(d => prof.allowedTool(d.function.name, c)); };
+const toolsFor = s => { const e = eff(s), c = e.caps; return defsAs(defsFor(s), strategies.spec(e.settings.strategy).reads).filter(d => prof.allowedTool(d.function.name, c)); };
 
 // ---------- message rendering ----------
 
@@ -1210,6 +1211,7 @@ async function turnsInner(s, depth, onFirst) {
   const ctx = {
     pads: state.meta.pads, savePads: () => { saveMeta(); renderPads(); },
     depth, fanOut: args => fanOut(s, args, ctx), branchRead,
+    reads: strategies.spec(set.strategy).reads, // 'ranged': a range that is asked for comes back whole (tools.js)
     // attribution and reference checks come from the harness's view of the session
     by: () => ({ session: s.id, message: s.messages.length - 1, model: set.model, t: Date.now() }),
     knownRef: r => !!state.sessions[r] || s.messages.some(m => typeof m.content === 'string' && m.content.includes(r)),
