@@ -1227,6 +1227,7 @@ check('layout: the page itself does not scroll',await page.evaluate(() => docume
   const card = page.locator(HELD).first(), shown = await card.locator('pre').textContent(), brief = await card.getAttribute('data-brief');
   check('held call: a call whose arguments are stored by handle shows them resolved on the card: the path and the whole text', /^file_edit \{"path":"f1\.txt"/.test(shown) && shown.includes('goodbye '.repeat(200)) && !/"ref"/.test(shown), shown.slice(0, 120));
   check('held call: its brief is the tool and the kept fields (the path; the text as size and hash), never the handle', /^file_edit \{.*"path":"f1\.txt"/.test(brief || '') && /"replace":\{"length":1600,"hash":"\w+"\}/.test(brief || '') && !/"ref"|goodbye/.test(brief || ''), String(brief));
+  check('held note: the call that stored the arguments (the one the harness swapped for a handle) is marked stored too', await card.getAttribute('data-ref') === 'stored', String(await card.getAttribute('data-ref')));
   const closed = await card.locator('pre').evaluate(e => e.clientHeight < e.scrollHeight), more = card.locator('[data-hold=more]');
   if (await more.count()) await more.click();
   const opened = await card.locator('pre').evaluate(e => e.clientHeight >= e.scrollHeight - 1);
@@ -1275,6 +1276,12 @@ check('layout: the page itself does not scroll',await page.evaluate(() => docume
   check('held note: each state says something of its own (the unknown note and the lost note differ once the handle is taken out)', rest(noteB, INVENTED).length > 0 && rest(noteC, handle).length > 0 && rest(noteB, INVENTED) !== rest(noteC, handle) && briefB.split(INVENTED).join('#') !== briefC.split(handle).join('#'), `${rest(noteB, INVENTED)} | ${rest(noteC, handle)}`);
   await release();
   await page.evaluate(async t => (await import('./app/outstore.js')).put(t), blob);
+  // a handle that resolves but that no call of the session recorded as storing (here an output: plain text under a handle) is marked other and carries no extra line
+  const outHandle = await page.evaluate(async () => (await import('./app/outstore.js')).put('plain output text, not a stored call'));
+  await holdSay('repeat edit ' + outHandle);
+  const refD = await heldCard().getAttribute('data-ref'), noteD = await heldCard().locator('pre').textContent();
+  check('held note: a handle that resolves but that no call of this session recorded as storing is marked other, shown whole with no extra line', refD === 'other' && noteD.split('\n').length === 1, `${refD} | ${noteD}`);
+  await release();
   await holdSay('please use a tool');
   check('held note: a call whose arguments are not a handle carries no state', await heldCard().getAttribute('data-ref') === null);
   await release();
