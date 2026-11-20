@@ -2,6 +2,7 @@
 // Pure functions, no Node or DOM API: scripts/turn-profile.mjs re-exports this module for the CLI and
 // app/panels.js uses it in the browser (docs/METRICS-PANEL.md).
 // Reads a stored session (messages + ledger) and reports shape, counts, sizes, repeats and costs.
+// Per call it carries an argument summary (argSummary: where the call was aimed, as written; what it carried, as size and hash).
 // It never copies message content into its output, and it makes no judgement of good or bad:
 // every row says what happened. A drill (`drill`) is the one place content is shown, on purpose and by index.
 
@@ -23,6 +24,37 @@ export function resultClass(text) {
   if (/HELD|awaiting approval|approval/i.test(t.slice(0, 120))) return 'held';
   if (!t.trim()) return 'empty';
   return 'ok';
+}
+
+// ---- argument summary: what a call was aimed at, without what it carried ----
+// Fields that name a place or a command (path, op, ref, branch, lines, handle, offset, a command line) are kept as
+// written; fields that carry content (a file body, find and replace text, a message, code, free text) become
+// {length, hash}. Anything not known to be a place is treated as content. A key inside a kept field is masked.
+const PLACE = new Set(['repo', 'op', 'path', 'ref', 'lines', 'branch', 'from', 'base', 'head', 'state', 'handle', 'part', 'kind', 'slot', 'label', 'id', 'service', 'method', 'folder', 'owner', 'scope', 'type']);
+const PLACE_BY_TOOL = { repo_create: ['name'] }; // elsewhere `name` is the free-text label of a call
+const INSIDE = new Set(['changes', 'edits']); // lists of objects that are summarised field by field
+const PLACE_MAX = 300, CMD_MAX = 400;
+const SECRETS = [[/\b(sk-[A-Za-z0-9_-]{16,}|github_pat_[A-Za-z0-9_]{16,}|gh[pousr]_[A-Za-z0-9]{16,})/g, m => m.slice(0, 5) + '...(masked)'], [/((?:Bearer|Basic|token)\s+|(?:token|api[_-]?key|password|secret)\s*[=:]\s*)[^\s"']{8,}/gi, '$1(masked)'], [/:\/\/[^/\s:@]+:[^@\s/]+@/g, '://(masked)@']];
+const masked = t => SECRETS.reduce((s, [re, to]) => s.replace(re, to), String(t));
+const sized = v => { const t = typeof v === 'string' ? v : JSON.stringify(v) ?? ''; return { length: t.length, hash: hash(t) }; };
+function summarise(tool, o) {
+  const out = {};
+  for (const [k, v] of Object.entries(o)) {
+    if (v == null || typeof v === 'number' || typeof v === 'boolean') out[k] = v;
+    else if (k === 'cmd' && typeof v === 'string') {
+      const first = v.split('\n')[0], one = !v.trimEnd().includes('\n');
+      if (first.length > CMD_MAX) out[k] = sized(v); else { out[k] = masked(first); if (!one) out.cmd_more = sized(v); }
+    }
+    else if (typeof v === 'string' && (PLACE.has(k) || PLACE_BY_TOOL[tool]?.includes(k))) out[k] = v.length > PLACE_MAX ? sized(v) : masked(v);
+    else if (INSIDE.has(k) && Array.isArray(v)) out[k] = v.map(e => e && typeof e === 'object' && !Array.isArray(e) ? summarise(tool, e) : sized(e));
+    else out[k] = sized(v);
+  }
+  return out;
+}
+// name: the tool; raw: its arguments as logged (a JSON string). Never throws.
+export function argSummary(name, raw) {
+  let o; try { o = JSON.parse(raw || '{}'); } catch { return { unparsed: sized(String(raw ?? '')) }; }
+  return o && typeof o === 'object' && !Array.isArray(o) ? summarise(String(name || ''), o) : { unparsed: sized(String(raw ?? '')) };
 }
 
 // one row per (strategy, model, main|helper kind) so a session that changed model is not counted whole in each group
@@ -49,10 +81,11 @@ export function profile(s) {
   const results = new Map(); // tool_call_id -> {class, chars}
   for (const m of msgs) if (m.role === 'tool') results.set(m.tool_call_id, { cls: resultClass(m.content), chars: len(m.content) });
   const calls = [];
-  msgs.forEach((m, i) => (m.tool_calls || []).forEach(t => {
+  msgs.forEach((m, i) => (m.tool_calls || []).forEach((t, j) => {
     const args = t.function?.arguments ?? '';
     const r = results.get(t.id) || { cls: 'no-result', chars: 0 };
-    calls.push({ msg: i, name: t.function?.name, argHash: hash(args), argChars: len(args), cls: r.cls, resultChars: r.chars });
+    // arguments stored by handle left their summary beside the message (x.args, written by the harness); otherwise it is made here
+    calls.push({ msg: i, name: t.function?.name, argHash: hash(args), argChars: len(args), cls: r.cls, resultChars: r.chars, args: m.x?.args?.[j] ?? argSummary(t.function?.name, args) });
   }));
 
   // turns: a turn starts at each user message
@@ -98,7 +131,7 @@ export function profile(s) {
     cache: { overallPct: sum(main, 'prompt') ? Math.round(100 * sum(main, 'cached') / sum(main, 'prompt')) : null, firstHitAtRequest: firstHit < 0 ? null : firstHit, curve: cacheCurve },
     growth: { promptCurve, outCurve: main.map(r => r.out), reasoningShare: sum(main, 'out') ? +(sum(main, 'reasoning') / sum(main, 'out')).toFixed(2) : 0 },
     calls: { total: calls.length, byTool, byResultClass: byClass, repeats, repeatRuns, callsBeforeFirstWrite: firstWrite < 0 ? null : firstWrite, firstWriteTool: firstWrite < 0 ? null : calls[firstWrite].name },
-    perTurn: turns.map((t, n) => ({ n, userChars: t.userChars, shortFollowUp: n > 0 && t.userChars < 240, assistantMsgs: t.assistantMsgs, calls: t.calls.length, tools: t.calls.map(c => c.name + (c.cls === 'ok' ? '' : ':' + c.cls)).join(' '), stop: t.stop, after: after(n) })),
+    perTurn: turns.map((t, n) => ({ n, userChars: t.userChars, shortFollowUp: n > 0 && t.userChars < 240, assistantMsgs: t.assistantMsgs, calls: t.calls.length, tools: t.calls.map(c => c.name + (c.cls === 'ok' ? '' : ':' + c.cls)).join(' '), stop: t.stop, after: after(n), args: t.calls.map(c => ({ name: c.name, args: c.args })) })), // args: one argument summary per call, in call order
     followUps, // turns after the first: after a round-limit stop, steering (after any other recorded stop), or with no stop recorded
     flags: (s.flags || []).reduce((o, f) => (o[f.tool + ':' + String(f.kind || f.why || '').slice(0, 30)] = (o[f.tool + ':' + String(f.kind || f.why || '').slice(0, 30)] || 0) + 1, o), {}),
     stem: s.stem ? { folded: !!s.stem.folded } : null,

@@ -40,6 +40,7 @@ import * as pat from './patterns.js';
 import * as inventory from './inventory.js';
 import { hunks, changed } from './diff.js';
 import { defsAs } from './tools.js'; // tool definitions as the session's strategy has them (ranged reads)
+import { argSummary } from './profile.js';
 import { put, get, handlesIn, setFallback } from './outstore.js';
 import { buildRequest, measure, report, padAttachment, inherit, imitatesNote, keptLines, corePrompt, EDGE_MIN, markedOnly, edgeReplies, turnOf, KINDS } from './context.js';
 
@@ -1302,16 +1303,18 @@ async function turnsInner(s, depth, onFirst) {
     if (acc.content || calls.length) {
       // Long arguments leave the log here, once, before the message is stored:
       // the log keeps {ref, name} and the full text sits in the output store.
-      for (const c of calls) {
+      const kept = {}; // call index -> argument summary (profile.js) of arguments that leave the log: places as written, content as size and hash
+      for (const [j, c] of calls.entries()) {
         if (!SWAPPABLE.has(c.function.name) || c.function.arguments.length <= ARG_MAX) continue;
         let a;
         try { a = JSON.parse(c.function.arguments); } catch { continue; }
+        kept[j] = argSummary(c.function.name, c.function.arguments);
         // what the call was looking for stays inline: it is the hint the next turns read
         c.function.arguments = JSON.stringify({ ref: await put(c.function.arguments), name: String(a.name || a.title || '').slice(0, 60) || undefined, want: a.want ? String(a.want).slice(0, 160) : undefined });
       }
       const m = { role: 'assistant', content: acc.content || null };
       if (calls.length) m.tool_calls = calls;
-      m.x = { model: set.model, usage: acc.usage, ms: Math.round(performance.now() - acc.t0), ...(acc.upstream ? { upstream: acc.upstream } : {}) };
+      m.x = { model: set.model, usage: acc.usage, ms: Math.round(performance.now() - acc.t0), ...(acc.upstream ? { upstream: acc.upstream } : {}), ...(Object.keys(kept).length ? { args: kept } : {}) };
       if (acc.upstream && s.pin !== false) s.upstream = acc.upstream;
       if (acc.reasoning) m.x.reasoning = acc.reasoning;
       push(s, m);
@@ -1627,6 +1630,9 @@ async function relog(s, tc, to) {
   if (!c) return;
   let a = {};
   try { a = JSON.parse(to); } catch {}
+  // the summary kept beside the message follows the rewritten arguments (profile.js reads inline ones itself)
+  const j = m.tool_calls.indexOf(c), swap = SWAPPABLE.has(c.function.name) && to.length > ARG_MAX;
+  if (swap) ((m.x ??= {}).args ??= {})[j] = argSummary(c.function.name, to); else if (m.x?.args) delete m.x.args[j];
   c.function.arguments = SWAPPABLE.has(c.function.name) && to.length > ARG_MAX
     ? JSON.stringify({ ref: await put(to), name: String(a.name || '').slice(0, 60) || undefined, want: a.want ? String(a.want).slice(0, 160) : undefined })
     : to;
