@@ -1,0 +1,128 @@
+{
+ "from": "aa62df3^ (git archive aa62df3^ app: app/tools.js execTool with app/localbridge.js client)",
+ "note": "What the local tools and the shell tool answered when they failed, before the failure texts were made neutral (aa62df3): the tool result as the model read it. A labelled stand-in answers for the bridge (fetch: a refused connection, a 401, a 403, a JSON error), at url and token below. shell.raw is the in-page machine's own message (app/vm.js, unchanged since). Generated once from that tree; do not edit, do not regenerate from the current tree.",
+ "url": "http://127.0.0.1:8791",
+ "token": "tok",
+ "local": [
+  {
+   "name": "the bridge does not answer (local_info)",
+   "tool": "local_info",
+   "args": {},
+   "stub": {
+    "throws": true
+   },
+   "out": "Tool error: The local bridge at http://127.0.0.1:8791 did not answer. Is it running (node localbridge/wh-local.mjs)? If it is, the browser may have blocked the request: allow \"Local network access\" for this site (the lock icon in the address bar > Site settings), and check that no extension or shield is blocking requests to localhost."
+  },
+  {
+   "name": "the bridge does not answer (local_http)",
+   "tool": "local_http",
+   "args": {
+    "service": "app",
+    "path": "/"
+   },
+   "stub": {
+    "throws": true
+   },
+   "out": "Tool error: The local bridge at http://127.0.0.1:8791 did not answer. Is it running (node localbridge/wh-local.mjs)? If it is, the browser may have blocked the request: allow \"Local network access\" for this site (the lock icon in the address bar > Site settings), and check that no extension or shield is blocking requests to localhost."
+  },
+  {
+   "name": "the bridge does not answer (local_read)",
+   "tool": "local_read",
+   "args": {
+    "folder": "notes",
+    "path": "/todo.md"
+   },
+   "stub": {
+    "throws": true
+   },
+   "out": "Tool error: The local bridge at http://127.0.0.1:8791 did not answer. Is it running (node localbridge/wh-local.mjs)? If it is, the browser may have blocked the request: allow \"Local network access\" for this site (the lock icon in the address bar > Site settings), and check that no extension or shield is blocking requests to localhost."
+  },
+  {
+   "name": "the token is refused (local_info)",
+   "tool": "local_info",
+   "args": {},
+   "stub": {
+    "status": 401
+   },
+   "out": "Tool error: The bridge refused the token. Copy the one printed when wh-local started (it is new every run unless you set --token)."
+  },
+  {
+   "name": "the origin is refused (local_http)",
+   "tool": "local_http",
+   "args": {
+    "service": "app",
+    "path": "/"
+   },
+   "stub": {
+    "status": 403,
+    "body": "origin not allowed"
+   },
+   "out": "Tool error: The bridge does not allow this page's origin. Start it with --origin <this page's origin>."
+  },
+  {
+   "name": "the bridge answers an error to the listing (local_info)",
+   "tool": "local_info",
+   "args": {},
+   "stub": {
+    "status": 500,
+    "headers": {
+     "content-type": "application/json"
+    },
+    "body": "{\"error\":\"listing failed\"}"
+   },
+   "out": "Tool error: info: listing failed"
+  },
+  {
+   "name": "no such service (local_http)",
+   "tool": "local_http",
+   "args": {
+    "service": "nope",
+    "path": "/"
+   },
+   "stub": {
+    "status": 404,
+    "headers": {
+     "content-type": "application/json"
+    },
+    "body": "{\"error\":\"no such service: nope\"}"
+   },
+   "out": "Tool error: bridge: no such service: nope"
+  },
+  {
+   "name": "no such folder (local_read)",
+   "tool": "local_read",
+   "args": {
+    "folder": "zzz",
+    "path": "/x"
+   },
+   "stub": {
+    "status": 404,
+    "headers": {
+     "content-type": "application/json"
+    },
+    "body": "{\"error\":\"no such folder: zzz\"}"
+   },
+   "out": "Tool error: read zzz/x: no such folder: zzz"
+  },
+  {
+   "name": "no such file (local_read)",
+   "tool": "local_read",
+   "args": {
+    "folder": "notes",
+    "path": "/nothere"
+   },
+   "stub": {
+    "status": 404,
+    "headers": {
+     "content-type": "application/json"
+    },
+    "body": "{\"error\":\"not found\"}"
+   },
+   "out": "Tool error: read notes/nothere: not found"
+  }
+ ],
+ "shell": {
+  "raw": "The machine needs cross-origin isolation: switch it on in Settings (the page reloads once).",
+  "out": "Tool error: The machine needs cross-origin isolation: switch it on in Settings (the page reloads once)."
+ }
+}

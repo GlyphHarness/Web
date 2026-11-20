@@ -520,6 +520,39 @@ await attempt('config: the tmux option (vmTmux) is true or false in Paste config
   });
 }
 
+// ---- failure texts follow the strategy wording (concept "failure texts follow the strategy wording"; seams: tools.js execTool
+// ctx.wording, localbridge.js run). A strategy registered before the neutral wording is read the failure texts the shell and
+// the local tools gave before aa62df3 (scripts/fixtures/failures-pre-aa62df3.json, from git archive aa62df3^); strat-serial-3.0
+// is read the neutral ones. A labelled stand-in answers for the bridge's fetch (a refused connection, a 401, a 403, a JSON error).
+{
+  const FX = JSON.parse(fs.readFileSync(new URL('./fixtures/failures-pre-aa62df3.json', import.meta.url), 'utf8'));
+  const found = t => neutralMod ? neutralMod.found(String(t)) : ['(app/neutral.js is missing)'];
+  const strategies = await import('../app/strategies.js');
+  const stub = s => async () => { if (s.throws) throw new TypeError('Failed to fetch'); return new Response(s.body ?? '', { status: s.status ?? 200, headers: s.headers || {} }); };
+  const viaStub = (c, wording) => execTool({ function: { name: c.tool, arguments: JSON.stringify(c.args) } }, { local: client({ url: FX.url, token: FX.token, fetch: stub(c.stub) }), pads: [], by: () => ({}), wording });
+  const differing = async id => { const w = strategies.spec(id).wording, bad = []; for (const c of FX.local) { const o = await viaStub(c, w); if (o !== c.out) bad.push(c.name + ': ' + o.slice(0, 90)); } return bad; };
+  for (const id of ['strat-serial-1.0', 'strat-checkpoint-1.0', 'strat-stem-1.0', 'strat-stem-2.0', 'strat-serial-2.0'])
+    await attempt(`failure texts: under ${id} the local tools fail with the texts they gave before aa62df3, byte for byte`, async () => { const bad = await differing(id); return [FX.local.length >= 9 && bad.length === 0, bad.join(' | ')]; });
+  await attempt('failure texts: under strat-serial-3.0 the same failures are tool errors with no identifying term, and the old identifying ones are not sent', async () => {
+    const w = strategies.spec('strat-serial-3.0').wording, outs = [];
+    for (const c of FX.local) outs.push([c, await viaStub(c, w)]);
+    const bad = outs.filter(([c, o]) => !/^Tool error: /.test(o) || found(o).length || (found(c.out).length && o === c.out));
+    return [w === 'neutral' && outs.length >= 9 && outs.some(([c]) => found(c.out).length >= 1) && bad.length === 0, bad.map(([c, o]) => c.name + ': ' + o.slice(0, 90)).join(' | ')];
+  });
+  // main.js shellRunner hands the shell tool the in-page machine's failure as an error that says it plainly and carries the machine's own message in .raw
+  const machineDown = { run: async () => { throw Object.assign(new Error('the machine is not available'), { raw: FX.shell.raw }); } };
+  const shellOut = wording => execTool({ function: { name: 'shell', arguments: JSON.stringify({ cmd: 'echo hi' }) } }, { vm: machineDown, pads: [], by: () => ({}), wording });
+  for (const id of ['strat-serial-1.0', 'strat-stem-2.0', 'strat-serial-2.0'])
+    await attempt(`failure texts: under ${id} a shell call the in-page machine cannot run fails with the machine's own message, as before aa62df3`, async () => { const o = await shellOut(strategies.spec(id).wording); return [o === FX.shell.out, o]; });
+  await attempt('failure texts: under strat-serial-3.0 a shell call the in-page machine cannot run fails plainly, with no identifying term', async () => { const o = await shellOut(strategies.spec('strat-serial-3.0').wording); return [/^Tool error: /.test(o) && found(o).length === 0 && o !== FX.shell.out && found(FX.shell.out).length > 0, o]; });
+  // a host did not exist before aa62df3: its failure texts have no earlier wording and are plain under every strategy
+  await attempt('failure texts: a shell call a host cannot run fails plainly under every strategy (there was no earlier text)', async () => {
+    const outs = []; for (const id of ['strat-serial-1.0', 'strat-serial-2.0', 'strat-serial-3.0'])
+      outs.push(await execTool({ function: { name: 'shell', arguments: JSON.stringify({ cmd: 'echo hi' }) } }, { vm: lbMod.hostShell(client({ url: 'http://127.0.0.1:9', token: TOKEN }), 't'), pads: [], by: () => ({}), wording: strategies.spec(id).wording }));
+    return [outs.every(o => /^Tool error: /.test(o) && found(o).length === 0) && new Set(outs).size === 1, outs.join(' | ')];
+  });
+}
+
 fs.rmSync(tmp, { recursive: true, force: true });
 console.log(fails ? `\n${fails} failed` : '\nall passed');
 process.exit(fails ? 1 : 0);

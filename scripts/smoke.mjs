@@ -1127,6 +1127,11 @@ check('layout: the page itself does not scroll',await page.evaluate(() => docume
     const OLD = JSON.parse(fs.readFileSync(new URL('./fixtures/model-view-pre-aa62df3.json', import.meta.url), 'utf8'));
     const r = await lastReq(), s0 = await sess(), sh = d => (d || []).find(t => t.function?.name === 'shell');
     check('strategy wording: a session under a strategy registered before the neutral wording is sent the shell tool it was registered with', s0.ledger.at(-1)?.strat !== 'strat-serial-3.0' && !!sh(r.tools) && JSON.stringify(sh(r.tools)) === JSON.stringify(sh(OLD.defs)), s0.ledger.at(-1)?.strat + ' ' + JSON.stringify(sh(r.tools)?.function?.description).slice(0, 80));
+    // spec (failure texts follow the strategy wording): the same call, which the in-page machine cannot run here, fails with the
+    // machine's own message under a strategy registered before the neutral wording (as before aa62df3); under strat-serial-3.0 it is
+    // the plain one (checked below)
+    const rawText = await lastTool();
+    check('failure texts: under a strategy registered before the neutral wording a shell call the in-page machine cannot run fails with the machine\'s own message', s0.ledger.at(-1)?.strat !== 'strat-serial-3.0' && /^Tool error: /.test(rawText) && rawText !== 'Tool error: the machine is not available' && found(rawText).length > 0, rawText);
   }
   await paste({ settings: { ghlabel: 'test repos', watchModel: 'mock-1', helper: 'mock-1', strategy: 'strat-serial-3.0' } });
   // spec correction (own commit): the helper prompts below are read from the requests made under strat-serial-3.0 only;
