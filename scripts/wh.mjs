@@ -133,22 +133,26 @@ async function settle(p, ms = 900000) {
     await new Promise(s => setTimeout(s, 300));
   }
 }
+// What the page said when a run stopped: its error notices (the provider's error, "Stopped after 8 tool rounds."). They live in the page only.
+const notices = p => p.evaluate(() => [...document.querySelectorAll('.msg[data-role=error] .txt')].map(e => e.textContent.trim()));
 async function turnReport(p, id, before) {
   const s = await sess(p, id), msgs = s.messages.slice(before.n), ledger = s.ledger.slice(before.l);
   const calls = msgs.flatMap(m => m.tool_calls || []).map(t => t.function.name);
   const reply = [...msgs].reverse().find(m => m.role === 'assistant' && m.content)?.content || '';
   const tok = ledger.reduce((o, e) => ({ p: o.p + (e.prompt || 0), c: o.c + (e.cached || 0), o: o.o + (e.completion || 0), $: o.$ + (Number(e.cost) || 0) }), { p: 0, c: 0, o: 0, $: 0 });
   // stop: why the run ended, from the harness's own record (null while it still waits at a hold or a card)
-  const end = lastStop(s);
-  return { id, requests: ledger.filter(e => !e.helper).length, tools: calls, tokens: { prompt: tok.p, cached: tok.c, out: tok.o }, cost: tok.$, stop: end && end.at > before.n ? end.why : null, reply: reply.slice(0, 600), flags: openFlags(s).filter(f => f.at > before.n).map(f => `${f.tool}: ${f.why}`) };
+  const end = lastStop(s), stop = end && (before.s != null ? s.stops.length > before.s : end.at > before.n) ? end.why : null; // a stop recorded since the command began (a step released from a hold ends at the same log length)
+  const said = stop && stop !== 'done' ? (await notices(p)).slice(before.e ?? Infinity).at(-1) : null;
+  return { id, requests: ledger.filter(e => !e.helper).length, tools: calls, tokens: { prompt: tok.p, cached: tok.c, out: tok.o }, cost: tok.$, stop, stopDetail: said ? said.replace(/^Stopped after /, '').replace(/\.$/, '') : null, reply: reply.slice(0, 600), flags: openFlags(s).filter(f => f.at > before.n).map(f => `${f.tool}: ${f.why}`) };
 }
 const fmtTurn = (r, st) => [`${r.id} · ${r.requests} req · ${k(r.tokens.prompt)} in (${k(r.tokens.cached)} cached) · ${k(r.tokens.out)} out · ${money(r.cost)}${r.tools.length ? ' · tools ' + r.tools.join(',') : ''}${r.stop && r.stop !== 'done' ? ' · stop ' + r.stop : ''}`,
+  ...(r.stop && r.stop !== 'done' ? [`STOP ${r.stop}${r.stopDetail ? ': ' + r.stopDetail : ''}`] : []),
   ...(st.approve ? st.approve.map(a => 'APPROVE? ' + a + '  (wh allow | wh deny)') : []),
   ...(st.held ? st.held.map(h => 'HELD ' + h + '  (wh step | wh skip)') : st.ask ? ['ASKS a question (answer it in the page)'] : st.timeout ? ['still running (wh show / wh say later)'] : []),
   ...(r.flags.length ? r.flags.map(f => 'FLAG ' + f) : []), r.reply ? '> ' + r.reply.replace(/\n+/g, ' ⏎ ').slice(0, 400) : ''].filter(Boolean).join('\n');
 
 async function decide(a, verb) {
-  const id = flagOf(a, 'i') || readState().current, p = await tab(id), s0 = await sess(p, id), before = { n: s0.messages.length, l: s0.ledger.length };
+  const id = flagOf(a, 'i') || readState().current, p = await tab(id), s0 = await sess(p, id), before = { n: s0.messages.length, l: s0.ledger.length, e: (await notices(p)).length };
   const card = p.locator('.msg[data-role=approve]:not([data-done])').first();
   if (!await card.count()) return { ok: false, text: 'nothing is waiting for approval' };
   const what = (await card.textContent()).replace(/\s+/g, ' ').slice(0, 300);
@@ -188,7 +192,7 @@ const CMDS = {
   async say(a) {
     const id = flagOf(a, 'i') || readState().current;
     if (!id) return { ok: false, text: 'no session: wh new' };
-    const p = await tab(id), s0 = await sess(p, id), before = { n: s0.messages.length, l: s0.ledger.length }, text = a.join(' ');
+    const p = await tab(id), s0 = await sess(p, id), before = { n: s0.messages.length, l: s0.ledger.length, e: (await notices(p)).length, s: (s0.stops || []).length }, text = a.join(' ');
     await p.fill('#input', text); await p.click('#send');
     const st = await settle(p);
     const r = await turnReport(p, id, before);
@@ -267,12 +271,12 @@ const CMDS = {
   },
   async step(a) {
     const id = flagOf(a, 'i') || readState().current, all = has(a, '--all');
-    const p = await tab(id), s0 = await sess(p, id), before = { n: s0.messages.length, l: s0.ledger.length };
+    const p = await tab(id), s0 = await sess(p, id), before = { n: s0.messages.length, l: s0.ledger.length, e: (await notices(p)).length, s: (s0.stops || []).length };
     const n = await p.locator('.msg[data-role=held]:not([data-done])').count();
     if (!n) return { ok: false, text: 'nothing is held' };
     await p.locator(`.msg[data-role=held]:not([data-done]) [data-hold=${all ? 'all' : 'release'}]`).first().click();
     const st = await settle(p), r = await turnReport(p, id, before);
-    return { text: fmtTurn(r, st), log: { id, stop: r.stop } };
+    return { text: fmtTurn(r, st), data: { ...r, state: st }, log: { id, stop: r.stop } };
   },
   async skip(a) {
     const id = flagOf(a, 'i') || readState().current, p = await tab(id);
