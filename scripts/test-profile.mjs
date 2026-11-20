@@ -137,4 +137,54 @@ const flagged = P.profile({ id: 's3', title: 't', ledger: [], messages: [{ role:
 check('commit: the first of several commits counts, and the command may be the first call', flagged.calls?.callsBeforeFirstCommit === 0, J(flagged.calls));
 check('commit: the text report and the behaviour row say it', /calls before first commit 3/.test(P.render(p2)) && behave.callsBeforeFirstCommit === 3 && /calls before first commit 3/.test(shown), P.render(p2).split('\n').filter(l => /commit|write/.test(l)).join(' | ') + ' || ' + shown);
 
+// ---- a shell call that writes a file through a script is a file write ----
+// The profile keeps only the first line of a shell command (argSummary), so that is all this can see.
+const swSession = (id, cmds) => ({ id, title: 'scripted writes', ledger: [], messages: [
+  { role: 'user', content: 'do it' },
+  { role: 'assistant', content: null, tool_calls: cmds.map((cmd, i) => tc('sw' + i, 'shell', { cmd })) },
+  ...cmds.map((_, i) => ({ role: 'tool', tool_call_id: 'sw' + i, content: 'ok' })),
+] });
+const scriptTotal = cmds => P.profile(swSession('sw', cmds)).calls?.scriptedWrites;
+const writes = [
+  ['python -c', `python -c 'from pathlib import Path; Path("x").write_text("y")'`],
+  ['python3 -c', `python3 -c 'open("x", "w").write("y")'`],
+  ['node -e', `node -e 'require("fs").writeFileSync("x", "y")'`],
+  ['node -p', `node -p 'require("fs").writeFileSync("x", "y")'`],
+  ['python here-document', `python3 - <<'PY'`],
+  ['node here-document', `node - <<'JS'`],
+  ['sed -i', `sed -i 's/a/b/' app/x.js`],
+  ['sed --in-place', `sed --in-place 's/a/b/' app/x.js`],
+  ['>', `echo hi > notes.txt`],
+  ['>> with no space', `printf x >>notes.txt`],
+  ['tee', `echo hi | tee out.txt`],
+  ['tee -a', `echo hi | tee -a out.txt`],
+];
+for (const [shape, cmd] of writes) check(`scripted: ${shape} is a scripted file write`, scriptTotal([cmd]) === 1, cmd);
+const notWrites = [
+  ['a suite', 'node scripts/ci.mjs main git'],
+  ['a node script and a check', 'node scripts/test-profile.mjs; node --check app/panels.js'],
+  ['a plain python script', 'python3 scripts/do_thing.py'],
+  ['git', 'git commit -m "fix a > b"'],
+  ['a git read', "git log --grep 'x > y'"],
+  ['a file read', `sed -n '1,5p' app/x.js`],
+  ['cat', 'cat app/x.js'],
+  ['grep with a quoted >', `grep -n '>' app/x.js`],
+  ['>&', 'echo hi >&2'],
+  ['2>', 'echo hi 2> err.log'],
+  ['2>&1 and /dev/null', 'echo hi > /dev/null 2>&1'],
+  ['/dev/null with no space', 'echo hi >/dev/null'],
+  ['tee with no file name', 'echo hi | tee -a'],
+  ['a > inside a quoted message', `git commit -m 'speed > quality'`],
+];
+for (const [shape, cmd] of notWrites) check(`scripted: ${shape} is not a scripted file write`, scriptTotal([cmd]) === 0, cmd);
+check('scripted: every writing shell call counts, mixed with reads', scriptTotal(['echo hi > a.txt', 'cat a.txt', `sed -i 's/a/b/' a.txt`, 'node scripts/ci.mjs profile', 'echo hi | tee b.txt']) === 3, J(scriptTotal(['echo hi > a.txt', 'cat a.txt', `sed -i 's/a/b/' a.txt`, 'node scripts/ci.mjs profile', 'echo hi | tee b.txt'])));
+check('scripted: only the kept command line counts (a write on a later line is invisible)', scriptTotal(['echo first\npython3 -c "write the file"']) === 0 && scriptTotal([`python3 - <<'PY'\nwrite the file\nPY`]) === 1);
+check('scripted: no shell call means 0', P.profile({ id: 'no-shell', title: 'none', ledger: [], messages: [{ role: 'user', content: 'go' }, { role: 'assistant', content: null, tool_calls: [tc('n1', 'repo_read', { path: 'app/x.js' })] }, { role: 'tool', tool_call_id: 'n1', content: 'ok' }] }).calls?.scriptedWrites === 0);
+const psw = P.profile(swSession('sw', ['echo hi > a.txt', `python3 - <<'PY'\nPY`]));
+const reportLine = P.render(psw).split('\n').find(l => /calls before first write/.test(l)) || '';
+check('scripted: the report line with the first-write and first-commit counts says scripted file writes N', /calls before first write/.test(reportLine) && /calls before first commit/.test(reportLine) && /scripted file writes 2/.test(reportLine), reportLine);
+const swRow = P.behaviour([psw])[0], swText = P.renderBehaviour([swRow]);
+check('scripted: the behaviour row and its text carry the count', swRow?.scriptedWrites === 2 && /scripted file writes 2/.test(swText) && /calls before first write/.test(swText), J(swRow) + ' || ' + swText);
+check('scripted: a session with no scripted write reports 0 in text and in behaviour', P.behaviour([p2])[0].scriptedWrites === 0 && /scripted file writes 0/.test(P.render(p2)) && /scripted file writes 0/.test(P.renderBehaviour(P.behaviour([p2]))), P.render(p2).split('\n').filter(l => /scripted/.test(l)).join(''));
+
 process.exitCode = fails ? 1 : 0;
