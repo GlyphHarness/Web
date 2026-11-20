@@ -103,10 +103,15 @@ const readers = [
     const led = Array.isArray(r.ledger) ? r.ledger : [];
     return { session: r.id, kind: 'session', calls, cost: led.length ? led.reduce((n, e) => n + (Number(e.cost) || 0), 0) : null };
   },
-  // a turn profile (app/profile.js): tool names per turn and costs, no arguments
+  // a turn profile (app/profile.js): tool names per turn and costs; when it has per-call argument summaries,
+  // the kept fields (paths, commands, handles) become evidence, while summarised content is not a string to match
   r => {
     if (!Array.isArray(r?.perTurn)) return null;
-    const calls = r.perTurn.flatMap(t => String(t.tools || '').split(' ').filter(Boolean).map((name, j) => ({ turn: t.n, msg: null, call: j, name: name.split(':')[0], args: null })));
+    const kept = v => typeof v === 'string' ? [v] : v && typeof v === 'object'
+      ? (typeof v.hash === 'string' && typeof v.length === 'number' ? [] : Object.values(v).flatMap(kept)) : v == null ? [] : [String(v)];
+    const calls = r.perTurn.flatMap(t => Array.isArray(t.args)
+      ? t.args.map((c, j) => ({ turn: t.n, msg: null, call: j, name: c.name, args: kept(c.args) }))
+      : String(t.tools || '').split(' ').filter(Boolean).map((name, j) => ({ turn: t.n, msg: null, call: j, name: name.split(':')[0], args: null })));
     return { session: r.id, kind: 'profile', calls, cost: r.cost?.total ?? null };
   },
 ];
