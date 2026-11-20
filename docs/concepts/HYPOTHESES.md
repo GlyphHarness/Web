@@ -271,3 +271,14 @@ What it taught
 6. Two of the nine `file_edit` calls had their arguments stored by handle, so the held step showed the operator only `{"ref": ...}`, and the profile's argument summary for those two calls is the handle, not the path. The operator released two edits without reading them. `wh held` needs to show what a held call will do, and the summary of a stored call needs its path.
 
 Verdict: none (no hypothesis was under test). Host file tools and tool rounds move to measured for this model on this one task.
+
+### H12. Host file tools cut requests on a file edit (registered 2026-11-20, before the canary)
+
+- **Claim.** On one task with the same first message bytes, a session whose shell runs on a host completes with fewer requests and tool calls when `hostFiles` is on than when it is off, and writes no file by script.
+- **Why now.** Live stepped sessions 1 and 2 differed in task and in four options at once (125 requests against 27); neither says which option did what.
+- **Arms.** Blue: `hostFiles` off. Green: `hostFiles` on. Both: `tencent/hy4-flash`, `strat-serial-3.0`, `toolRounds` 40, run code denied, `pace both`, watcher and helper off, the same page build, a fresh browser profile per arm (stored recipes and the scratchpad must not carry over).
+- **Task.** A real open item from the release judge: `transient` in `app/providers.js` treats every `TypeError` as a network error; narrow it to the messages a failed fetch produces. Checks first in `scripts/test-retry.mjs`, then the implementation. The brief names no tool.
+- **Isolation.** Each arm has the container folder `/work/Web` to itself, a clone at the same commit on its own branch; blue's clone is moved out of the container's mount before green starts.
+- **Measures.** Completed as asked (two commits, checks first, suites green); requests; tool calls; results other than ok; operator messages by kind (steering, after a limit stop, after a failed turn); ledger cost; prompt tokens; shell command lines that write a file by script (`python3`, `node -e`, a here-document, `sed -i`, a redirect into a source file).
+- **Canary.** One blue, then one green. Stop if green costs over twice blue. The canary is not worse if green completes and its requests are at most blue's. A full run (three tasks of different shape per arm, alternating order) follows only then.
+- **Null.** No difference, or green worse: recorded as it falls.
