@@ -27,7 +27,7 @@ Built and hypothesis are stated apart. Each rule says which it is.
 - Opportunistic strategy: a variant that applies only where a condition holds (long core, costly input, repeated reads); its own strategy id, compared with serial.
 - Describe before hypothesising: `.claude/skills/turn-analysis/SKILL.md` gives how strategies and models behaved from turn metadata only; use it when documenting a run.
 - Faults are recorded per model as `common` (typical), `uncommon` (advanced), or `provider` (not the model).
-- Choose by measurement: stems cut core context to about a third on the mock but cost +58% vs serial live on qwen/qwen3.7-flash (`docs/STEMS.md`).
+- Choose by measurement: stems cut core context to about a third on the mock but cost +58% vs serial live on qwen/qwen3.7-flash (`docs/case-studies/side-goal-2026-11-19-live.md`).
 - Data use, conceptual, not built (`catalog/README.md`, three uses):
   1. Analyze the records for patterns and emergent concepts, and the issues and solutions they point to.
   2. Fetch, query and arrange the records so they become actionable.
