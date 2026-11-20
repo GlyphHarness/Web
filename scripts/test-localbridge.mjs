@@ -32,7 +32,7 @@ const svc = http.createServer((req, res) => {
 await new Promise(ok => svc.listen(0, '127.0.0.1', ok));
 const svcUrl = `http://127.0.0.1:${svc.address().port}`;
 
-const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'wh-local-'));
+const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'lbt-'));
 const notes = path.join(tmp, 'notes'), secret = path.join(tmp, 'secret');
 fs.mkdirSync(path.join(notes, 'sub'), { recursive: true }); fs.mkdirSync(secret);
 fs.writeFileSync(path.join(notes, 'todo.md'), '# todo\n- one\n');
