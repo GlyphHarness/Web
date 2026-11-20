@@ -1048,6 +1048,22 @@ await say('now something else');
   check('profile: a session recorded before stop reasons counts its follow-ups as unrecorded, not as steering', r.old?.unrecorded === 1 && r.old?.steering === 0 && r.old?.limitContinuations === 0 && JSON.stringify(r.oldTurns) === JSON.stringify([[null, null], [null, null]]), JSON.stringify([r.old, r.oldTurns]));
 }
 
+// ---- argument summary: what each call was aimed at stays readable from the records, without what it carried ----
+// (seams: the turn loop where long arguments leave the log for a handle; app/profile.js. The rest is scripts/test-profile.mjs.)
+await page.click('[data-act=new]');
+await say('long script');
+{
+  const r = await page.evaluate(async () => {
+    const id = sessionStorage.getItem('wh:tab-active'), s = JSON.parse(localStorage['wh:s:' + id]), P = await import('./app/profile.js'), p = P.profile(s);
+    const m = s.messages.find(m => m.tool_calls?.length), sent = JSON.parse(document.querySelector('#req').textContent || '{}');
+    return { logged: JSON.parse(m.tool_calls[0].function.arguments), kept: m.x?.args?.[0] ?? null, turn: p.perTurn[0]?.args ?? null, sentKeys: [...new Set((sent.messages || []).flatMap(x => Object.keys(x)))], leak: /padding|total=4950/.test(JSON.stringify([m.x?.args ?? null, p])) };
+  });
+  const isSum = v => !!v && typeof v.length === 'number' && typeof v.hash === 'string' && Object.keys(v).length === 2;
+  check('argument summary: a call stored by handle keeps the summary of its arguments beside the message', /^os:/.test(r.logged.ref || '') && isSum(r.kept?.code) && r.kept.code.length > 400 && isSum(r.kept.want), JSON.stringify([r.logged, r.kept]));
+  check('argument summary: the profile lists it for that call, with no content', r.turn?.length === 1 && r.turn[0].name === 'run_js' && isSum(r.turn[0].args?.code) && r.turn[0].args.code.length === r.kept?.code?.length && !r.leak, JSON.stringify(r.turn));
+  check('argument summary: it is harness data, not part of what is sent', r.sentKeys.length > 0 && !r.sentKeys.includes('x'), r.sentKeys.join());
+}
+
 check('layout: the page itself does not scroll',await page.evaluate(() => document.documentElement.scrollHeight <= innerHeight && scrollY === 0));
 if (shot) await page.screenshot({ path: shot });
 check('no page errors', errors.filter(e => !/schema 99|ERR_TUNNEL|Failed to load resource/.test(e)).length === 0, errors.join(' | '));
