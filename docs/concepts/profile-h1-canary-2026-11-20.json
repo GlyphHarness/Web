@@ -1,0 +1,483 @@
+{
+ "at": "2026-11-20T08:19:29.749Z",
+ "sessions": [
+  {
+   "id": "smwopdij7cy9m",
+   "title": "H1 canary blue",
+   "rows": [
+    {
+     "i": 0,
+     "helper": null,
+     "strat": "strat-serial-1.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 3716,
+     "cached": 0,
+     "write": 0,
+     "out": 352,
+     "reasoning": 253,
+     "cost": 0.000179516,
+     "cachePct": 0
+    },
+    {
+     "i": 1,
+     "helper": null,
+     "strat": "strat-serial-1.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 3858,
+     "cached": 3584,
+     "write": 0,
+     "out": 138,
+     "reasoning": 9,
+     "cost": 0.000034355,
+     "cachePct": 93
+    },
+    {
+     "i": 2,
+     "helper": null,
+     "strat": "strat-serial-1.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 4752,
+     "cached": 3840,
+     "write": 0,
+     "out": 292,
+     "reasoning": 167,
+     "cost": 0.000078706,
+     "cachePct": 81
+    },
+    {
+     "i": 3,
+     "helper": null,
+     "strat": "strat-serial-1.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 8431,
+     "cached": 4608,
+     "write": 0,
+     "out": 164,
+     "reasoning": 51,
+     "cost": 0.000163759,
+     "cachePct": 55
+    },
+    {
+     "i": 4,
+     "helper": null,
+     "strat": "strat-serial-1.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 9453,
+     "cached": 8192,
+     "write": 0,
+     "out": 65,
+     "reasoning": 0,
+     "cost": 0.0000655555,
+     "cachePct": 87
+    },
+    {
+     "i": 5,
+     "helper": null,
+     "strat": "strat-serial-1.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 9562,
+     "cached": 9216,
+     "write": 0,
+     "out": 215,
+     "reasoning": 83,
+     "cost": 0.0000561415,
+     "cachePct": 96
+    },
+    {
+     "i": 6,
+     "helper": null,
+     "strat": "strat-serial-1.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 10495,
+     "cached": 9472,
+     "write": 0,
+     "out": 72,
+     "reasoning": 0,
+     "cost": 0.000060129,
+     "cachePct": 90
+    },
+    {
+     "i": 7,
+     "helper": null,
+     "strat": "strat-serial-1.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 11066,
+     "cached": 10240,
+     "write": 0,
+     "out": 101,
+     "reasoning": 0,
+     "cost": 0.0000584605,
+     "cachePct": 93
+    },
+    {
+     "i": 8,
+     "helper": null,
+     "strat": "strat-serial-1.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 11666,
+     "cached": 11008,
+     "write": 0,
+     "out": 397,
+     "reasoning": 255,
+     "cost": 0.0000953205,
+     "cachePct": 94
+    },
+    {
+     "i": 9,
+     "helper": null,
+     "strat": "strat-serial-1.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 12183,
+     "cached": 11520,
+     "write": 0,
+     "out": 124,
+     "reasoning": 0,
+     "cost": 0.000057907,
+     "cachePct": 95
+    },
+    {
+     "i": 10,
+     "helper": null,
+     "strat": "strat-serial-1.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 12904,
+     "cached": 12032,
+     "write": 0,
+     "out": 204,
+     "reasoning": 120,
+     "cost": 0.00007723,
+     "cachePct": 93
+    },
+    {
+     "i": 11,
+     "helper": null,
+     "strat": "strat-serial-1.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 13223,
+     "cached": 12800,
+     "write": 0,
+     "out": 119,
+     "reasoning": 0,
+     "cost": 0.0000507245,
+     "cachePct": 97
+    },
+    {
+     "i": 12,
+     "helper": null,
+     "strat": "strat-serial-1.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 13597,
+     "cached": 13056,
+     "write": 0,
+     "out": 1796,
+     "reasoning": 1690,
+     "cost": 0.000290857,
+     "cachePct": 96
+    },
+    {
+     "i": 13,
+     "helper": null,
+     "strat": "strat-serial-1.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 14138,
+     "cached": 13568,
+     "write": 0,
+     "out": 78,
+     "reasoning": 24,
+     "cost": 0.000051261,
+     "cachePct": 96
+    },
+    {
+     "i": 14,
+     "helper": null,
+     "strat": "strat-serial-1.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 14270,
+     "cached": 14080,
+     "write": 0,
+     "out": 57,
+     "reasoning": 0,
+     "cost": 0.0000357785,
+     "cachePct": 99
+    },
+    {
+     "i": 15,
+     "helper": null,
+     "strat": "strat-serial-1.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 14348,
+     "cached": 14080,
+     "write": 0,
+     "out": 104,
+     "reasoning": 25,
+     "cost": 0.000045112,
+     "cachePct": 98
+    },
+    {
+     "i": 16,
+     "helper": null,
+     "strat": "strat-serial-1.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 14822,
+     "cached": 14336,
+     "write": 0,
+     "out": 70,
+     "reasoning": 0,
+     "cost": 0.000048349,
+     "cachePct": 97
+    },
+    {
+     "i": 17,
+     "helper": null,
+     "strat": "strat-serial-1.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 15311,
+     "cached": 14592,
+     "write": 0,
+     "out": 54,
+     "reasoning": 0,
+     "cost": 0.00005464,
+     "cachePct": 95
+    },
+    {
+     "i": 18,
+     "helper": null,
+     "strat": "strat-serial-1.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 15822,
+     "cached": 15104,
+     "write": 0,
+     "out": 270,
+     "reasoning": 0,
+     "cost": 0.000085721,
+     "cachePct": 95
+    },
+    {
+     "i": 19,
+     "helper": null,
+     "strat": "strat-serial-1.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 16149,
+     "cached": 15616,
+     "write": 0,
+     "out": 2503,
+     "reasoning": 2461,
+     "cost": 0.0003937505,
+     "cachePct": 97
+    },
+    {
+     "i": 20,
+     "helper": null,
+     "strat": "strat-serial-1.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 16321,
+     "cached": 16128,
+     "write": 0,
+     "out": 142,
+     "reasoning": 0,
+     "cost": 0.000050898,
+     "cachePct": 99
+    }
+   ],
+   "models": [
+    "tencent/hy4-flash"
+   ],
+   "strategies": [
+    "strat-serial-1.0"
+   ],
+   "slices": [
+    {
+     "group": "strat-serial-1.0 | tencent/hy4-flash",
+     "requests": 21,
+     "cost": 0.0020341715,
+     "prompt": 246087,
+     "cached": 227072,
+     "out": 7317,
+     "reasoning": 5138,
+     "costs": [
+      0.000179516,
+      0.000034355,
+      0.000078706,
+      0.000163759,
+      0.0000655555,
+      0.0000561415,
+      0.000060129,
+      0.0000584605,
+      0.0000953205,
+      0.000057907,
+      0.00007723,
+      0.0000507245,
+      0.000290857,
+      0.000051261,
+      0.0000357785,
+      0.000045112,
+      0.000048349,
+      0.00005464,
+      0.000085721,
+      0.0003937505,
+      0.000050898
+     ],
+     "firstHit": 1
+    }
+   ],
+   "messages": 60,
+   "turns": 3,
+   "requests": {
+    "main": 21,
+    "helper": 0,
+    "helperKinds": {}
+   },
+   "tokens": {
+    "prompt": 246087,
+    "cached": 227072,
+    "write": 0,
+    "out": 7317,
+    "reasoning": 5138
+   },
+   "cost": {
+    "total": 0.0020341715,
+    "main": 0.0020341715,
+    "helper": 0,
+    "perRequestMedian": 0.0000584605,
+    "helperMax": 0
+   },
+   "cache": {
+    "overallPct": 92,
+    "firstHitAtRequest": 1,
+    "curve": [
+     0,
+     93,
+     81,
+     55,
+     87,
+     96,
+     90,
+     93,
+     94,
+     95,
+     93,
+     97,
+     96,
+     96,
+     99,
+     98,
+     97,
+     95,
+     95,
+     97,
+     99
+    ]
+   },
+   "growth": {
+    "promptCurve": [
+     3716,
+     3858,
+     4752,
+     8431,
+     9453,
+     9562,
+     10495,
+     11066,
+     11666,
+     12183,
+     12904,
+     13223,
+     13597,
+     14138,
+     14270,
+     14348,
+     14822,
+     15311,
+     15822,
+     16149,
+     16321
+    ],
+    "outCurve": [
+     352,
+     138,
+     292,
+     164,
+     65,
+     215,
+     72,
+     101,
+     397,
+     124,
+     204,
+     119,
+     1796,
+     78,
+     57,
+     104,
+     70,
+     54,
+     270,
+     2503,
+     142
+    ],
+    "reasoningShare": 0.7
+   },
+   "calls": {
+    "total": 36,
+    "byTool": {
+     "repo_read": 21,
+     "output_read": 13,
+     "run_js": 2
+    },
+    "byResultClass": {
+     "ok": 33,
+     "refused": 1,
+     "error": 1,
+     "not-run": 1
+    },
+    "repeats": 1,
+    "repeatRuns": 1,
+    "callsBeforeFirstWrite": null,
+    "firstWriteTool": null
+   },
+   "perTurn": [
+    {
+     "n": 0,
+     "userChars": 63,
+     "shortFollowUp": false,
+     "assistantMsgs": 8,
+     "calls": 16,
+     "tools": "repo_read repo_read repo_read repo_read repo_read output_read output_read repo_read output_read output_read output_read output_read repo_read repo_read repo_read repo_read"
+    },
+    {
+     "n": 1,
+     "userChars": 8,
+     "shortFollowUp": true,
+     "assistantMsgs": 8,
+     "calls": 14,
+     "tools": "repo_read repo_read repo_read repo_read output_read output_read repo_read repo_read output_read:refused output_read output_read run_js:error output_read repo_read"
+    },
+    {
+     "n": 2,
+     "userChars": 8,
+     "shortFollowUp": true,
+     "assistantMsgs": 5,
+     "calls": 6,
+     "tools": "repo_read repo_read repo_read repo_read output_read run_js:not-run"
+    }
+   ],
+   "flags": {},
+   "stem": null
+  }
+ ],
+ "groups": [
+  {
+   "group": "strat-serial-1.0 | tencent/hy4-flash",
+   "sessions": 1,
+   "requests": 21,
+   "costTotal": 0.0020341715,
+   "costMedian": 0.0000584605,
+   "costP95": 0.000290857,
+   "costMax": 0.0003937505,
+   "cachePct": 92,
+   "firstHitAtRequest": 1,
+   "outPerRequest": 348.42857142857144,
+   "reasoningShare": 0.7
+  }
+ ]
+}
