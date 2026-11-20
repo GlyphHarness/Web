@@ -187,4 +187,34 @@ const swRow = P.behaviour([psw])[0], swText = P.renderBehaviour([swRow]);
 check('scripted: the behaviour row and its text carry the count', swRow?.scriptedWrites === 2 && /scripted file writes 2/.test(swText) && /calls before first write/.test(swText), J(swRow) + ' || ' + swText);
 check('scripted: a session with no scripted write reports 0 in text and in behaviour', P.behaviour([p2])[0].scriptedWrites === 0 && /scripted file writes 0/.test(P.render(p2)) && /scripted file writes 0/.test(P.renderBehaviour(P.behaviour([p2]))), P.render(p2).split('\n').filter(l => /scripted/.test(l)).join(''));
 
+// ---- a held mark comes from what the harness recorded, never from words in a result (H12 full stage: held fired in all four saved sessions, no call was held) ----
+// Real hold: the harness holds a call (pace) and writes x.held on its tool message; a held model request ends the turn with stop reason 'held' (session.stops).
+// The hold fixture's result text says nothing of a hold; the other fixture's says plenty and nothing was held.
+const hm = (id, content, x) => ({ role: 'tool', tool_call_id: id, content, ...(x ? { x } : {}) });
+const HOLD = { id: 'h1', title: 'real hold', ledger: [], messages: [
+  { role: 'user', content: 'go' },
+  { role: 'assistant', content: null, tool_calls: [sh('r1', 'ls'), sh('r2', 'cat app/x.js'), sh('r3', 'git status')] },
+  hm('r1', 'app notes', { tool: 'shell', ms: 3, ok: true, held: true }), hm('r2', 'file text', { tool: 'shell', ms: 3, ok: true }), hm('r3', 'clean', { tool: 'shell', ms: 3, ok: true, held: true }),
+  { role: 'user', content: 'again' },
+  { role: 'assistant', content: 'waiting' },
+], stops: [{ at: 5, why: 'done' }, { at: 7, why: 'held' }] };
+const NOHOLD = { id: 'h2', title: 'repo text', ledger: [], messages: [
+  { role: 'user', content: 'show the log' },
+  { role: 'assistant', content: null, tool_calls: [sh('q1', 'git log --oneline'), sh('q2', 'cat docs/x.md'), sh('q3', 'cat docs/y.md'), sh('q4', 'ls')] },
+  hm('q1', 'a1b2c3d H12 full stage: progress file closes (held, approval)', { tool: 'shell', ms: 3, ok: true }),
+  hm('q2', '## Held steps and approval\nthe operator releases a held step', { tool: 'shell', ms: 3, ok: true }),
+  hm('q3', 'HELD calls are listed; awaiting approval is a state', { tool: 'shell', ms: 3, ok: true }),
+  hm('q4', 'approval.md\nheld.md', { tool: 'shell', ms: 3, ok: true }),
+  { role: 'assistant', content: 'done' },
+], stops: [{ at: 7, why: 'done' }] };
+const ph = P.profile(HOLD), pn = P.profile(NOHOLD), words = ['HELD: waiting', 'awaiting approval of the edit', 'Approval needed', 'this step was held'];
+check('held: a call the harness held (x.held on its tool message) is class held, though its text says nothing of a hold', ph.calls?.byResultClass?.held === 2 && ph.calls.byResultClass.ok === 1, J(ph.calls?.byResultClass));
+check('held: the turn lists a held call as such, in call order', ph.perTurn?.[0]?.tools === 'shell:held shell shell:held', J(ph.perTurn?.[0]?.tools));
+check('held: a model request held and skipped is the turn stop reason held', ph.perTurn?.[1]?.stop === 'held' && ph.perTurn[0].stop === 'done', J(ph.perTurn?.map(t => t.stop)));
+check('held: repository text that says held or approval is not a hold (git log, cat, ls output)', !('held' in (pn.calls?.byResultClass || {})) && pn.calls?.byResultClass?.ok === 4, J(pn.calls?.byResultClass));
+check('held: no call of a session with no hold is marked held in its turns or its report', !/held/.test(pn.perTurn?.[0]?.tools || 'x') && !/held/.test(P.render(pn).split('\n').filter(l => /results/.test(l)).join('')), J(pn.perTurn?.[0]?.tools));
+check('held: words alone class a result by nothing (resultClass has no held class)', words.every(t => P.resultClass(t) === 'ok'), J(words.map(P.resultClass)));
+check('held: the other classes are unchanged (a skipped call with no recorded hold stays not-run, an error stays an error)', P.resultClass('Not run: skipped by the user.') === 'not-run' && P.resultClass('Tool error: x') === 'error');
+check('held: a stored session whose results carry no x (before holds were recorded) marks none', !('held' in (P.profile({ ...NOHOLD, messages: NOHOLD.messages.map(({ x, ...m }) => m) }).calls?.byResultClass || {})));
+
 process.exitCode = fails ? 1 : 0;
