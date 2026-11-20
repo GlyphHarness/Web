@@ -1245,6 +1245,39 @@ check('layout: the page itself does not scroll',await page.evaluate(() => docume
   const rep = await lastCall();
   check('stored call: a repeat by handle keeps the summary of what it repeats', rep.kept?.path === 'f1.txt' && rep.kept.replace?.length === 1600, JSON.stringify(rep.kept));
   check('stored call: the turn profile lists the path of the repeat as well', (await profArgs()).filter(a => a.name === 'file_edit').length === 3 && (await profArgs()).filter(a => a.name === 'file_edit').every(a => a.args?.path === 'f1.txt'), JSON.stringify(await profArgs()));
+  // ---- the held note says which of three a handle is (fault uujrpd): stored by a call of this session, stored by none, or stored and lost ----
+  // spec (red): the card carries data-ref = stored | unknown | lost for a call whose arguments are a handle alone, and none for any other call.
+  // A handle no call of the session stored is plain: releasing fails the call like a missing handle. What the model is sent is not touched.
+  const heldCard = () => page.locator(HELD).first();
+  const trailLast = () => page.evaluate(() => JSON.parse(localStorage['wh:trail']).at(-1));
+  await holdSay('repeat edit ' + handle);
+  const refA = await heldCard().getAttribute('data-ref'), noteA = await heldCard().locator('pre').textContent();
+  check('held note: a handle an earlier call of this session stored is marked stored, and the call is shown whole', refA === 'stored' && !/"ref"/.test(noteA) && noteA.split('\n').length === 1, String(refA));
+  await release();
+  await paste({ settings: { pace: 'run' } });
+  const INVENTED = 'os:neverstoredx';
+  await say('repeat edit ' + INVENTED);
+  const viewInvRun = await modelView(), trInvRun = await trailLast();
+  await paste({ settings: { pace: 'tools' } });
+  await holdSay('repeat edit ' + INVENTED);
+  const refB = await heldCard().getAttribute('data-ref'), noteB = await heldCard().locator('pre').textContent(), briefB = await heldCard().getAttribute('data-brief');
+  check('held note: a handle no call of this session stored is marked unknown and the card names the handle', refB === 'unknown' && noteB.includes(INVENTED) && (briefB || '').includes(INVENTED), `${refB} | ${noteB} | ${briefB}`);
+  await release();
+  const viewInvHeld = await modelView(), trInvHeld = await trailLast();
+  check('held note: releasing an unknown handle fails the call like a missing handle (the trail row is not ok and names the handle)', trInvRun.ok === false && trInvHeld.ok === false && trInvHeld.ref === INVENTED, JSON.stringify(trInvHeld));
+  check('held note: what the model is sent for an unknown handle is the same with the hold as without', viewInvHeld === viewInvRun && viewInvRun.includes(INVENTED), viewInvHeld);
+  const blob = await page.evaluate(async h => (await import('./app/outstore.js')).get(h), handle);
+  await page.evaluate(h => new Promise((ok, no) => { const r = indexedDB.open('webharness', 1); r.onsuccess = () => { const t = r.result.transaction('out', 'readwrite'); t.objectStore('out').delete(h); t.oncomplete = () => ok(); t.onerror = () => no(t.error); }; }), handle);
+  await holdSay('repeat edit ' + handle);
+  const refC = await heldCard().getAttribute('data-ref'), noteC = await heldCard().locator('pre').textContent(), briefC = await heldCard().getAttribute('data-brief');
+  check('held note: a handle a call of this session stored, gone from this browser, is marked lost and the card names the handle', refC === 'lost' && noteC.includes(handle) && (briefC || '').includes(handle), `${refC} | ${noteC} | ${briefC}`);
+  const rest = (t, h) => t.split('\n').slice(1).join('\n').split(h).join('#');
+  check('held note: each state says something of its own (the unknown note and the lost note differ once the handle is taken out)', rest(noteB, INVENTED).length > 0 && rest(noteC, handle).length > 0 && rest(noteB, INVENTED) !== rest(noteC, handle) && briefB.split(INVENTED).join('#') !== briefC.split(handle).join('#'), `${rest(noteB, INVENTED)} | ${rest(noteC, handle)}`);
+  await release();
+  await page.evaluate(async t => (await import('./app/outstore.js')).put(t), blob);
+  await holdSay('please use a tool');
+  check('held note: a call whose arguments are not a handle carries no state', await heldCard().getAttribute('data-ref') === null);
+  await release();
   await paste({ settings: { pace: 'run' } });
   await paste({ settings: { hostFiles: false } });
   // the round limit: a setting; the turn stops after that many tool rounds and the stop is recorded as before
