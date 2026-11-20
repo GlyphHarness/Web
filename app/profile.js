@@ -52,6 +52,8 @@ function summarise(tool, o) {
   }
   return out;
 }
+// the handle in arguments that are a handle alone ({ref, name?, want?}), else ''
+const handleOf = raw => { try { const o = JSON.parse(raw); return o && typeof o.ref === 'string' && Object.keys(o).every(k => k === 'ref' || k === 'name' || k === 'want') ? o.ref : ''; } catch { return ''; } };
 // name: the tool; raw: its arguments as logged (a JSON string). Never throws.
 export function argSummary(name, raw) {
   let o; try { o = JSON.parse(raw || '{}'); } catch { return { unparsed: sized(String(raw ?? '')) }; }
@@ -81,12 +83,15 @@ export function profile(s) {
   // message shape
   const results = new Map(); // tool_call_id -> {class, chars}
   for (const m of msgs) if (m.role === 'tool') results.set(m.tool_call_id, { cls: resultClass(m.content), chars: len(m.content) });
-  const calls = [];
+  const calls = [], byRef = new Map(); // tool + handle -> the summary kept when the arguments were stored
   msgs.forEach((m, i) => (m.tool_calls || []).forEach((t, j) => {
     const args = t.function?.arguments ?? '';
     const r = results.get(t.id) || { cls: 'no-result', chars: 0 };
-    // arguments stored by handle left their summary beside the message (x.args, written by the harness); otherwise it is made here
-    calls.push({ msg: i, name: t.function?.name, argHash: hash(args), argChars: len(args), cls: r.cls, resultChars: r.chars, args: m.x?.args?.[j] ?? argSummary(t.function?.name, args) });
+    // arguments stored by handle left their summary beside the message (x.args, written by the harness); otherwise it is made here.
+    // A call that is a handle alone (a repeat, or a record from before summaries were kept) takes the summary of the earlier call of the same tool with the same handle.
+    const ref = handleOf(args), key = t.function?.name + ' ' + ref, own = m.x?.args?.[j];
+    if (own && ref) byRef.set(key, own);
+    calls.push({ msg: i, name: t.function?.name, argHash: hash(args), argChars: len(args), cls: r.cls, resultChars: r.chars, args: own ?? (ref ? byRef.get(key) : undefined) ?? argSummary(t.function?.name, args) });
   }));
 
   // turns: a turn starts at each user message

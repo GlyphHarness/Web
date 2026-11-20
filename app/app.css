@@ -195,6 +195,7 @@ button.primary { border-color: var(--accent); background: var(--accent); color: 
 .mhead .mx.bad { color: var(--bad); }
 .msg[data-role=held] { border-left: 3px solid var(--warn); }
 .msg[data-role=held][data-done] { opacity: .7; }
+.msg[data-role=held][data-clip]:not([data-open]) pre { max-height: 9em; overflow: hidden; }
 .msg[data-role=ask] { border-left: 3px solid var(--accent); }
 .msg[data-role=ask][data-done] { opacity: .8; }
 .msg .actions { display: flex; gap: 6px; justify-content: flex-end; margin-top: 6px; }

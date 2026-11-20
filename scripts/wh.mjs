@@ -124,7 +124,7 @@ async function settle(p, ms = 900000) {
   const t0 = Date.now();
   await p.waitForSelector('#app[data-busy]', { state: 'attached', timeout: 3000 }).catch(() => {});
   for (;;) {
-    const st = await p.evaluate(() => ({ busy: document.querySelector('#app').hasAttribute('data-busy'), held: [...document.querySelectorAll('.msg[data-role=held]:not([data-done])')].map(c => c.querySelector('pre')?.textContent.slice(0, 200)), approve: [...document.querySelectorAll('.msg[data-role=approve]:not([data-done])')].map(c => c.textContent.replace(/\s+/g, ' ').slice(0, 1200)), ask: !!document.querySelector('.msg[data-role=ask]:not([data-done])') }));
+    const st = await p.evaluate(() => ({ busy: document.querySelector('#app').hasAttribute('data-busy'), held: [...document.querySelectorAll('.msg[data-role=held]:not([data-done])')].map(c => c.dataset.brief ?? c.querySelector('pre')?.textContent.slice(0, 200)), approve: [...document.querySelectorAll('.msg[data-role=approve]:not([data-done])')].map(c => c.textContent.replace(/\s+/g, ' ').slice(0, 1200)), ask: !!document.querySelector('.msg[data-role=ask]:not([data-done])') }));
     if (st.held.length) return { held: st.held };
     if (st.approve.length) return { approve: st.approve };
     if (st.ask) return { ask: true };
