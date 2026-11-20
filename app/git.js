@@ -69,17 +69,19 @@ export function client(env) {
     return { text: b64.dec(j.content), sha: j.sha };
   }
 
-  async function read(a) {
+  async function read(a, seen) {
     const repo = repoOf(a), op = a.op || 'file';
     if (op === 'file') {
       if (!a.path) throw new Error('path is required');
       const f = await fileAt(repo, a.path, a.ref);
       if (f.dir) return f.dir.map(e => (e.type === 'dir' ? e.path + '/' : e.path)).join('\n') || '(empty directory)';
+      let out = f.text;
       if (a.lines) {
         const [s, e] = String(a.lines).split('-').map(Number);
-        return f.text.split('\n').slice(Math.max(0, s - 1), e || s).join('\n');
+        out = f.text.split('\n').slice(Math.max(0, s - 1), e || s).join('\n');
       }
-      return f.text;
+      seen?.({ repo, path: a.path, ref: a.ref || null, text: f.text, out, lines: a.lines ? String(a.lines) : null }); // a file was read: the caller keeps its own record (inventory.js check records)
+      return out;
     }
     if (op === 'tree') {
       const ref = a.ref || await defaultBranch(repo);

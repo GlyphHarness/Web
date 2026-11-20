@@ -1,12 +1,12 @@
 // Tools the model can call. Definitions are sent in a fixed order (they sit in
 // the cacheable prefix) and are worded without reference to where they run.
 //   { def: <OpenAI tool schema>, run(args, ctx) -> string | Promise<string> }
-import { present, read, slice, get, handlesIn } from './outstore.js';
+import { present, read, slice, get, handlesIn, squeeze, VIEW_MAX } from './outstore.js';
 import * as H from './handles.js';
 import * as pat from './patterns.js';
 import { run as lb } from './localbridge.js';
 
-// ctx = { pads, savePads, depth, fanOut, branchRead, by(), knownRef(h), onPatterns(), helper(want, text) } from the host.
+// ctx = { pads, savePads, depth, fanOut, branchRead, by(), knownRef(h), onPatterns(), helper(want, text), onRead(file) } from the host.
 
 // Long arguments are stored by handle when the call is logged (main.js), so a
 // logged call can read {ref, name}. That form is also a valid call: it runs the
@@ -197,7 +197,8 @@ export const repoTools = [
   fn('repo_read',
     'Read a GitHub repository. op: file (path, optional lines "a-b"; a directory path lists it), tree (all file paths, optional path prefix), log (optional path, n), diff (base, head, optional path), branches, prs (state). ref is a branch, tag or commit; default branch if omitted. Say in `want` what you are looking for when the output may be long.',
     { repo: { type: 'string', description: 'owner/name' }, op: { type: 'string', enum: ['file', 'tree', 'log', 'diff', 'branches', 'prs'] }, path: { type: 'string' }, ref: { type: 'string' }, lines: { type: 'string' }, n: { type: 'integer' }, base: { type: 'string' }, head: { type: 'string' }, state: { type: 'string' }, want: { type: 'string' } }, ['repo'],
-    (a, ctx) => ctx.git ? ctx.git.read(a) : noRepo),
+    // a file read is reported to the host (check records, inventory.js), with whether what came back sits whole in the turn
+    (a, ctx) => ctx.git ? ctx.git.read(a, f => ctx.onRead?.({ ...f, fits: squeeze(f.out).length <= VIEW_MAX })) : noRepo),
   fn('repo_commit',
     'Commit changes to a branch in one commit; the branch is created from `from` (default branch if omitted) when it does not exist. Each change is {path, content}, {path, edits: [{find, replace}]} (each find must occur exactly once in the current file; prefer this for small changes), {path, from: "os:..."} or {path, delete: true}. The user approves each commit.' + REF_NOTE,
     { repo: { type: 'string' }, branch: { type: 'string' }, from: { type: 'string' }, message: { type: 'string' }, changes: { type: 'array', items: CHANGE }, ...REF_PROPS }, [],

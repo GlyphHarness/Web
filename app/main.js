@@ -37,6 +37,7 @@ import * as bridge from './bridge.js';
 import { render } from './widgets.js';
 import * as theme from './theme.js';
 import * as pat from './patterns.js';
+import * as inventory from './inventory.js';
 import { put, get, handlesIn, setFallback } from './outstore.js';
 import { buildRequest, measure, report, padAttachment, inherit, imitatesNote, keptLines, corePrompt, EDGE_MIN, markedOnly, edgeReplies, turnOf, KINDS } from './context.js';
 
@@ -1214,6 +1215,8 @@ async function turnsInner(s, depth, onFirst) {
     // handles (handles.js): this session is the reader; which ids it resolved, with a hash of what came back
     reader: s.id,
     onResolve: (id, h) => { (s.resolved ??= []).push({ t: Date.now(), id, h, at: s.messages.length }); saveSession(s); },
+    // check records (inventory.js): what this session read of a file, kept beside the turns, never in them
+    onRead: f => { inventory.noteRead(s.inventory ??= inventory.create(), { ...f, session: s.id, at_turn: s.messages.length }); saveSession(s); },
     ask: a => askCard(s, a),
     concern: (a, who) => fileConcern(s, a, who),
     values: valueTools(s, () => ctx.by()),
