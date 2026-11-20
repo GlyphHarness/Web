@@ -1,0 +1,613 @@
+{
+ "at": "2026-11-20T17:49:31.534Z",
+ "sessions": [
+  {
+   "id": "smwp9tw9eqgqm",
+   "title": "h12 green",
+   "rows": [
+    {
+     "i": 0,
+     "helper": null,
+     "strat": "strat-serial-3.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 3752,
+     "cached": 0,
+     "write": 0,
+     "out": 85,
+     "reasoning": 0,
+     "cost": 0.0001432625,
+     "cachePct": 0
+    },
+    {
+     "i": 1,
+     "helper": null,
+     "strat": "strat-serial-3.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 15378,
+     "cached": 3584,
+     "write": 0,
+     "out": 77,
+     "reasoning": 24,
+     "cost": 0.0004289845,
+     "cachePct": 23
+    },
+    {
+     "i": 2,
+     "helper": null,
+     "strat": "strat-serial-3.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 15477,
+     "cached": 15360,
+     "write": 0,
+     "out": 34,
+     "reasoning": 0,
+     "cost": 0.000031912,
+     "cachePct": 99
+    },
+    {
+     "i": 3,
+     "helper": null,
+     "strat": "strat-serial-3.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 16406,
+     "cached": 15360,
+     "write": 0,
+     "out": 42,
+     "reasoning": 0,
+     "cost": 0.000065551,
+     "cachePct": 94
+    },
+    {
+     "i": 4,
+     "helper": null,
+     "strat": "strat-serial-3.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 17038,
+     "cached": 16384,
+     "write": 0,
+     "out": 1608,
+     "reasoning": 1558,
+     "cost": 0.00027339,
+     "cachePct": 96
+    },
+    {
+     "i": 5,
+     "helper": null,
+     "strat": "strat-serial-3.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 17119,
+     "cached": 16896,
+     "write": 0,
+     "out": 462,
+     "reasoning": 0,
+     "cost": 0.00009806,
+     "cachePct": 99
+    },
+    {
+     "i": 6,
+     "helper": null,
+     "strat": "strat-serial-3.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 17177,
+     "cached": 16896,
+     "write": 0,
+     "out": 127,
+     "reasoning": 97,
+     "cost": 0.0000530225,
+     "cachePct": 98
+    },
+    {
+     "i": 7,
+     "helper": null,
+     "strat": "strat-serial-3.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 17620,
+     "cached": 17152,
+     "write": 0,
+     "out": 34,
+     "reasoning": 0,
+     "cost": 0.000046885,
+     "cachePct": 97
+    },
+    {
+     "i": 8,
+     "helper": null,
+     "strat": "strat-serial-3.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 18257,
+     "cached": 17408,
+     "write": 0,
+     "out": 53,
+     "reasoning": 0,
+     "cost": 0.0000632735,
+     "cachePct": 95
+    },
+    {
+     "i": 9,
+     "helper": null,
+     "strat": "strat-serial-3.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 18637,
+     "cached": 18176,
+     "write": 0,
+     "out": 100,
+     "reasoning": 0,
+     "cost": 0.000057449,
+     "cachePct": 98
+    },
+    {
+     "i": 10,
+     "helper": null,
+     "strat": "strat-serial-3.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 18836,
+     "cached": 18432,
+     "write": 0,
+     "out": 210,
+     "reasoning": 0,
+     "cost": 0.000071293,
+     "cachePct": 98
+    },
+    {
+     "i": 11,
+     "helper": null,
+     "strat": "strat-serial-3.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 18895,
+     "cached": 18688,
+     "write": 0,
+     "out": 135,
+     "reasoning": 106,
+     "cost": 0.0000542445,
+     "cachePct": 99
+    },
+    {
+     "i": 12,
+     "helper": null,
+     "strat": "strat-serial-3.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 19311,
+     "cached": 18688,
+     "write": 0,
+     "out": 79,
+     "reasoning": 0,
+     "cost": 0.0000609365,
+     "cachePct": 97
+    },
+    {
+     "i": 13,
+     "helper": null,
+     "strat": "strat-serial-3.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 19427,
+     "cached": 19200,
+     "write": 0,
+     "out": 55,
+     "reasoning": 0,
+     "cost": 0.0000444725,
+     "cachePct": 99
+    },
+    {
+     "i": 14,
+     "helper": null,
+     "strat": "strat-serial-3.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 19696,
+     "cached": 19200,
+     "write": 0,
+     "out": 86,
+     "reasoning": 0,
+     "cost": 0.000058243,
+     "cachePct": 97
+    },
+    {
+     "i": 15,
+     "helper": null,
+     "strat": "strat-serial-3.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 19999,
+     "cached": 19456,
+     "write": 0,
+     "out": 34,
+     "reasoning": 0,
+     "cost": 0.000052966,
+     "cachePct": 97
+    },
+    {
+     "i": 16,
+     "helper": null,
+     "strat": "strat-serial-3.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 20409,
+     "cached": 19968,
+     "write": 0,
+     "out": 61,
+     "reasoning": 0,
+     "cost": 0.0000539575,
+     "cachePct": 98
+    },
+    {
+     "i": 17,
+     "helper": null,
+     "strat": "strat-serial-3.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 20608,
+     "cached": 20224,
+     "write": 0,
+     "out": 105,
+     "reasoning": 0,
+     "cost": 0.0000585285,
+     "cachePct": 98
+    }
+   ],
+   "models": [
+    "tencent/hy4-flash"
+   ],
+   "strategies": [
+    "strat-serial-3.0"
+   ],
+   "slices": [
+    {
+     "group": "strat-serial-3.0 | tencent/hy4-flash",
+     "requests": 18,
+     "cost": 0.0017164314999999998,
+     "prompt": 314042,
+     "cached": 291072,
+     "out": 3387,
+     "reasoning": 1785,
+     "costs": [
+      0.0001432625,
+      0.0004289845,
+      0.000031912,
+      0.000065551,
+      0.00027339,
+      0.00009806,
+      0.0000530225,
+      0.000046885,
+      0.0000632735,
+      0.000057449,
+      0.000071293,
+      0.0000542445,
+      0.0000609365,
+      0.0000444725,
+      0.000058243,
+      0.000052966,
+      0.0000539575,
+      0.0000585285
+     ],
+     "firstHit": 1
+    }
+   ],
+   "messages": 38,
+   "turns": 1,
+   "requests": {
+    "main": 18,
+    "helper": 0,
+    "helperKinds": {}
+   },
+   "tokens": {
+    "prompt": 314042,
+    "cached": 291072,
+    "write": 0,
+    "out": 3387,
+    "reasoning": 1785
+   },
+   "cost": {
+    "total": 0.0017164314999999998,
+    "main": 0.0017164314999999998,
+    "helper": 0,
+    "perRequestMedian": 0.00005838575,
+    "helperMax": 0
+   },
+   "cache": {
+    "overallPct": 93,
+    "firstHitAtRequest": 1,
+    "curve": [
+     0,
+     23,
+     99,
+     94,
+     96,
+     99,
+     98,
+     97,
+     95,
+     98,
+     98,
+     99,
+     97,
+     99,
+     97,
+     97,
+     98,
+     98
+    ]
+   },
+   "growth": {
+    "promptCurve": [
+     3752,
+     15378,
+     15477,
+     16406,
+     17038,
+     17119,
+     17177,
+     17620,
+     18257,
+     18637,
+     18836,
+     18895,
+     19311,
+     19427,
+     19696,
+     19999,
+     20409,
+     20608
+    ],
+    "outCurve": [
+     85,
+     77,
+     34,
+     42,
+     1608,
+     462,
+     127,
+     34,
+     53,
+     100,
+     210,
+     135,
+     79,
+     55,
+     86,
+     34,
+     61,
+     105
+    ],
+    "reasoningShare": 0.53
+   },
+   "calls": {
+    "total": 19,
+    "byTool": {
+     "shell": 11,
+     "file_read": 2,
+     "output_read": 3,
+     "file_edit": 3
+    },
+    "byResultClass": {
+     "ok": 19
+    },
+    "repeats": 0,
+    "repeatRuns": 0,
+    "callsBeforeFirstWrite": 7,
+    "callsBeforeFirstCommit": 11,
+    "firstWriteTool": "file_edit"
+   },
+   "perTurn": [
+    {
+     "n": 0,
+     "userChars": 1938,
+     "shortFollowUp": false,
+     "assistantMsgs": 18,
+     "calls": 19,
+     "tools": "shell file_read file_read shell output_read shell shell file_edit shell output_read shell shell file_edit shell file_edit shell shell output_read shell",
+     "stop": "done",
+     "after": null,
+     "args": [
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "git status --short --branch && ls -la && cat scripts/ci.mjs",
+        "want": {
+         "length": 44,
+         "hash": "293cf642"
+        }
+       }
+      },
+      {
+       "name": "file_read",
+       "args": {
+        "path": "app/providers.js"
+       }
+      },
+      {
+       "name": "file_read",
+       "args": {
+        "path": "scripts/test-retry.mjs"
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "git status --short --branch; echo ---; cat scripts/ci.mjs; echo ---; git log --oneline -5",
+        "want": {
+         "length": 45,
+         "hash": "1e7b3dca"
+        }
+       }
+      },
+      {
+       "name": "output_read",
+       "args": {
+        "handle": "os:105qgrz1oy",
+        "offset": 0,
+        "length": 6000
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "ls -la scripts/ && git status --short && git ls-files | wc -l",
+        "want": {
+         "length": 37,
+         "hash": "dd85c562"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "git ls-files ci-record.json; cat .gitignore 2>/dev/null; git status --porcelain",
+        "want": {
+         "length": 47,
+         "hash": "64e282ff"
+        }
+       }
+      },
+      {
+       "name": "file_edit",
+       "args": {
+        "path": "scripts/test-retry.mjs",
+        "find": {
+         "length": 36,
+         "hash": "25d191d0"
+        },
+        "replace": {
+         "length": 1528,
+         "hash": "b02bae63"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "git diff -- scripts/test-retry.mjs",
+        "want": {
+         "length": 23,
+         "hash": "5006e216"
+        }
+       }
+      },
+      {
+       "name": "output_read",
+       "args": {
+        "handle": "os:1qwlfib147",
+        "offset": 0,
+        "length": 3000
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "node scripts/ci.mjs retry 2>&1 | tail -20; echo \"exit: ${PIPESTATUS[0]}\"",
+        "want": {
+         "length": 41,
+         "hash": "f4707355"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "git add scripts/test-retry.mjs && git commit -m \"Spec: only fetch's network-error TypeErrors are retried (a client TypeError must not be asked again)\" && git log -1 --format='%H %s'",
+        "want": {
+         "length": 41,
+         "hash": "38c264bb"
+        }
+       }
+      },
+      {
+       "name": "file_edit",
+       "args": {
+        "path": "app/providers.js",
+        "find": {
+         "length": 98,
+         "hash": "9df4849e"
+        },
+        "replace": {
+         "length": 605,
+         "hash": "36c4f8cf"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "git diff -- app/providers.js",
+        "want": {
+         "length": 27,
+         "hash": "0f708281"
+        }
+       }
+      },
+      {
+       "name": "file_edit",
+       "args": {
+        "path": "app/providers.js",
+        "find": {
+         "length": 117,
+         "hash": "2c50c168"
+        },
+        "replace": {
+         "length": 72,
+         "hash": "cd5272d9"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "node scripts/ci.mjs retry profile validators 2>&1 | tail -30; echo \"exit: ${PIPESTATUS[0]}\"",
+        "want": {
+         "length": 37,
+         "hash": "153c2d03"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "git status --short && git diff -- app/providers.js && git add app/providers.js && git commit -m \"Retry: treat only fetch's own network-error messages as transient TypeErrors (client bugs surface at once)\" && git log -2 --format='%H %s'",
+        "want": {
+         "length": 43,
+         "hash": "87890395"
+        }
+       }
+      },
+      {
+       "name": "output_read",
+       "args": {
+        "handle": "os:mto8kjn6ev",
+        "offset": 0,
+        "length": 1200
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "git status --short --branch && git log -2 --format='%H %s' && node scripts/ci.mjs retry profile validators 2>&1 | tail -1",
+        "want": {
+         "length": 34,
+         "hash": "7011552b"
+        }
+       }
+      }
+     ]
+    }
+   ],
+   "followUps": {
+    "limitContinuations": 0,
+    "failedContinuations": 0,
+    "steering": 0,
+    "unrecorded": 0
+   },
+   "flags": {},
+   "stem": null
+  }
+ ],
+ "groups": [
+  {
+   "group": "strat-serial-3.0 | tencent/hy4-flash",
+   "sessions": 1,
+   "requests": 18,
+   "costTotal": 0.0017164314999999998,
+   "costMedian": 0.00005838575,
+   "costP95": 0.0004289845,
+   "costMax": 0.0004289845,
+   "cachePct": 93,
+   "firstHitAtRequest": 1,
+   "outPerRequest": 188.16666666666666,
+   "reasoningShare": 0.53
+  }
+ ]
+}

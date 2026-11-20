@@ -1,0 +1,600 @@
+{
+ "at": "2026-11-20T17:44:57.660Z",
+ "sessions": [
+  {
+   "id": "smwp9onnr9qae",
+   "title": "h12 blue",
+   "rows": [
+    {
+     "i": 0,
+     "helper": null,
+     "strat": "strat-serial-3.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 3203,
+     "cached": 0,
+     "write": 0,
+     "out": 96,
+     "reasoning": 0,
+     "cost": 0.000125593,
+     "cachePct": 0
+    },
+    {
+     "i": 1,
+     "helper": null,
+     "strat": "strat-serial-3.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 3757,
+     "cached": 3072,
+     "write": 0,
+     "out": 37,
+     "reasoning": 8,
+     "cost": 0.0000337815,
+     "cachePct": 82
+    },
+    {
+     "i": 2,
+     "helper": null,
+     "strat": "strat-serial-3.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 6590,
+     "cached": 3584,
+     "write": 0,
+     "out": 38,
+     "reasoning": 9,
+     "cost": 0.000115925,
+     "cachePct": 54
+    },
+    {
+     "i": 3,
+     "helper": null,
+     "strat": "strat-serial-3.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 10388,
+     "cached": 6400,
+     "write": 0,
+     "out": 47,
+     "reasoning": 18,
+     "cost": 0.0001557835,
+     "cachePct": 62
+    },
+    {
+     "i": 4,
+     "helper": null,
+     "strat": "strat-serial-3.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 13922,
+     "cached": 10240,
+     "write": 0,
+     "out": 1280,
+     "reasoning": 771,
+     "cost": 0.00032407,
+     "cachePct": 74
+    },
+    {
+     "i": 5,
+     "helper": null,
+     "strat": "strat-serial-3.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 14398,
+     "cached": 13824,
+     "write": 0,
+     "out": 28,
+     "reasoning": 0,
+     "cost": 0.00004476,
+     "cachePct": 96
+    },
+    {
+     "i": 6,
+     "helper": null,
+     "strat": "strat-serial-3.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 14997,
+     "cached": 14336,
+     "write": 0,
+     "out": 550,
+     "reasoning": 0,
+     "cost": 0.000121914,
+     "cachePct": 96
+    },
+    {
+     "i": 7,
+     "helper": null,
+     "strat": "strat-serial-3.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 15144,
+     "cached": 14848,
+     "write": 0,
+     "out": 31,
+     "reasoning": 0,
+     "cost": 0.0000369875,
+     "cachePct": 98
+    },
+    {
+     "i": 8,
+     "helper": null,
+     "strat": "strat-serial-3.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 15691,
+     "cached": 15104,
+     "write": 0,
+     "out": 58,
+     "reasoning": 0,
+     "cost": 0.00005135,
+     "cachePct": 96
+    },
+    {
+     "i": 9,
+     "helper": null,
+     "strat": "strat-serial-3.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 16109,
+     "cached": 15616,
+     "write": 0,
+     "out": 27,
+     "reasoning": 0,
+     "cost": 0.0000444725,
+     "cachePct": 97
+    },
+    {
+     "i": 10,
+     "helper": null,
+     "strat": "strat-serial-3.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 16247,
+     "cached": 15872,
+     "write": 0,
+     "out": 159,
+     "reasoning": 68,
+     "cost": 0.0000592725,
+     "cachePct": 98
+    },
+    {
+     "i": 11,
+     "helper": null,
+     "strat": "strat-serial-3.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 16386,
+     "cached": 16128,
+     "write": 0,
+     "out": 105,
+     "reasoning": 0,
+     "cost": 0.0000479745,
+     "cachePct": 98
+    },
+    {
+     "i": 12,
+     "helper": null,
+     "strat": "strat-serial-3.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 16577,
+     "cached": 16384,
+     "write": 0,
+     "out": 74,
+     "reasoning": 0,
+     "cost": 0.000041728,
+     "cachePct": 99
+    },
+    {
+     "i": 13,
+     "helper": null,
+     "strat": "strat-serial-3.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 16679,
+     "cached": 16384,
+     "write": 0,
+     "out": 243,
+     "reasoning": 0,
+     "cost": 0.0000690425,
+     "cachePct": 98
+    },
+    {
+     "i": 14,
+     "helper": null,
+     "strat": "strat-serial-3.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 17083,
+     "cached": 16640,
+     "write": 0,
+     "out": 49,
+     "reasoning": 0,
+     "cost": 0.0000473495,
+     "cachePct": 97
+    },
+    {
+     "i": 15,
+     "helper": null,
+     "strat": "strat-serial-3.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 17500,
+     "cached": 16896,
+     "write": 0,
+     "out": 58,
+     "reasoning": 0,
+     "cost": 0.000054633,
+     "cachePct": 97
+    },
+    {
+     "i": 16,
+     "helper": null,
+     "strat": "strat-serial-3.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 17605,
+     "cached": 17408,
+     "write": 0,
+     "out": 63,
+     "reasoning": 0,
+     "cost": 0.0000418585,
+     "cachePct": 99
+    },
+    {
+     "i": 17,
+     "helper": null,
+     "strat": "strat-serial-3.0",
+     "model": "tencent/hy4-flash",
+     "prompt": 17788,
+     "cached": 17408,
+     "write": 0,
+     "out": 98,
+     "reasoning": 0,
+     "cost": 0.000053181,
+     "cachePct": 98
+    }
+   ],
+   "models": [
+    "tencent/hy4-flash"
+   ],
+   "strategies": [
+    "strat-serial-3.0"
+   ],
+   "slices": [
+    {
+     "group": "strat-serial-3.0 | tencent/hy4-flash",
+     "requests": 18,
+     "cost": 0.0014696765,
+     "prompt": 250064,
+     "cached": 230144,
+     "out": 3041,
+     "reasoning": 874,
+     "costs": [
+      0.000125593,
+      0.0000337815,
+      0.000115925,
+      0.0001557835,
+      0.00032407,
+      0.00004476,
+      0.000121914,
+      0.0000369875,
+      0.00005135,
+      0.0000444725,
+      0.0000592725,
+      0.0000479745,
+      0.000041728,
+      0.0000690425,
+      0.0000473495,
+      0.000054633,
+      0.0000418585,
+      0.000053181
+     ],
+     "firstHit": 1
+    }
+   ],
+   "messages": 37,
+   "turns": 1,
+   "requests": {
+    "main": 18,
+    "helper": 0,
+    "helperKinds": {}
+   },
+   "tokens": {
+    "prompt": 250064,
+    "cached": 230144,
+    "write": 0,
+    "out": 3041,
+    "reasoning": 874
+   },
+   "cost": {
+    "total": 0.0014696765,
+    "main": 0.0014696765,
+    "helper": 0,
+    "perRequestMedian": 0.000052265499999999996,
+    "helperMax": 0
+   },
+   "cache": {
+    "overallPct": 92,
+    "firstHitAtRequest": 1,
+    "curve": [
+     0,
+     82,
+     54,
+     62,
+     74,
+     96,
+     96,
+     98,
+     96,
+     97,
+     98,
+     98,
+     99,
+     98,
+     97,
+     97,
+     99,
+     98
+    ]
+   },
+   "growth": {
+    "promptCurve": [
+     3203,
+     3757,
+     6590,
+     10388,
+     13922,
+     14398,
+     14997,
+     15144,
+     15691,
+     16109,
+     16247,
+     16386,
+     16577,
+     16679,
+     17083,
+     17500,
+     17605,
+     17788
+    ],
+    "outCurve": [
+     96,
+     37,
+     38,
+     47,
+     1280,
+     28,
+     550,
+     31,
+     58,
+     27,
+     159,
+     105,
+     74,
+     243,
+     49,
+     58,
+     63,
+     98
+    ],
+    "reasoningShare": 0.29
+   },
+   "calls": {
+    "total": 18,
+    "byTool": {
+     "shell": 12,
+     "output_read": 6
+    },
+    "byResultClass": {
+     "ok": 18
+    },
+    "repeats": 0,
+    "repeatRuns": 0,
+    "callsBeforeFirstWrite": null,
+    "callsBeforeFirstCommit": 12,
+    "firstWriteTool": null
+   },
+   "perTurn": [
+    {
+     "n": 0,
+     "userChars": 1938,
+     "shortFollowUp": false,
+     "assistantMsgs": 18,
+     "calls": 18,
+     "tools": "shell shell output_read output_read output_read shell output_read shell output_read shell output_read shell shell shell shell shell shell shell",
+     "stop": "done",
+     "after": null,
+     "args": [
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "pwd && git status --short && git branch --show-current && ls",
+        "name": {
+         "length": 10,
+         "hash": "49204588"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "cat app/providers.js && echo '=== TEST ===' && cat scripts/test-retry.mjs && echo '=== CI ===' && cat scripts/ci.mjs",
+        "name": {
+         "length": 12,
+         "hash": "1fba844b"
+        }
+       }
+      },
+      {
+       "name": "output_read",
+       "args": {
+        "handle": "os:n48ujy7ukf",
+        "lines": "1-180"
+       }
+      },
+      {
+       "name": "output_read",
+       "args": {
+        "handle": "os:n48ujy7ukf",
+        "lines": "181-456"
+       }
+      },
+      {
+       "name": "output_read",
+       "args": {
+        "handle": "os:n48ujy7ukf",
+        "lines": "300-456"
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "python3 - <<'PY'",
+        "cmd_more": {
+         "length": 1603,
+         "hash": "8be8f2ce"
+        },
+        "name": {
+         "length": 10,
+         "hash": "dbf0e8a5"
+        }
+       }
+      },
+      {
+       "name": "output_read",
+       "args": {
+        "handle": "os:hrptvmg151",
+        "lines": "1-30"
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "python3 - <<'PY'",
+        "cmd_more": {
+         "length": 1471,
+         "hash": "378baeba"
+        },
+        "name": {
+         "length": 17,
+         "hash": "633d3a51"
+        }
+       }
+      },
+      {
+       "name": "output_read",
+       "args": {
+        "handle": "os:1o1v8xf19o",
+        "lines": "1-40"
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "node scripts/ci.mjs retry; echo \"EXIT=$?\"",
+        "name": {
+         "length": 33,
+         "hash": "749146cb"
+        }
+       }
+      },
+      {
+       "name": "output_read",
+       "args": {
+        "handle": "os:g9otfo1k38",
+        "find": {
+         "length": 4,
+         "hash": "5c438d2d"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "git status --short && git diff --stat && git diff -- ci-record.json | head -30",
+        "name": {
+         "length": 17,
+         "hash": "a790225c"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "git add scripts/test-retry.mjs && git commit -m \"Spec: retry only fetch network TypeErrors, never a coding-mistake TypeError (programming errors must surface at once without a delay)\" && git rev-parse HEAD",
+        "name": {
+         "length": 16,
+         "hash": "a7b98ea6"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "ref": "os:5v7t4kz9w0",
+        "name": {
+         "length": 23,
+         "hash": "d6f1702f"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "python3 - <<'PY'",
+        "cmd_more": {
+         "length": 836,
+         "hash": "c3a182d4"
+        },
+        "name": {
+         "length": 23,
+         "hash": "d6f1702f"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "node scripts/ci.mjs retry profile validators; echo \"EXIT=$?\"",
+        "name": {
+         "length": 25,
+         "hash": "06ae9730"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "git status --short && git diff --stat",
+        "name": {
+         "length": 18,
+         "hash": "a9c88b20"
+        }
+       }
+      },
+      {
+       "name": "shell",
+       "args": {
+        "cmd": "git add app/providers.js && git commit -m \"Narrow retryable TypeErrors to known fetch network messages\" && git rev-parse HEAD && git status --short && git log -2 --oneline",
+        "name": {
+         "length": 21,
+         "hash": "b4c10626"
+        }
+       }
+      }
+     ]
+    }
+   ],
+   "followUps": {
+    "limitContinuations": 0,
+    "failedContinuations": 0,
+    "steering": 0,
+    "unrecorded": 0
+   },
+   "flags": {},
+   "stem": null
+  }
+ ],
+ "groups": [
+  {
+   "group": "strat-serial-3.0 | tencent/hy4-flash",
+   "sessions": 1,
+   "requests": 18,
+   "costTotal": 0.0014696765,
+   "costMedian": 0.000052265499999999996,
+   "costP95": 0.00032407,
+   "costMax": 0.00032407,
+   "cachePct": 92,
+   "firstHitAtRequest": 1,
+   "outPerRequest": 168.94444444444446,
+   "reasoningShare": 0.29
+  }
+ ]
+}

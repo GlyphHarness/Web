@@ -282,3 +282,27 @@ Verdict: none (no hypothesis was under test). Host file tools and tool rounds mo
 - **Measures.** Completed as asked (two commits, checks first, suites green); requests; tool calls; results other than ok; operator messages by kind (steering, after a limit stop, after a failed turn); ledger cost; prompt tokens; shell command lines that write a file by script (`python3`, `node -e`, a here-document, `sed -i`, a redirect into a source file).
 - **Canary.** One blue, then one green. Stop if green costs over twice blue. The canary is not worse if green completes and its requests are at most blue's. A full run (three tasks of different shape per arm, alternating order) follows only then.
 - **Null.** No difference, or green worse: recorded as it falls.
+
+### H12 canary · 2026-11-20 · requests equal, green dearer · verdict `retest`
+
+Setup as registered above: `tencent/hy4-flash`, `strat-serial-3.0`, `toolRounds` 40, run code denied, `pace both`, the installed Chrome with a visible window, page at `b7ea982`, shell on the container, a fresh browser profile and a fresh clone at `b7ea982` per arm (blue's clone was moved out of the mount before green started). Blue ran first. The first message was the same bytes in both arms (1,938 chars; same hash in both saved traces) and names no tool. Neither first request held an identifying term (the 19 words checked in session 2).
+
+| Arm | Outcome | Requests / tool calls | Operator messages | Results other than ok | File writes by script | Tokens | Cost (ledger) |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| blue, `hostFiles` off, 16 tools | completed in one turn: two commits, checks first (36 pass and 1 fail at the checks commit, re-run by the operator), then `retry ok (37/37), profile ok (34/34), validators ok (46/46)` | 18 / 18 (12 `shell`, 6 `output_read`) | 0 | 0 | 4 shell command lines (3 `python3` here-documents kept in the profile, 1 command stored by handle) | 250,064 prompt (92% cached), 3,041 out (874 reasoning) | $0.00147 |
+| green, `hostFiles` on, 19 tools | completed in one turn: two commits, checks first, then `retry ok (32/32), profile ok (34/34), validators ok (46/46)` | 18 / 19 (11 `shell`, 3 `file_edit`, 2 `file_read`, 3 `output_read`) | 0 | 0 | 0 | 314,042 prompt (93% cached), 3,387 out (1,785 reasoning) | $0.00172 |
+
+Profiles (metadata only): `docs/concepts/profile-h12-blue-2026-11-20.json`, `docs/concepts/profile-h12-green-2026-11-20.json`.
+
+Read against the registered rule: green completed and its requests are at most blue's (18 and 18), so the canary is not worse, and the stop rule (green over twice blue's cost) did not trigger (1.17 times). The claim itself, fewer requests and tool calls, is not shown: requests are equal, green made one more call, and green cost 17% more. The part of the claim about scripts holds in this pair: blue wrote files with four scripted command lines, green with three `file_edit` calls.
+
+What it taught
+
+1. On this task the file tools did not save a request. Blue read both files with one `cat` and paged the stored output by line range (3 `output_read` calls); green read both files whole with `file_read` (2 calls). Writing took blue 4 command lines and green 3 edits.
+2. Green's extra cost is prompt weight: its two whole-file reads put about 11.6k tokens into the prompt at request 1 (3.8k to 15.4k), where blue's prompt reached that size only at request 4; every later request re-sent it. 64k more prompt tokens over 18 requests.
+3. The drop from session 1 (125 requests) to session 2 (27) is therefore not explained by the file tools. Blue here had none and took 18. What blue and session 2 share, and session 1 lacked, is 40 tool rounds, no run code, ranged reads of stored output that the model used, and a brief checked against the repository. Which of those matters is still open.
+4. Both arms looked at their own edit before going on (blue by a ranged read of the script's output, green with `git diff`), and both committed the checks before the implementation without being reminded.
+5. The two arms wrote different rules from the same brief: blue matches the network phrases as substrings, green as whole messages. The brief ("match those phrases without regard to case") allows both. Blue's change is the one carried to `dev` (`c73400b`, `3deceae`), because a failed fetch may wrap the phrase in more text; that choice is the operator's, not a result of the pair.
+6. Operator note: the first page load of a fresh browser profile timed out once in `wh init` for green; the commands were repeated and the session started clean (the failed commands are in the command log as `no`).
+
+Verdict: `retest`. One pair on one small task. By the programme a full run may follow (three tasks of different shape per arm); the question worth carrying into it is cost and scripted writes, since requests did not move.

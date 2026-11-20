@@ -81,3 +81,20 @@ Hypotheses touched (description only):
 - H7 (repeat note): the 3 repeats here are reads of text that had just changed; a repeat note keyed on byte-identical calls would have fired on useful reads.
 
 Limits: one session, one model, one small task.
+
+### 2026-11-20 · H12 canary pair (host files off and on, one task) · n = 2 sessions, 36 requests
+Source: `docs/concepts/profile-h12-blue-2026-11-20.json`, `docs/concepts/profile-h12-green-2026-11-20.json`.
+
+What it looked like, blue then green, both `strat-serial-3.0 | tencent/hy4-flash`, one turn each, stop done, no follow-ups: requests 18 and 18; calls 18 and 19; all results ok in both; repeats 0 and 0; cost $0.00147 and $0.00172; prompt tokens 250.1k and 314.0k; cache 92% and 93%, first hit at request 1 in both (82% and 23%); output 3.0k and 3.4k tokens, reasoning 29% and 53% of it; calls before the first commit 12 and 11; calls before the first write: none seen for blue (its writes are shell command lines), 7 for green.
+
+Pointers drilled: none.
+
+Open questions it raises:
+- Green's reasoning share is 53% against blue's 29% on the same task. Is that the three extra tool definitions, or run-to-run spread? One pair cannot say.
+- A whole-file read is the dearest single call in both arms. Would a brief that points at the function, or a tool answer that offers an outline before the whole file, cut the prompt weight?
+
+Hypotheses touched (description only):
+- H12: requests equal (does not support the claim), scripted writes 4 and 0 (supports that part), cost 1.17 times in green's disfavour.
+- H2 (cache floor): request 1 hit the cache at 3.8k prompt tokens in blue, below 4,096; that does not fit a floor at 4,096 for this route.
+
+Limits: two sessions, one task, one model; blue ran first.
