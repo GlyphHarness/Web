@@ -213,6 +213,13 @@ const mock = {
       yield { choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_' + Date.now(), type: 'function', function: { name: 'pattern_run', arguments: JSON.stringify({ id: /run pattern (pt:\w+)/.exec(last.content)[1], values: { a: 6, b: 7 } }) } }] } }] };
     } else if (/store pattern/.test(last.content || '')) {
       yield { choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_' + Date.now(), type: 'function', function: { name: 'pattern_put', arguments: JSON.stringify({ kind: 'recipe', title: 'multiply two numbers', labels: ['math'], slots: ['a', 'b'], recipe: { tool: 'run_js', args: { code: 'return {{a}} * {{b}}' } }, refs: ['os:doesnotexist'] }) } }] } }] };
+    } else if (/slice (os:\w+) (?:lines (\d+-\d+)|offset (\d+) length (\d+))/.test(last.content || '')) {
+      // "slice os:… lines a-b" / "slice os:… offset n length m": a stored output read by line range or by characters
+      const [, handle, lines, offset, length] = /slice (os:\w+) (?:lines (\d+-\d+)|offset (\d+) length (\d+))/.exec(last.content);
+      yield { choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_' + Date.now(), type: 'function', function: { name: 'output_read', arguments: JSON.stringify(lines ? { handle, lines } : { handle, offset: Number(offset), length: Number(length) }) } }] } }] };
+    } else if (/js reads (os:\w+)/.test(last.content || '')) {
+      // "js reads os:…": code that calls a tool by name as if it were a function there
+      yield { choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_' + Date.now(), type: 'function', function: { name: 'run_js', arguments: JSON.stringify({ code: `return await output_read({ handle: "${/js reads (os:\w+)/.exec(last.content)[1]}" })` }) } }] } }] };
     } else if (/\bpull ([a-z][a-z0-9]{5})\b/.test(last.content || '')) {
       yield { choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_' + Date.now(), type: 'function', function: { name: 'output_read', arguments: JSON.stringify({ handle: /\bpull ([a-z][a-z0-9]{5})\b/.exec(last.content)[1] }) } }] } }] };
     } else if (/read (os:\w+)/.test(last.content || '')) {
