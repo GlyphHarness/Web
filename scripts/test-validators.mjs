@@ -174,6 +174,121 @@ check('records: a .trace export reads as session records whose tool call argumen
   return (recs.length === 1 && recs[0].messages.flatMap(m => m.tool_calls || []).length === 6 && rs.slice(1, 5).every(r => r.outcome === 'fail')) || { sessions: recs.length, outcomes: outcomes(rs) };
 });
 
+// ---- evidence inside a command line: the message arguments of `git commit` in a command line are evidence strings
+// of their own, so a template anchored at the start of an argument (^Spec: ...) can match them. By code only.
+const cm = s => V.commitMessages(s);
+const bt = String.fromCharCode(96);
+const table = [
+  [String.raw`git commit -m 'Spec: a (b)'`, ['Spec: a (b)']],
+  [String.raw`git commit -m "Spec: say \"hi\" and \$HOME (why)"`, ['Spec: say "hi" and $HOME (why)']],
+  [String.raw`git commit -m "keep \n and \\ and \x"`, [String.raw`keep \n and \ and \x`]],
+  [String.raw`git commit -m 'Spec: don'\''t (why)'`, ["Spec: don't (why)"]],
+  [String.raw`git commit -m "it's (x)"`, ["it's (x)"]],
+  [String.raw`git commit -m fix`, ['fix']],
+  [String.raw`git commit -m Spec:\ a\ \(b\)`, ['Spec: a (b)']],
+  [String.raw`git commit --message 'a b'`, ['a b']],
+  [String.raw`git commit --message='a b'`, ['a b']],
+  [String.raw`git commit --message=ab`, ['ab']],
+  [String.raw`git commit -m'a b'`, ['a b']],
+  [String.raw`git commit -mab`, ['ab']],
+  [String.raw`git commit -am 'a b'`, ['a b']],
+  [String.raw`git commit -a -m 'a'`, ['a']],
+  [String.raw`git commit -m 'a' -m 'b'`, ['a', 'b']],
+  [String.raw`git commit -m "a" --message=b`, ['a', 'b']],
+  [String.raw`git add x && git commit -m 'Spec: a (b)' && git log -1`, ['Spec: a (b)']],
+  [String.raw`cd r; git commit -m 'a' || echo no`, ['a']],
+  [String.raw`git status | cat; git commit -m 'a' | tee log`, ['a']],
+  ["git add x\ngit commit -m 'a'\ngit log -1", ['a']],
+  [String.raw`(cd r && git commit -m 'a')`, ['a']],
+  [String.raw`git -C r -c user.name=x commit -m 'a'`, ['a']],
+  [String.raw`FOO=1 git commit -m 'a'`, ['a']],
+  [String.raw`git commit -m 'a && b; c | d || e'`, ['a && b; c | d || e']],
+  [String.raw`git commit -m "$(date) (x)"`, ['$(date) (x)']],
+  ['git commit -m "x ' + bt + 'date' + bt + ' (y)"', ['x ' + bt + 'date' + bt + ' (y)']],
+  [String.raw`git commit -m 'a' && git commit -m 'b`, ['a']],
+  [String.raw`git log --grep 'Spec: a'`, []],
+  [String.raw`echo "git commit -m 'Spec: a (b)'"`, []],
+  [String.raw`git commit`, []],
+  [String.raw`git commit -m`, []],
+  [String.raw`git commit-tree -m 'a'`, []],
+  [String.raw`git commit -m 'Spec: a (b`, []],
+  [String.raw`git commit -m "Spec: a (b`, []],
+];
+check('command line: git commit messages are extracted in every quoting and option form, in any chain', () => {
+  const bad = table.filter(([line, want]) => !same(cm(line), want)).map(([line]) => line);
+  return bad.length === 0 || bad;
+});
+check('command line: not a git commit, or cut off inside its quote, gives no message (nothing is guessed)', () =>
+  same(cm('ls'), []) && same(cm(null), []) && same(cm(42), []) && same(cm(String.raw`git commit -m 'Spec: a`), []));
+const SH = String.raw`git add x && git commit -m 'Spec: validators read command lines (messages are evidence)' && git log -1`;
+const viaShell = {
+  id: 's_cmd', title: 'commit through a shell', system: 'SECRET-SYSTEM', ledger: [{ prompt: 1, completion: 1, cost: 0.01 }],
+  messages: [
+    { role: 'user', content: 'SECRET-USER do the work' },
+    { role: 'assistant', content: 'SECRET-REPLY', tool_calls: [call('e1', 'shell', { cmd: 'node scripts/smoke.mjs' }), call('e2', 'shell', { cmd: SH })] },
+    tool('e1'), tool('e2'),
+  ],
+};
+const shapeV = by(3), fileV = by(1);
+const bare = V.extract('- Start the message with `Spec:`.\n', 'skills/other/SKILL.md')[0];
+check('command line: the anchored Spec: shape passes on the message inside a shell command, at the call', () => {
+  const r = V.resolve(shapeV, viaShell, opts);
+  return (r.outcome === 'pass' && r.at_turn === 0 && r.evidence_handle === 's_cmd#m1.c1') || r;
+});
+check('command line: a pass found inside a command line says so (in_command), and a plain pass does not', () => {
+  const a = V.resolve(shapeV, viaShell, opts), b = V.resolve(shapeV, good, opts);
+  return (a.in_command === true && b.outcome === 'pass' && !('in_command' in b)) || { a: a.in_command, b };
+});
+check('command line: the bare Spec: label passes on a message inside a command line', () => {
+  const r = V.resolve(bare, viaShell, { sources: { 'skills/other/SKILL.md': '- Start the message with `Spec:`.\n' } });
+  return (r.outcome === 'pass' && r.in_command === true) || r;
+});
+check('command line: a message without the parenthesised part still fails the Spec: <behaviour> (<why>) shape', () => {
+  const rec = { ...viaShell, id: 's_cmd2', messages: [viaShell.messages[0], { role: 'assistant', content: '', tool_calls: [call('f1', 'shell', { cmd: String.raw`git commit -m 'Spec: no why given'` })] }] };
+  const a = V.resolve(shapeV, rec, opts), b = V.resolve(bare, rec, { sources: { 'skills/other/SKILL.md': '- Start the message with `Spec:`.\n' } });
+  return (a.outcome === 'fail' && a.reason === 'absent' && b.outcome === 'pass') || { a, b };
+});
+check('command line: a command that only mentions the message (echo, git log --grep) is not evidence', () => {
+  const rec = { ...viaShell, id: 's_cmd3', messages: [viaShell.messages[0], { role: 'assistant', content: '', tool_calls: [
+    call('g1', 'shell', { cmd: String.raw`echo "git commit -m 'Spec: a (b)'"` }), call('g2', 'shell', { cmd: String.raw`git log --grep 'Spec: a (b)'` })] }] };
+  const r = V.resolve(shapeV, rec, opts);
+  return (r.outcome === 'fail' && r.reason === 'absent') || r;
+});
+check('command line: text in a file write that contains a git commit line is not a command line', () => {
+  const rec = { ...viaShell, id: 's_cmd4', messages: [viaShell.messages[0], { role: 'assistant', content: '', tool_calls: [
+    call('h1', 'repo_commit', { message: 'docs', changes: [{ path: 'docs/x.md', content: SH }] })] }] };
+  const r = V.resolve(shapeV, rec, opts);
+  return (r.outcome === 'fail' && r.reason === 'absent') || r;
+});
+check('command line: a template that is not anchored, and a path, resolve exactly as before (no in_command)', () => {
+  const rec = { ...viaShell, id: 's_cmd5', messages: [viaShell.messages[0], { role: 'assistant', content: '', tool_calls: [call('i1', 'shell', { cmd: 'cat docs/seams.md' })] }] };
+  const a = V.resolve(fileV, rec, opts), un = { ...shapeV, shape: { ...shapeV.shape, expected: [{ kind: 'template', text: 'x', pattern: 'Spec: .+? \\(.+?\\)' }] } };
+  const b = V.resolve(un, viaShell, opts);
+  return (a.outcome === 'pass' && !('in_command' in a) && b.outcome === 'pass' && !('in_command' in b)) || { a, b };
+});
+check('command line: the trace reader and the turn profile reader find the message in the same way', () => {
+  const trace = { kind: 'webharness.trace', exchanges: [{ t: 1, request: { messages: viaShell.messages.map(({ ...m }) => m), tools: [{}] } }] };
+  const [fromT] = V.fromTrace(trace, 'x');
+  const a = V.resolve(shapeV, fromT, opts), b = V.resolve(shapeV, profile(viaShell), opts);
+  return (a.outcome === 'pass' && a.in_command === true && b.outcome === 'pass' && b.in_command === true && /#t\d+\.c\d+$/.test(b.evidence_handle)) || { a, b };
+});
+check('command line: a profile keeps one line; a message inside that line counts, one cut off by it does not', () => {
+  const prof = cmd => ({ id: 'p1', perTurn: [{ n: 1, tools: 'shell', args: [{ name: 'shell', args: { cmd, cmd_more: { length: 80, hash: 'abcd1234' } } }] }], cost: { total: 0 } });
+  const whole = V.resolve(shapeV, prof(String.raw`git commit -m 'Spec: a (b)' && git log -1 ` + '\\'), opts);
+  const cut = V.resolve(shapeV, prof(String.raw`git commit -m 'Spec: a (b)`), opts);
+  const doc = V.resolve(shapeV, prof(String.raw`git commit -m "$(cat <<'EOF'`), opts);
+  return (whole.outcome === 'pass' && whole.in_command === true && cut.outcome === 'fail' && doc.outcome === 'fail') || { whole, cut, doc };
+});
+check('command line: an order check whose second step is an anchored template finds it inside a command line', () => {
+  const ord = { ...by(2), shape: { step: 's', expected: [{ kind: 'command', text: 'node scripts/smoke.mjs', pattern: 'node scripts/smoke\\.mjs' }, { kind: 'template', text: 'Spec:', pattern: '^Spec:' }], forbidden: [], result: 'r' } };
+  const r = V.resolve(ord, viaShell, opts);
+  return (r.outcome === 'pass' && r.evidence_handle === 's_cmd#m1.c1' && r.in_command === true) || r;
+});
+check('command line: results hold no message text, and the record is still only read', () => {
+  const before = JSON.stringify(viaShell), r = V.resolve(shapeV, viaShell, opts);
+  return (JSON.stringify(viaShell) === before && !/validators read command lines/.test(JSON.stringify(r))) || r;
+});
+
 // ---- the node entry: records are appended beside the sessions, never rewritten, and a fail is not an error
 check('entry: scripts/validators.mjs appends records as lines, keeps what was there, exits 0 on fails', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wh-validators-'));
