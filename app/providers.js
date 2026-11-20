@@ -194,7 +194,9 @@ const mock = {
       yield { choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_' + Date.now(), type: 'function', function: { name: 'shell', arguments: JSON.stringify({ cmd: last.content.slice(7), timeout: 600 }) } }] } }] };
     } else if (/repo (read|commit|pr)/.test(last.content || '')) {
       const op = /repo (read|commit|pr)/.exec(last.content)[1];
-      const call = op === 'read' ? ['repo_read', { repo: 'o/r', op: 'file', path: 'a.txt' }]
+      // "repo read path <path> [lines a-b]" reads that path (a slice with lines); plain "repo read" reads a.txt whole
+      const rp = /repo read path (\S+)(?: lines (\d+-\d+))?/.exec(last.content);
+      const call = op === 'read' ? ['repo_read', { repo: 'o/r', op: 'file', path: rp ? rp[1] : 'a.txt', ...(rp?.[2] ? { lines: rp[2] } : {}) }]
         : op === 'commit' ? ['repo_commit', { repo: 'o/r', branch: 'feat', message: 'Change greeting\n\nfrom the mock', changes: [{ path: 'a.txt', edits: [{ find: 'hello', replace: 'goodbye' }] }, { path: 'b.txt', content: 'new file' }] }]
         : ['repo_pr', { repo: 'o/r', head: 'feat', title: 'Change greeting' }];
       yield { choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_' + Date.now(), type: 'function', function: { name: call[0], arguments: JSON.stringify(call[1]) } }] } }] };

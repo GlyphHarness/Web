@@ -859,7 +859,141 @@ await say('hello reasoning');
   await paste({ streamIdle: 90 });
 }
 
-check('layout: the page itself does not scroll', await page.evaluate(() => document.documentElement.scrollHeight <= innerHeight && scrollY === 0));
+// ---- inventory: app/*.js inventoried by extraction alone (docs/concepts/INVENTORY.md I1; seam: capture provider) ----
+// The same build runs here in node and in the page. No model takes part: the provider is handed a way to
+// read the files and a place to put its captures, nothing else.
+{
+  const I = await import('../app/inventory.js').catch(() => null);
+  const files = fs.readdirSync(new URL('../app/', import.meta.url)).filter(f => f.endsWith('.js')).sort().map(f => 'app/' + f);
+  const disk = label => fs.readFileSync(new URL('../' + label, import.meta.url), 'utf8');
+  const safely = async f => { try { return await f(); } catch (e) { return { error: String(e?.message || e) }; } };
+  const keys = o => Object.keys(o || {}).sort().join();
+  const HOW = ['ast', 'regex', 'parser', 'metadata', 'iac', 'lsp'];
+
+  // node: build once, counting anything that leaves the process
+  const changed = {}; // label -> text, for the "a change is a new record" check
+  const store = I?.memStore?.() || {};
+  const env = { read: async label => changed[label] ?? disk(label), put: store.put, get: store.get };
+  const inv = I?.create?.() || { entries: [], features: [], checks: [] };
+  const fetch0 = globalThis.fetch;
+  let outside = 0;
+  globalThis.fetch = (...a) => { outside++; return fetch0(...a); };
+  const before = await safely(() => I.view(inv));
+  const t0 = performance.now();
+  const built = await safely(() => I.build(inv, { language: 'js', scope: files }, env));
+  const ms = Math.round(performance.now() - t0);
+  globalThis.fetch = fetch0;
+  const current = label => inv.entries.filter(e => e.label === label).at(-1);
+  const symbolsOf = async label => { try { return JSON.parse(await store.get(current(label).captures[0].payload_handle)); } catch { return []; } };
+  const exportsOf = async label => (await symbolsOf(label)).filter(s => s.kind === 'export').map(s => s.name).sort();
+  const viewNow = async opts => { const v = await safely(() => I.view(inv, opts)); return Array.isArray(v) ? v : []; };
+  const rows = await viewNow();
+  const rowOf = (label, list = rows) => list.find(v => v.entry_id === current(label)?.id);
+  check('inventory: every app/*.js file goes from not inventoried to inventoried by extraction alone (node)',
+    files.length >= 39 && Array.isArray(before) && before.length === 0 && built?.added === files.length && built.failed?.length === 0 && files.every(f => rowOf(f)?.held?.length >= 1) && outside === 0,
+    JSON.stringify({ files: files.length, entries: inv.entries.length, ms, outside, error: built?.error, failed: built?.failed }));
+
+  const nodeExports = {};
+  for (const f of files) nodeExports[f] = (await exportsOf(f)).join();
+  // the engine's own answer, for modules that load here without a page
+  const loaded = [];
+  for (const f of ['app/strategies.js', 'app/handles.js', 'app/store.js', 'app/migrate.js', 'app/outstore.js', 'app/git.js']) loaded.push([f, nodeExports[f], Object.keys(await import('../' + f)).sort().join()]);
+  check('inventory: exported names equal what the modules really export (six modules loaded here)', loaded.every(([, got, real]) => real && got === real), JSON.stringify(loaded.filter(([, got, real]) => got !== real)));
+  check('inventory: known exports are found, a re-export by its exported name, and a file with none is still inventoried',
+    nodeExports['app/strategies.js'] === 'DEFAULT,ID,known,list,register,spec' && nodeExports['app/handoff.js'] === 'KINDS,LINE,csvRows,parse,wants' && nodeExports['app/git.js'] === 'client' && nodeExports['app/main.js'] === 'VERSION,boot' && nodeExports['app/render-defaults.js'] === '' && rowOf('app/render-defaults.js')?.held?.length >= 1,
+    JSON.stringify([nodeExports['app/strategies.js'], nodeExports['app/handoff.js'], nodeExports['app/git.js'], nodeExports['app/main.js']]));
+
+  const sym = async (f, name) => (await symbolsOf(f)).find(s => s.name === name && s.kind === 'function');
+  const g = { client: await sym('app/git.js', 'client'), fileAt: await sym('app/git.js', 'fileAt'), fn: await sym('app/tools.js', 'fn'), execTool: await sym('app/tools.js', 'execTool'), register: await sym('app/strategies.js', 'register') };
+  check('inventory: function names come with signatures, nested ones with their container',
+    /client\s*\(env\)/.test(g.client?.signature || '') && g.client.container === null && g.fileAt?.container === 'client' && /fileAt\s*\(repo, path, ref\)/.test(g.fileAt.signature) && /\(name, description, properties, required, run\)/.test(g.fn?.signature || '') && /execTool\s*\(call, ctx, via\)/.test(g.execTool?.signature || '') && /register\s*\(spec\)/.test(g.register?.signature || ''),
+    JSON.stringify(g));
+  let nsym = 0;
+  const offRange = [];
+  for (const f of files) {
+    const lines = disk(f).split('\n');
+    for (const s of await symbolsOf(f)) {
+      nsym++;
+      const [a, b] = String(s.range).split('-').map(Number);
+      if (!(a >= 1 && b >= a && b <= lines.length && lines.slice(a - 1, b).join('\n').includes(s.name))) offRange.push([f, s.name, s.range]);
+    }
+  }
+  check('inventory: every symbol has a line range, and its name is on those lines', nsym > files.length && offRange.length === 0, JSON.stringify({ symbols: nsym, off: offRange.slice(0, 5) }));
+  const toolNames = (await symbolsOf('app/tools.js')).map(s => s.name);
+  check('inventory: a name that exists only inside string content is not captured', toolNames.includes('runJs') && !toolNames.includes('fmt'), JSON.stringify(toolNames.slice(0, 12)));
+
+  const cap = await safely(() => I.capture({ language: 'js', scope: ['app/strategies.js'], op: 'capture' }, env));
+  check('capture provider seam: {language, scope, op: capture} returns symbol entries, reference edges and annotations',
+    Array.isArray(cap?.symbol_entries) && cap.symbol_entries.length > 0 && Array.isArray(cap.reference_edges) && Array.isArray(cap.annotations) && cap.symbol_entries.every(s => keys(s) === 'container,file,kind,name,range,references_count,signature' && s.file === 'app/strategies.js'),
+    JSON.stringify(cap?.error || cap?.symbol_entries?.[0]));
+  const e0 = current('app/strategies.js'), f0 = inv.features.find(f => f.id === e0?.captures?.[0]?.feature_id);
+  check('inventory: entries, captures and the capture feature carry their record fields',
+    keys(e0) === 'captured_at,captures,domain,id,kind,label,metadata,source' && e0.domain === 'js' && keys(e0.metadata) === 'hash,mtime,path,size' && e0.metadata.path === 'app/strategies.js' && e0.metadata.size === disk('app/strategies.js').length && keys(e0.captures[0]) === 'feature_id,payload_handle' && keys(f0) === 'applies_to,cost,extracts,how,id' && HOW.includes(f0.how) && new Set(inv.entries.map(e => e.id)).size === files.length,
+    JSON.stringify([e0, f0]));
+  check('inventory: captures are made by code, none by a model',
+    inv.entries.length === files.length && inv.entries.every(e => /^provider:/.test(e.source) && e.captures.length >= 1 && e.captures.every(c => HOW.includes(inv.features.find(f => f.id === c.feature_id)?.how) && !('model' in c))) && outside === 0,
+    JSON.stringify([...new Set(inv.entries.map(e => e.source))]));
+
+  // held is not checked (invariant 3)
+  check('inventory: a capture is held, not checked: nothing reads as checked until a check record says so', files.length > 0 && files.every(f => { const v = rowOf(f); return v && keys(v) === 'checked,entry_id,held,stale' && v.held.length >= 1 && v.checked.length === 0 && v.stale === false; }), JSON.stringify(rows[0]));
+  const tools = current('app/tools.js');
+  await safely(() => I.check(inv, { session: 's-spec', entry_id: tools.id, read: 'capture only', range: null, at_turn: 0, source_hash: tools.metadata.hash }));
+  const refused = await safely(() => I.check(inv, { session: 's-spec', entry_id: tools.id, read: 'skimmed', range: null, at_turn: 0, source_hash: tools.metadata.hash }));
+  const afterQuery = rowOf('app/tools.js', await viewNow({ session: 's-spec' }));
+  check('inventory: a capture query is recorded as "capture only", never as a read of the content', afterQuery?.checked?.join() === 'capture only' && afterQuery.stale === false && !!refused?.error && inv.checks.length === 1, JSON.stringify([afterQuery, refused]));
+
+  // a change is a new record (invariant 5)
+  const snap = JSON.stringify(inv.entries);
+  const again = await safely(() => I.build(inv, { language: 'js', scope: files }, env));
+  const sameAfterAgain = JSON.stringify(inv.entries) === snap;
+  const oldHash = e0?.metadata?.hash;
+  await safely(() => I.check(inv, { session: 's-spec', entry_id: e0.id, read: 'whole', range: null, at_turn: 1, source_hash: oldHash }));
+  changed['app/strategies.js'] = disk('app/strategies.js') + '\nexport function addedLater(a, b) { return a + b; }\n';
+  const third = await safely(() => I.build(inv, { language: 'js', scope: files }, env));
+  const versions = inv.entries.filter(e => e.label === 'app/strategies.js');
+  check('inventory: an unchanged source adds no record; a changed one adds a new record and rewrites nothing',
+    again?.added === 0 && again.unchanged === files.length && sameAfterAgain && third?.added === 1 && inv.entries.length === files.length + 1 && JSON.stringify(inv.entries.slice(0, files.length)) === snap && versions.length === 2 && versions[0].id === versions[1].id && versions[0].metadata.hash !== versions[1].metadata.hash && (await exportsOf('app/strategies.js')).includes('addedLater'),
+    JSON.stringify({ again, third, entries: inv.entries.length }));
+  const late = await viewNow({ session: 's-spec' });
+  check('inventory: what was checked at an older hash reads as stale; the rest does not', rowOf('app/strategies.js', late)?.stale === true && rowOf('app/strategies.js', late).checked.join() === 'whole' && rowOf('app/tools.js', late)?.stale === false && late.length === files.length, JSON.stringify(rowOf('app/strategies.js', late)));
+
+  // pluggable: one provider per language
+  const unknown = await safely(() => I.capture({ language: 'cobol', scope: ['x.cbl'], op: 'capture' }, env));
+  const fake = { id: 'spec-fake', language: 'speclang', feature: { id: 'speclang-names', applies_to: 'speclang', extracts: 'the first word', how: 'regex', cost: 'none' },
+    run: async ({ scope }, { read }) => ({ symbol_entries: await Promise.all(scope.map(async file => ({ name: (await read(file)).trim(), kind: 'function', container: null, file, range: '1-1', signature: '', references_count: null }))), reference_edges: [], annotations: [] }) };
+  const plugged = await safely(async () => {
+    I.register(fake);
+    const inv2 = I.create();
+    await I.build(inv2, { language: 'speclang', scope: ['one.spec'] }, { read: async () => 'alpha', put: store.put, get: store.get });
+    return { entry: inv2.entries[0], feature: inv2.features[0], symbols: JSON.parse(await store.get(inv2.entries[0].captures[0].payload_handle)) };
+  });
+  check('capture provider seam: one provider per language, pluggable (an unknown language is refused, a registered provider serves its own)',
+    !!unknown?.error && plugged?.entry?.domain === 'speclang' && plugged.entry.source === 'provider:spec-fake' && plugged.entry.captures[0].feature_id === 'speclang-names' && plugged.feature?.id === 'speclang-names' && plugged.symbols[0]?.name === 'alpha',
+    JSON.stringify([unknown, plugged?.error || plugged?.entry]));
+
+  // the page: same module, same files, read over the static server
+  const pg = await page.evaluate(async files => {
+    try {
+      const I = await import('./app/inventory.js'), O = await import('./app/outstore.js');
+      const sessions = () => Object.keys(localStorage).filter(k => k.startsWith('wh:s:')).sort().map(k => localStorage[k]).join('\n');
+      const s0 = sessions(), requests0 = document.querySelector('#tracen').getAttribute('data-v');
+      const inv = I.create(), t0 = performance.now();
+      const r = await I.build(inv, { language: 'js', scope: files }, { read: async label => (await fetch('./' + label)).text(), put: O.put, get: O.get });
+      const ms = Math.round(performance.now() - t0), exportsBy = {};
+      for (const e of inv.entries) exportsBy[e.label] = JSON.parse(await O.get(e.captures[0].payload_handle)).filter(s => s.kind === 'export').map(s => s.name).sort().join();
+      const everything = Object.keys(localStorage).map(k => localStorage[k]).join('\n');
+      return { ok: true, added: r.added, failed: r.failed, entries: inv.entries.length, inventoried: I.view(inv).filter(v => v.held.length >= 1 && v.checked.length === 0).length, exportsBy, ms,
+        sameSessions: sessions() === s0, sameRequests: document.querySelector('#tracen').getAttribute('data-v') === requests0, written: inv.entries.some(e => everything.includes(e.id) || everything.includes(e.captures[0].payload_handle)) };
+    } catch (e) { return { ok: false, error: String(e) }; }
+  }, files);
+  check('inventory: the same build runs in the page: every file inventoried, no request made',
+    pg.ok && pg.added === files.length && pg.entries === files.length && pg.failed.length === 0 && pg.inventoried === files.length && pg.sameRequests,
+    JSON.stringify({ error: pg.error, entries: pg.entries, ms: pg.ms, failed: pg.failed }));
+  check('inventory: node and the page find the same exports for every file', pg.ok && files.every(f => pg.exportsBy[f] === nodeExports[f]), JSON.stringify(files.filter(f => pg.exportsBy?.[f] !== nodeExports[f])));
+  check('inventory: building it writes no label or record id into any session', pg.ok && pg.sameSessions && pg.written === false, JSON.stringify({ sameSessions: pg.sameSessions, written: pg.written }));
+}
+
+check('layout: the page itself does not scroll',await page.evaluate(() => document.documentElement.scrollHeight <= innerHeight && scrollY === 0));
 if (shot) await page.screenshot({ path: shot });
 check('no page errors', errors.filter(e => !/schema 99|ERR_TUNNEL|Failed to load resource/.test(e)).length === 0, errors.join(' | '));
 check('tests: no OpenRouter model request was made (mock only)', !orCalls.some(u => /chat\/completions|completions|responses/.test(u)), orCalls.join(' '));

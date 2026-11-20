@@ -183,6 +183,43 @@ await page.check('#repotools');
 await say('hello'); await idle();
 check('repository tools switch: on adds them back, with the access line once in the log', (await toolNames()).includes('repo_commit') && /^github access: /m.test(await thread().locator('.msg[data-role=user] .txt').nth(-2).textContent()));
 
+// ---- inventory: check records at repo_read and the has/has-not view (docs/concepts/INVENTORY.md I3; seam: tools, repo_read) ----
+// Everything here is answered from the session's stored records (localStorage), and the view is computed
+// in node from those records alone: no turn text is read to say what was checked.
+{
+  const I = await import('../app/inventory.js').catch(() => null);
+  const stored = () => page.evaluate(() => JSON.parse(localStorage['wh:s:' + JSON.parse(localStorage['wh:meta']).active]));
+  const recordsOf = s => ({ entries: s.inventory?.entries || [], checks: s.inventory?.checks || [] });
+  const entryOf = (s, path) => recordsOf(s).entries.filter(e => e.metadata?.path === path).at(-1);
+  const checksOf = (s, path) => recordsOf(s).checks.filter(c => c.entry_id === entryOf(s, path)?.id);
+  const row = (s, path, session = s.id) => { try { return I.view(recordsOf(s), { session }).find(v => v.entry_id === entryOf(s, path).id) || null; } catch { return null; } };
+  const keys = o => Object.keys(o || {}).sort().join();
+
+  const s0 = await stored(), a0 = row(s0, 'a.txt');
+  check('check records: a whole-file repo_read is answerable from the session records alone', a0?.checked?.join() === 'whole' && a0.stale === false, JSON.stringify(a0));
+  check('check records: a read is not a capture (checked, nothing held)', Array.isArray(a0?.held) && a0.held.length === 0 && keys(a0) === 'checked,entry_id,held,stale', JSON.stringify(a0));
+
+  await say('repo read path a.txt lines 1-1'); await idle();
+  await say('repo read path src/x.js'); await idle();
+  await say('repo read path src'); await idle(); // a directory listing: not a read of a file
+  const s1 = await stored(), a1 = row(s1, 'a.txt'), x1 = row(s1, 'src/x.js'), c1 = recordsOf(s1).checks;
+  check('check records: a slice is told apart from a whole read, and keeps its range', a1?.checked?.join() === 'whole,slice' && checksOf(s1, 'a.txt').at(-1)?.range === '1-1' && checksOf(s1, 'a.txt')[0]?.range === null && x1?.checked?.join() === 'whole' && x1.stale === false, JSON.stringify([a1, x1]));
+  check('check records: one record per file read, none for a directory listing', c1.length === 3 && recordsOf(s1).entries.length === 2 && !entryOf(s1, 'src'), JSON.stringify(c1.map(c => [c.read, c.range])));
+  check('check records: each has id, session, entry_id, read, range, at_turn, t, source_hash, and at_turn is the turn of the read', c1.length === 3 && c1.every(c => keys(c) === 'at_turn,entry_id,id,range,read,session,source_hash,t' && c.session === s1.id && typeof c.source_hash === 'string' && c.source_hash && s1.messages[c.at_turn]?.x?.tool === 'repo_read') && new Set(c1.map(c => c.id)).size === 3, JSON.stringify(c1[0]));
+  check('check records: the view is per session', row(s1, 'a.txt', 'some-other-session')?.checked?.length === 0, JSON.stringify(row(s1, 'a.txt', 'some-other-session')));
+
+  // the source changes after it was first seen, and no longer fits a turn whole
+  branches.main.files['src/x.js'] = Array.from({ length: 200 }, (_, i) => `export const x${i} = ${i};`).join('\n');
+  await say('repo read path src/x.js'); await idle();
+  branches.main.files['src/x.js'] = 'x';
+  const s2 = await stored(), x2 = row(s2, 'src/x.js'), a2 = row(s2, 'a.txt');
+  check('check records: a source whose hash differs from the entry reads as stale; an unchanged one does not', x2?.stale === true && a2?.stale === false, JSON.stringify([x2, a2]));
+  check('check records: a read too long to sit whole in the turn is not recorded as whole', checksOf(s2, 'src/x.js').at(-1)?.read === 'slice' && x2?.checked?.join() === 'whole,slice', JSON.stringify(checksOf(s2, 'src/x.js').at(-1)));
+  check('check records: a later read is a new record; earlier records are not rewritten', recordsOf(s2).checks.length === 4 && JSON.stringify(recordsOf(s2).checks.slice(0, 3)) === JSON.stringify(c1) && JSON.stringify(recordsOf(s2).entries.slice(0, 2)) === JSON.stringify(recordsOf(s1).entries), String(recordsOf(s2).checks.length));
+  const turnsText = JSON.stringify(s2.messages) + '\n' + (s2.system || ''), r2 = recordsOf(s2);
+  check('check records: no record id or entry label is written into turn content', r2.checks.length === 4 && ![...r2.checks.map(c => c.id), ...r2.entries.map(e => e.id), ...r2.entries.map(e => e.label)].some(x => !x || turnsText.includes(x)));
+}
+
 // ---- sandbox ----
 const run = code => page.evaluate(async c => (await import('./app/tools.js')).runJs({ code: c }), code);
 check('sandbox: code runs', await run('return 6*7') === '42');
