@@ -28,6 +28,11 @@ Three append-only catalogs, one JSON object per line. Ids: 6 lowercase letters, 
 - Only the steward appends inbox lines (without `to`) to the catalog files and deletes the inbox file in the same commit.
 - `catalog/inbox/.gitkeep` keeps the folder.
 
+## With docs/concepts/
+`catalog/*.jsonl` is the index of record (one line per term, concept, fault; status; per-model results). `docs/concepts/*.md` is the prose it points to: the why, hypotheses H1.. in full, the programme.
+Concepts C1..C17 of `docs/concepts/CATALOG.md` are records by name; hypothesis ids sit in `claim` or `evidence`. Status map: idea=hypothesis, spec=specified, built=implemented, tested=measured, dropped=not-supported.
+Names follow docs/concepts; the other name stays in `aka`. Prose is never rewritten from here.
+
 ## Order of work
 name it -> concept (hypothesis) -> spec -> implement -> measure -> record result and faults -> judge -> release.
 

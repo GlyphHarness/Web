@@ -9,8 +9,8 @@ Purpose: see how strategies and models actually operate across all sessions, at 
 
 ## 1. Collect (metadata only)
 
-```powershell
-C:\wh\wh.ps1 profile -o C:\wh\profile-<date>.json
+```bash
+node scripts/wh.mjs profile -o docs/concepts/profile-<date>.json
 ```
 
 `wh profile` prints, per session: models and strategies, requests (main and helper by kind), cost with helper share, tokens, cache % per request and where the first hit came, prompt and output curves, tool calls by tool and by result class, repeated identical calls, calls before the first write, one line per turn (user size, assistant messages, tool sequence). Then spread by `strategy | model` (helper requests as `helper:<kind> | model`: median, p95 and max cost per request, cache, output per request, reasoning share), then per-session behaviour. The JSON holds no message content, so it is safe to keep and to commit.
@@ -33,9 +33,9 @@ Do not write "better", "worse", "works" or "fails" about a strategy here. Write 
 
 A number is a pointer. Examples: a run of repeats; a turn with a very large output; a request with 0 cache after hits; a `find-absent`; a cost spike. Then:
 
-```powershell
-C:\wh\wh.ps1 profile -i <session> -m <message index>   # one message: role, tool calls with args, content (truncated)
-C:\wh\wh.ps1 profile -i <session> -r <ledger row>      # one request's ledger row
+```bash
+node scripts/wh.mjs profile -i <session> -m <message index>   # one message: role, tool calls with args, content (truncated)
+node scripts/wh.mjs profile -i <session> -r <ledger row>      # one request's ledger row
 ```
 
 Drill is the only place content appears. Rules:

@@ -37,7 +37,7 @@ Work on `dev`; every piece of work follows the rigid order below.
 - CI: `node scripts/ci.mjs` (runs in `.github/workflows/test.yml`; a failing suite opens one ci-failure concern, a pass closes it).
 - Operator: `node scripts/wh.mjs <cmd>` (init, new, say, step, stem, fold, ls, show, assess, flags, review, watch, cost, raw).
 - Case study: `node scripts/casestudy.mjs --live --repeat N`.
-- Docs: `docs/STEMS.md`, `docs/TABS.md`, `docs/PROTOCOL.md`, `docs/TESTING.md`.
+- Docs: `docs/STEMS.md`, `docs/TABS.md`, `docs/PROTOCOL.md`, `docs/TESTING.md`, `docs/concepts/`.
 
 ## Non-negotiables
 - Tests use the mock provider only; OpenRouter is blocked in tests.
