@@ -88,4 +88,37 @@ check('validators: a path no call touched does not pass', res[2]?.outcome !== 'p
 const bare = { ...prof, perTurn: prof.perTurn.map(({ args, ...t }) => t) };
 check('validators: a profile without summaries stays unresolved, as before', V.resolve(vs[0], bare, { sources: { '.claude/skills/x/SKILL.md': md } }).reason === 'no-arguments');
 
+// ---- a short follow-up that continues a failed stop is not steering (live stepped session 1: steering read 3, the real count was 1) ----
+const sh = (id, cmd) => tc(id, 'shell', { cmd });
+const S2 = { id: 's2', title: 'stepped', ledger: [], messages: [
+  { role: 'user', content: 'x'.repeat(600) },                                                                                             // 0 turn 0: the brief
+  { role: 'assistant', content: null, tool_calls: [sh('d1', 'ls -la'), sh('d2', 'git log --oneline --grep commit')] },                       // 1
+  { role: 'tool', tool_call_id: 'd1', content: 'ok' }, { role: 'tool', tool_call_id: 'd2', content: 'ok' },                                 // 2 3
+  { role: 'user', content: 'continue' },                                                                                                    // 4 turn 1: after the round limit
+  { role: 'assistant', content: null, tool_calls: [tc('d3', 'run_js', { code: 'return 1' }), sh('d4', "git -C /work/Web commit -m 'Spec: x'")] }, // 5
+  { role: 'tool', tool_call_id: 'd3', content: '1' }, { role: 'tool', tool_call_id: 'd4', content: 'ok' },                                  // 6 7
+  { role: 'user', content: 'continue' },                                                                                                    // 8 turn 2: short, after a failed turn
+  { role: 'assistant', content: 'done for now' },                                                                                           // 9
+  { role: 'user', content: 'now fix the second check' },                                                                                    // 10 turn 3: steering, after a done turn
+  { role: 'assistant', content: 'trying' },                                                                                                 // 11
+  { role: 'user', content: 'Start over from the failing check and explain each step. '.repeat(8) },                                         // 12 turn 4: long, after a failed turn
+  { role: 'assistant', content: 'done' },                                                                                                   // 13
+], stops: [{ at: 4, why: 'limit' }, { at: 8, why: 'failed' }, { at: 10, why: 'done' }, { at: 12, why: 'failed' }, { at: 14, why: 'done' }] };
+const p2 = P.profile(S2), f2 = p2.followUps;
+check('follow-ups: a short message after a failed stop is a failed continuation, not steering', f2?.failedContinuations === 1 && f2.limitContinuations === 1 && f2.steering === 2 && f2.unrecorded === 0, J(f2));
+check('follow-ups: a long message after a failed stop is still steering', p2.perTurn?.[4]?.after === 'failed' && p2.perTurn[4].shortFollowUp === false && f2?.steering === 2, J(p2.perTurn?.map(t => [t.after, t.shortFollowUp])));
+check('follow-ups: a profile with no failed stop counts none', P.profile({ ...S2, stops: S2.stops.map(x => x.why === 'failed' ? { ...x, why: 'done' } : x) }).followUps?.failedContinuations === 0);
+check('follow-ups: a session without stop reasons has none either', P.profile({ id: 'x', title: 'x', ledger: [], messages: [{ role: 'user', content: 'a' }, { role: 'assistant', content: 'b' }, { role: 'user', content: 'continue' }] }).followUps?.failedContinuations === 0);
+const behave = P.behaviour([p2])[0], shown = P.renderBehaviour([behave]);
+check('follow-ups: the behaviour row and its text carry the count beside the round-limit count', behave.failedContinuations === 1 && /after a round-limit stop 1 · after a failed turn 1 · steering 2/.test(shown), shown);
+check('follow-ups: the per-turn text says which turn continues a failed stop', /turn 2:.*continues a failed stop/.test(P.render(p2)) && !/turn 4:.*continues a failed stop/.test(P.render(p2)), P.render(p2));
+
+// ---- a commit made through the shell is a commit: calls before the first one ----
+check('commit: calls before the first shell call that runs git commit', p2.calls?.callsBeforeFirstCommit === 3, J(p2.calls));
+check('commit: the call count before the first write is unchanged (a write made through the shell is not seen there)', p2.calls?.callsBeforeFirstWrite === null && prof.calls.callsBeforeFirstWrite === 2 && prof.calls.firstWriteTool === 'repo_commit', J([p2.calls, prof.calls]));
+check('commit: null when no shell call commits (git log --grep commit does not)', prof.calls?.callsBeforeFirstCommit === null && P.profile({ ...S2, messages: S2.messages.slice(0, 4) }).calls?.callsBeforeFirstCommit === null, J(prof.calls));
+const flagged = P.profile({ id: 's3', title: 't', ledger: [], messages: [{ role: 'user', content: 'go' }, { role: 'assistant', content: null, tool_calls: [sh('e1', 'git commit -am wip'), sh('e2', 'git commit -m again')] }, { role: 'tool', tool_call_id: 'e1', content: 'ok' }, { role: 'tool', tool_call_id: 'e2', content: 'ok' }] });
+check('commit: the first of several commits counts, and the command may be the first call', flagged.calls?.callsBeforeFirstCommit === 0, J(flagged.calls));
+check('commit: the text report and the behaviour row say it', /calls before first commit 3/.test(P.render(p2)) && behave.callsBeforeFirstCommit === 3 && /calls before first commit 3/.test(shown), P.render(p2).split('\n').filter(l => /commit|write/.test(l)).join(' | ') + ' || ' + shown);
+
 process.exitCode = fails ? 1 : 0;

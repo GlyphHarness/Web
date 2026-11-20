@@ -93,6 +93,37 @@ try {
   const counts = json('log', '-i', id2 || 'none').data?.counts;
   check('log: wh log counts limit continuations and steering messages separately', counts?.first === 1 && counts?.limitContinuations === 1 && counts?.steering === 1, JSON.stringify(counts));
 
+  // ---- stop line: when say, sayfile or step returns because the run ended other than done, it says how ----
+  // The mock fails 3 times with a 502 (the provider seam asks again twice, then the turn fails); the answer must name it.
+  json('new', 'stops', 'one');
+  const doneTurn = wh('say', 'hello there');
+  check('stop: a turn that ends done prints no STOP line', doneTurn.code === 0 && !/STOP/.test(doneTurn.out) && !/ stop /.test(doneTurn.out), doneTurn.out.slice(0, 300));
+  const failedTurn = wh('say', 'fail 502 x3 stopline');
+  check('stop: a turn that ends failed prints a STOP line with the provider error', /^STOP failed: HTTP 502: Provider returned error$/m.test(failedTurn.out), failedTurn.out.slice(0, 400));
+  const failedJson = json('say', 'fail 502 x3 stopline json');
+  check('stop: in --json the stop reason and what the page said are fields', failedJson.data?.stop === 'failed' && failedJson.data?.stopDetail === 'HTTP 502: Provider returned error', failedJson.out.slice(0, 400));
+  const healed = wh('say', 'fail 502 x2 stopline ok');
+  check('stop: a request that succeeded on a retry is a turn that ended done, with no STOP line', healed.code === 0 && !/STOP/.test(healed.out) && /Mock reply/.test(healed.out), healed.out.slice(0, 300));
+  const limitTurn = wh('say', 'round after round');
+  check('stop: a turn that ends at the round limit prints a STOP line, and still says stop limit', /^STOP limit: .*tool rounds/m.test(limitTurn.out) && /stop limit/.test(limitTurn.out), limitTurn.out.slice(0, 400));
+  const limitJson = json('say', 'round after round json');
+  check('stop: the round limit is a field in --json too', limitJson.data?.stop === 'limit' && /tool rounds/.test(limitJson.data?.stopDetail || ''), limitJson.out.slice(0, 300));
+  const fileTurn = wh('sayfile', file('fail.txt', 'fail 502 x3 stopline file'));
+  check('stop: sayfile prints it as say does', /^STOP failed: HTTP 502: Provider returned error$/m.test(fileTurn.out), fileTurn.out.slice(0, 300));
+  wh('pace', 'requests');
+  const heldReq = wh('say', 'fail 502 x3 stopline step');
+  const stepped = wh('step');
+  check('stop: step prints it when the released request ends the turn failed', /HELD/.test(heldReq.out) && /^STOP failed: HTTP 502: Provider returned error$/m.test(stepped.out), stepped.out.slice(0, 400));
+  wh('say', 'fail 502 x3 stopline step json');
+  const steppedJson = json('step');
+  check('stop: step has the stop reason and what the page said in --json', steppedJson.data?.stop === 'failed' && steppedJson.data?.stopDetail === 'HTTP 502: Provider returned error', steppedJson.out.slice(0, 300));
+  wh('pace', 'run');
+  wh('pace', 'tools');
+  wh('say', 'round after round step');
+  const steppedLimit = wh('step', '--all');
+  check('stop: step --all ends at the round limit with the STOP line and stop limit', /^STOP limit: .*tool rounds/m.test(steppedLimit.out) && /stop limit/.test(steppedLimit.out), steppedLimit.out.slice(0, 400));
+  wh('pace', 'run');
+
   // ---- the command log ----
   const L = log(), cmds = L.map(e => e.cmd);
   check('log: one JSON line per command, in order, with time, command and outcome', ['paste', 'new', 'system', 'dump', 'sayfile', 'pace', 'say', 'held', 'step', 'forget'].every(c => cmds.includes(c)) && cmds.indexOf('paste') < cmds.indexOf('system') && cmds.indexOf('system') < cmds.indexOf('sayfile') && L.every(e => e.t && e.cmd && typeof e.ok === 'boolean'), cmds.join(','));

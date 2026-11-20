@@ -859,6 +859,27 @@ await say('hello reasoning');
   await paste({ streamIdle: 90 });
 }
 
+// ---- a transient provider error is asked again at the provider seam; the ledger row says how often, the model is never told ----
+{
+  await page.evaluate(async () => { const R = await import('./app/providers.js'); if (R.retry) R.retry.delays = [0, 0]; });
+  const state = () => page.evaluate(async () => {
+    const id = sessionStorage.getItem('wh:tab-active'), s = JSON.parse(localStorage['wh:s:' + id]), m = (await import('./app/providers.js')).providers.mock;
+    return { retries: s.ledger.map(e => e.retries ?? null), rows: s.ledger.length, last: s.messages.at(-1)?.role, stops: (s.stops || []).map(x => x.why), sentWord: m.requests.some(b => /retr/i.test(JSON.stringify(b))) };
+  });
+  await page.click('[data-act=new]');
+  await say('fail 502 x2 smoke');
+  const healed = await state();
+  check('retry: a request that failed with a 502 twice succeeds, one ledger row says 2 retries, the turn ended done', healed.rows === 1 && healed.retries[0] === 2 && healed.last === 'assistant' && healed.stops.join() === 'done', JSON.stringify(healed));
+  check('retry: the retry count is not in any request the model was sent', healed.sentWord === false, JSON.stringify(healed));
+  await say('hello again');
+  const plain = await state();
+  check('retry: a request that needed none has no retries field', plain.rows === 2 && plain.retries[1] === null, JSON.stringify(plain));
+  await say('fail 502 x3 smoke');
+  const failed = await state();
+  check('retry: after two more attempts the turn fails as before, and its ledger row still counts them', failed.stops.at(-1) === 'failed' && failed.retries.at(-1) === 2 && /HTTP 502: Provider returned error/.test(await visible().locator('.msg[data-role=error]').last().textContent()), JSON.stringify(failed));
+  await page.evaluate(async () => { const R = await import('./app/providers.js'); if (R.retry) R.retry.delays = [1000, 3000]; });
+}
+
 // ---- inventory: app/*.js inventoried by extraction alone (docs/concepts/INVENTORY.md I1; seam: capture provider) ----
 // The same build runs here in node and in the page. No model takes part: the provider is handed a way to
 // read the files and a place to put its captures, nothing else.
