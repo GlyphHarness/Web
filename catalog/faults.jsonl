@@ -1,0 +1,7 @@
+{"id": "tuwpcr", "model": "qwen/qwen3.7-flash", "fault": "sent a whole anonymous function to run_js instead of a body", "class": "common", "seen": "2026-11-19", "handled": "harness now calls the function", "evidence": "docs/STEMS.md"}
+{"id": "hgokxu", "model": "qwen/qwen3.7-flash", "fault": "passed an output handle as ref", "class": "uncommon", "seen": "2026-11-19", "handled": "refused with guidance", "evidence": "docs/STEMS.md"}
+{"id": "fhjphb", "model": "qwen/qwen3.7-flash", "fault": "redundant output_read after the answer was in hand", "class": "common", "seen": "2026-11-19", "handled": "watcher flags repeats", "evidence": "docs/STEMS.md"}
+{"id": "xzloty", "model": "qwen/qwen3.7-flash", "fault": "reasoning output varies 168..4755 tokens on similar turns", "class": "common", "seen": "2026-11-19", "handled": "repeat runs; report median and range", "evidence": "docs/STEMS.md"}
+{"id": "elkeep", "model": "openrouter upstream", "fault": "streamed a tool call with no name", "class": "provider", "seen": "2026-11-19", "handled": "not run; model told to call again", "evidence": "docs/PROTOCOL.md"}
+{"id": "jxecxt", "model": "openrouter upstream", "fault": "stopped mid-stream", "class": "provider", "seen": "2026-11-19", "handled": "idle watchdog re-asks once", "evidence": "docs/PROTOCOL.md"}
+{"id": "iuzmlv", "model": "liquid/lfm-3-1.7b:free", "fault": "as watcher passed a failed call as ok (too small for the role)", "class": "uncommon", "seen": "2026-11-19", "handled": "not used as watcher", "evidence": "catalog/concepts.jsonl"}

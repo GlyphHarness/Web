@@ -1,0 +1,39 @@
+{"id": "xcmaii", "term": "core line", "means": "The main context line of a session; during a stem it holds only the stem's handle and step lines.", "see": "docs/STEMS.md", "aka": ["core"], "since": "2026-11-19"}
+{"id": "eghark", "term": "stem", "means": "A branch (git plus context) taken at the goal's turn; work runs there and folds back to the core line.", "see": "docs/STEMS.md", "aka": [], "since": "2026-11-19"}
+{"id": "mbfiyr", "term": "anchor", "means": "The turn where a stem branches; a cache checkpoint can sit there (stem anchor).", "see": "docs/STEMS.md", "aka": ["stem anchor"], "since": "2026-11-19"}
+{"id": "spawzt", "term": "fold", "means": "The stem's result re-pointed into the core line's handle once the stem finishes.", "see": "docs/STEMS.md", "aka": [], "since": "2026-11-19"}
+{"id": "swhuvh", "term": "handle", "means": "An opaque id whose bytes stay fixed in the cached prefix while what it resolves to changes.", "see": "docs/STEMS.md", "aka": ["id"], "since": "2026-11-19"}
+{"id": "wjgitg", "term": "re-point", "means": "Change what a handle resolves to in the store without editing the context bytes.", "see": "docs/STEMS.md", "aka": [], "since": "2026-11-19"}
+{"id": "qdfcuf", "term": "resolve", "means": "Read what a handle currently holds, with the read tool the model already uses.", "see": "docs/STEMS.md", "aka": [], "since": "2026-11-19"}
+{"id": "uankbl", "term": "pull", "means": "Model asks for what it needs by handle, instead of the harness pushing a narrative.", "see": "docs/STEMS.md", "aka": ["pulled"], "since": "2026-11-19"}
+{"id": "zmpetd", "term": "checkpoint", "means": "A cache breakpoint chosen where it pays: system, tail or stem anchor kind.", "see": "docs/STEMS.md", "aka": ["cache checkpoint", "selective checkpoint"], "since": "2026-11-19"}
+{"id": "egygwq", "term": "strategy", "means": "A named versioned spec the turn loop reads at fixed seams, id strat-<name>-<major>.<minor>.", "see": "docs/STEMS.md", "aka": ["strat"], "since": "2026-11-19"}
+{"id": "qrceaj", "term": "seam", "means": "A module boundary where behavior plugs in: tools, providers, strategies, hooks, policies, handles, checkpoints, machine, coord.", "see": "docs/PROTOCOL.md", "aka": [], "since": "2026-11-19"}
+{"id": "xnfprf", "term": "watcher", "means": "A small model that checks each completed tool call and answers ok or FLAG with a reason.", "see": "docs/STEMS.md", "aka": ["watch model"], "since": "2026-11-19"}
+{"id": "doqhhn", "term": "flag", "means": "A watcher note on a tool call, stored on the session (s.flags) and counted as a smell.", "see": "docs/STEMS.md", "aka": [], "since": "2026-11-19"}
+{"id": "duzhpf", "term": "check-off", "means": "An operator's assessment of a session against its goal, stored as s.watched.", "see": "docs/STEMS.md", "aka": ["assess"], "since": "2026-11-19"}
+{"id": "rlvjae", "term": "operator", "means": "A Claude Code session that drives harness sessions through scripts/wh.mjs and reports what it cannot resolve.", "see": "docs/STEMS.md", "aka": [], "since": "2026-11-19"}
+{"id": "ydbdbn", "term": "gate", "means": "A point before each model request or tool call where a session can be held.", "see": "docs/TABS.md", "aka": [], "since": "2026-11-19"}
+{"id": "emujeo", "term": "hold", "means": "State of a session waiting at a gate until step or resume.", "see": "docs/TABS.md", "aka": ["halt state"], "since": "2026-11-19"}
+{"id": "clrgps", "term": "step", "means": "One lockstep advance: every waiting session takes one step and holds again.", "see": "docs/TABS.md", "aka": [], "since": "2026-11-19"}
+{"id": "qofxtx", "term": "halt", "means": "Stop every tab at its next gate; used for lockstep and for updates.", "see": "docs/TABS.md", "aka": ["halt all"], "since": "2026-11-19"}
+{"id": "lvrahz", "term": "wake", "means": "A turn spent to inspect a wait point; a passing check needs no wake.", "see": "docs/STEMS.md", "aka": ["wake point"], "since": "2026-11-19"}
+{"id": "kwxvzl", "term": "warp", "means": "Re-pointing what handles resolve to so a stem's downstream turns see altered or materialized context.", "see": "docs/STEMS.md", "aka": [], "since": "2026-11-19"}
+{"id": "jopelr", "term": "materialize", "means": "Write real turn content into the context where a handle stood.", "see": "docs/STEMS.md", "aka": ["materialization"], "since": "2026-11-19"}
+{"id": "alenfn", "term": "resolver", "means": "The component that decides what a handle resolves to; the micro resolver is a small model doing so at the leading edge.", "see": "docs/STEMS.md", "aka": ["micro resolver"], "since": "2026-11-19"}
+{"id": "rmlvqw", "term": "confer", "means": "Models consult at checkpoints: A ahead, B look-back, plus a consult; arranged as a graph.", "see": "docs/STEMS.md", "aka": ["confer at checkpoints"], "since": "2026-11-19"}
+{"id": "uhxbac", "term": "priming turn", "means": "A generic prompt turn with a throwaway reply that registers the cache for a byte-stable payload.", "see": "docs/STEMS.md", "aka": ["cache-priming turn"], "since": "2026-11-19"}
+{"id": "oxuugk", "term": "concern", "means": "A tracked issue (labels concern, kind:*, ci-failure, triaged, needs-*) worked in the background loop.", "see": "docs/PROTOCOL.md", "aka": [], "since": "2026-11-19"}
+{"id": "rxdapd", "term": "smell", "means": "A recorded oddity (wh:smells: kind, tool, detail, steer fingerprint) tracked over time.", "see": "docs/STEMS.md", "aka": [], "since": "2026-11-19"}
+{"id": "bnqyrm", "term": "steering", "means": "The generic points and directions given to a session; logged in the log repo.", "see": "docs/STEMS.md", "aka": ["steer"], "since": "2026-11-19"}
+{"id": "dlhenl", "term": "ledger", "means": "Per-turn session rows: prompt, cached, cacheWrite, completion, reasoning, cost, bp kinds, strat id, upstream.", "see": "docs/STEMS.md", "aka": ["session ledger"], "since": "2026-11-19"}
+{"id": "lbhvob", "term": "slot", "means": "A live value drawn by CSS from data-v via slot(el, value); changes without re-rendering.", "see": "app/styles.js", "aka": [], "since": "2026-11-19"}
+{"id": "owdark", "term": "rule", "means": "A named CSS rule via rule(name, css); UI state is a rule, not a node edit.", "see": "app/styles.js", "aka": [], "since": "2026-11-19"}
+{"id": "pfhucl", "term": "spec", "means": "Checks written from the goal and committed red before the implementation.", "see": "docs/STEMS.md", "aka": ["spec-first"], "since": "2026-11-19"}
+{"id": "cexwff", "term": "red/green", "means": "A check fails (red) before implementation and passes (green) after.", "see": "docs/STEMS.md", "aka": [], "since": "2026-11-19"}
+{"id": "dvmnmd", "term": "case study", "means": "A measured comparison against plain serial turns, run with scripts/casestudy.mjs.", "see": "docs/case-studies", "aka": [], "since": "2026-11-19"}
+{"id": "gnwdjg", "term": "serial", "means": "The baseline: plain serial turns without stems; results are reported relative to it.", "see": "docs/STEMS.md", "aka": ["baseline"], "since": "2026-11-19"}
+{"id": "ssuekf", "term": "upstream", "means": "The provider route behind a model on OpenRouter; stems inherit the core's upstream so the cache holds.", "see": "docs/STEMS.md", "aka": [], "since": "2026-11-19"}
+{"id": "zdlrsp", "term": "machine", "means": "The shared in-browser VM and its host, with per-session unix users.", "see": "docs/TABS.md", "aka": [], "since": "2026-11-19"}
+{"id": "kknhup", "term": "session group", "means": "A set of sessions sharing a profile (settings such as strategy and watchModel).", "see": "docs/STEMS.md", "aka": ["profile"], "since": "2026-11-19"}
+{"id": "dqvtix", "term": "sealed", "means": "A redaction handle form: what it resolves to is hidden from the model.", "see": "docs/STEMS.md", "aka": [], "since": "2026-11-19"}
