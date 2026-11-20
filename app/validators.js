@@ -91,15 +91,81 @@ export function extract(text, source_path, { purpose = 'passive structure' } = {
   });
 }
 
-// ---- evidence readers: a record -> {session, kind, calls: [{turn, msg, call, name, args: [strings] | null}], cost: number | null}
-const leaves = v => typeof v === 'string' ? [v] : v && typeof v === 'object' ? Object.values(v).flatMap(leaves) : v == null ? [] : [String(v)];
-const args = a => { try { return leaves(JSON.parse(a)); } catch { return [String(a ?? '')]; } };
+// ---- command lines: a `git commit` message inside a command line is evidence of its own
+// A shell tool call holds a whole line (`git add x && git commit -m 'Spec: ...' && git log -1`), so a template
+// anchored at the start of an argument never sees the message. commitMessages reads the line the way a shell
+// splits it (quotes, backslashes, `&&` `||` `;` `|` `&` newline and parentheses between commands) and returns the
+// message arguments of each `git commit`. By code only: nothing is evaluated ($( and backticks stay as written),
+// and a word cut off inside its quote (a profile keeps the first line of a command) is no message.
+const GIT = /(^|[\\/])git(\.exe)?$/, WRAP = /^([A-Za-z_]\w*=.*|sudo|command|env|time|exec|nohup|nice|builtin)$/;
+const GIT_VAL = new Set(['-C', '-c', '--git-dir', '--work-tree', '--namespace', '--exec-path', '--super-prefix', '--config-env']);
+const COMMIT_VAL = new Set(['-F', '-C', '-c', '-t', '--file', '--author', '--date', '--template', '--reuse-message', '--reedit-message']);
+// a command line -> segments (one per command) of words {w, open}; open: the word ends inside an unclosed quote
+function segments(line) {
+  const s = String(line), segs = []; let seg = [], w = null, i = 0;
+  const word = open => { if (w !== null) seg.push({ w, open }); w = null; };
+  const cut = () => { word(false); if (seg.length) segs.push(seg); seg = []; };
+  while (i < s.length) {
+    const c = s[i];
+    if (c === "'") {
+      const j = s.indexOf("'", i + 1); w = (w ?? '') + s.slice(i + 1, j < 0 ? s.length : j);
+      if (j < 0) { word(true); break; }
+      i = j + 1;
+    } else if (c === '"') {
+      let j = i + 1, t = '';
+      for (; j < s.length && s[j] !== '"'; j++) {
+        if (s[j] === '\\' && j + 1 < s.length) { const n = s[j + 1]; if ('$`"\\'.includes(n)) { t += n; j++; } else if (n === '\n') j++; else t += '\\'; }
+        else t += s[j];
+      }
+      w = (w ?? '') + t;
+      if (j >= s.length) { word(true); break; }
+      i = j + 1;
+    } else if (c === '\\') {
+      if (s[i + 1] !== undefined && s[i + 1] !== '\n') w = (w ?? '') + s[i + 1];
+      i += 2;
+    } else if (c === ' ' || c === '\t' || c === '\r') { word(false); i++; }
+    else if (c === '\n' || c === ';' || c === '&' || c === '|' || c === '(' || c === ')') { cut(); i++; }
+    else if (c === '#' && w === null) { while (i < s.length && s[i] !== '\n') i++; }
+    else { w = (w ?? '') + c; i++; }
+  }
+  cut();
+  return segs;
+}
+export function commitMessages(line) {
+  if (typeof line !== 'string' || !line.includes('commit')) return [];
+  const out = [];
+  for (const seg of segments(line)) {
+    let i = 0;
+    while (i < seg.length && WRAP.test(seg[i].w)) i++;
+    if (!(i < seg.length && GIT.test(seg[i].w))) continue;
+    for (i++; i < seg.length && seg[i].w.startsWith('-'); i += GIT_VAL.has(seg[i].w) ? 2 : 1);
+    if (seg[i]?.w !== 'commit') continue;
+    for (let j = i + 1; j < seg.length; j++) {
+      const x = seg[j], m = x.w.match(/^--message=([\s\S]*)$/) || x.w.match(/^-[aesnqvipo]*m([\s\S]+)$/);
+      if (x.w === '--') break;
+      if (x.w === '--message' || /^-[aesnqvipo]*m$/.test(x.w)) { const v = seg[++j]; if (v && !v.open) out.push(v.w); }
+      else if (m) { if (!x.open) out.push(m[1]); }
+      else if (COMMIT_VAL.has(x.w)) j++;
+    }
+  }
+  return out;
+}
+
+// ---- evidence readers: a record -> {session, kind, calls: [{turn, msg, call, name, args: [strings] | null, cmds?: [strings]}], cost: number | null}
+// cmds are the arguments that are command lines (a call that does not give them: all the arguments of a shell tool).
+// Every reader gets this through the call, so a command line is read in one place, whatever the record kind.
+const keyed = (v, k = '') => typeof v === 'string' ? [[k, v]] : v && typeof v === 'object' ? Object.entries(v).flatMap(([n, x]) => keyed(x, Array.isArray(v) ? k : n)) : v == null ? [] : [[k, String(v)]];
+const CMDKEY = /^(cmd|command|cmdline|commandline|script|shell|bash)$/i, SHELLISH = /^(shell|bash|sh|zsh|exec|terminal|powershell|pwsh|run_shell|run_command|execute_command|shell_exec)$/i;
+const cmdsOf = (name, pairs) => pairs.filter(([k]) => CMDKEY.test(k) || SHELLISH.test(String(name ?? ''))).map(([, s]) => s);
+const parsed = a => { try { return keyed(JSON.parse(a)); } catch { return [['', String(a ?? '')]]; } };
+const args = a => parsed(a).map(([, s]) => s);
+const lines = c => c.cmds ?? (SHELLISH.test(String(c.name ?? '')) ? c.args || [] : []);
 const readers = [
   // a stored session (wh:s:<id>, a .session export, a .trace read by fromTrace): messages with tool calls, ledger rows
   r => {
     if (!Array.isArray(r?.messages)) return null;
     const calls = []; let turn = -1;
-    r.messages.forEach((m, i) => { if (m.role === 'user') turn++; (m.tool_calls || []).forEach((t, j) => calls.push({ turn: Math.max(turn, 0), msg: i, call: j, name: t.function?.name, args: args(t.function?.arguments) })); });
+    r.messages.forEach((m, i) => { if (m.role === 'user') turn++; (m.tool_calls || []).forEach((t, j) => calls.push({ turn: Math.max(turn, 0), msg: i, call: j, name: t.function?.name, args: args(t.function?.arguments), cmds: cmdsOf(t.function?.name, parsed(t.function?.arguments)) })); });
     const led = Array.isArray(r.ledger) ? r.ledger : [];
     return { session: r.id, kind: 'session', calls, cost: led.length ? led.reduce((n, e) => n + (Number(e.cost) || 0), 0) : null };
   },
@@ -107,10 +173,10 @@ const readers = [
   // the kept fields (paths, commands, handles) become evidence, while summarised content is not a string to match
   r => {
     if (!Array.isArray(r?.perTurn)) return null;
-    const kept = v => typeof v === 'string' ? [v] : v && typeof v === 'object'
-      ? (typeof v.hash === 'string' && typeof v.length === 'number' ? [] : Object.values(v).flatMap(kept)) : v == null ? [] : [String(v)];
+    const kept = (v, k = '') => typeof v === 'string' ? [[k, v]] : v && typeof v === 'object'
+      ? (typeof v.hash === 'string' && typeof v.length === 'number' ? [] : Object.entries(v).flatMap(([n, x]) => kept(x, Array.isArray(v) ? k : n))) : v == null ? [] : [[k, String(v)]];
     const calls = r.perTurn.flatMap(t => Array.isArray(t.args)
-      ? t.args.map((c, j) => ({ turn: t.n, msg: null, call: j, name: c.name, args: kept(c.args) }))
+      ? t.args.map((c, j) => ({ turn: t.n, msg: null, call: j, name: c.name, args: kept(c.args).map(([, s]) => s), cmds: cmdsOf(c.name, kept(c.args)) }))
       : String(t.tools || '').split(' ').filter(Boolean).map((name, j) => ({ turn: t.n, msg: null, call: j, name: name.split(':')[0], args: null })));
     return { session: r.id, kind: 'profile', calls, cost: r.cost?.total ?? null };
   },
@@ -131,11 +197,27 @@ export function fromTrace(trace, name = 'trace') {
 }
 
 // ---- checks: (validator, evidence) -> {outcome, reason, at: a call or null}
-const hit = (ev, exp) => { const re = new RegExp(exp.pattern); return ev.calls.findIndex(c => c.args && c.args.some(a => re.test(a))); };
+// seek: the first call from `from` on that shows the expected evidence -> {i, cmd} or null. A call shows it in one of its
+// arguments; and, for a pattern anchored at the start (^), in a git commit message inside one of its command lines
+// (cmd: true), because a whole command line never starts with the message. Unanchored patterns see arguments only.
+const msgs = new WeakMap();
+const messagesOf = c => { let m = msgs.get(c); if (!m) msgs.set(c, m = lines(c).flatMap(commitMessages)); return m; };
+function seek(ev, exp, from = 0) {
+  const re = new RegExp(exp.pattern), anchored = exp.pattern.startsWith('^');
+  for (let i = from; i < ev.calls.length; i++) {
+    const c = ev.calls[i];
+    if (!c.args) continue;
+    if (c.args.some(a => re.test(a))) return { i, cmd: false };
+    if (anchored && messagesOf(c).some(m => re.test(m))) return { i, cmd: true };
+  }
+  return null;
+}
+const hit = (ev, exp) => seek(ev, exp)?.i ?? -1;
+const shown = (ev, s) => ({ outcome: 'pass', at: ev.calls[s.i], ...(s.cmd ? { in_command: true } : {}) });
 const blind = ev => ev.calls.some(c => !c.args); // the record has calls whose arguments it does not hold
 const found = (v, ev) => {
   for (const f of v.shape.forbidden || []) { const i = hit(ev, f); if (i >= 0) return { outcome: 'fail', reason: 'forbidden', at: ev.calls[i] }; }
-  for (const x of v.shape.expected) { const i = hit(ev, x); if (i >= 0) return { outcome: 'pass', at: ev.calls[i] }; }
+  for (const x of v.shape.expected) { const s = seek(ev, x); if (s) return shown(ev, s); }
   if (blind(ev)) return { outcome: 'unresolved', reason: 'no-arguments' };
   return v.shape.expected.length ? { outcome: 'fail', reason: 'absent' } : { outcome: 'pass' };
 };
@@ -145,10 +227,10 @@ const checks = new Map(Object.entries({
   order(v, ev) {
     for (const f of v.shape.forbidden || []) { const i = hit(ev, f); if (i >= 0) return { outcome: 'fail', reason: 'forbidden', at: ev.calls[i] }; }
     if (blind(ev)) return { outcome: 'unresolved', reason: 'no-arguments' };
-    const [a, b] = v.shape.expected, i = hit(ev, a), rb = new RegExp(b.pattern);
+    const [a, b] = v.shape.expected, i = hit(ev, a);
     if (i < 0) return { outcome: 'fail', reason: 'absent' };
-    const j = ev.calls.findIndex((c, n) => n > i && c.args.some(x => rb.test(x)));
-    return j >= 0 ? { outcome: 'pass', at: ev.calls[j] } : hit(ev, b) >= 0 ? { outcome: 'fail', reason: 'order', at: ev.calls[hit(ev, b)] } : { outcome: 'fail', reason: 'absent' };
+    const s = seek(ev, b, i + 1);
+    return s ? shown(ev, s) : hit(ev, b) >= 0 ? { outcome: 'fail', reason: 'order', at: ev.calls[hit(ev, b)] } : { outcome: 'fail', reason: 'absent' };
   },
   cost(v, ev) {
     if (ev.cost == null) return { outcome: 'unresolved', reason: 'no-ledger' };
@@ -177,6 +259,7 @@ export function resolve(v, record, { sources = {}, flow_id = null } = {}) {
   return {
     id: 'vr-' + contentHash([v.id, v.step_text_hash, session, ev?.kind].join('\n')), validator_id: v.id, flow_id, session,
     at_turn: at ? at.turn : null, outcome, reason: r.reason || null, carried_to: [],
+    ...(r.in_command ? { in_command: true } : {}), // the evidence was a message inside a command line of the call
     evidence_handle: at ? `${session}#${at.msg == null ? 't' + at.turn : 'm' + at.msg}.c${at.call}` : null,
     tokens: 0, cost: 0, // resolved by code: no request was made
   };
