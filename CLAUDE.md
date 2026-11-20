@@ -43,5 +43,6 @@ Work on `dev`; every piece of work follows the rigid order below.
 - Tests use the mock provider only; OpenRouter is blocked in tests.
 - Secrets never in files or chat.
 - No native dialogs (alert/confirm/prompt); use `modal()`.
+- Restrictions (allowlists, deny rules, extra gates) are options, off by default. Do not build or enable them upfront; add one when it is wanted as a feature.
 - Specs before code; a spec change during implementation is its own commit with a reason.
 - Catalog via inbox files only (`.claude/skills/catalog/SKILL.md`): agents write `catalog/inbox/<agent>-<shortid>.jsonl`; the steward alone merges into `catalog/*.jsonl`. Records are append-only, one JSON per line.
