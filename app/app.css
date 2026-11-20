@@ -123,10 +123,23 @@ details.call pre.full { margin-top: 6px; padding-top: 6px; border-top: 1px dashe
 #price tr.role th { text-align: left; padding: 8px 4px 2px; color: var(--accent); font-weight: 600; overflow-wrap: anywhere; }
 #bridgebar { position: fixed; left: 8px; bottom: 8px; z-index: 20; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; max-width: min(420px, 96vw); padding: 6px 10px; background: var(--panel); border: 1px solid var(--warn); border-radius: 6px; box-shadow: 0 4px 16px var(--shadow); font-size: 12px; }
 #bridgebar .note { margin: 0; }
+body:has(> #bridgebar) .thread { padding-bottom: 120px; } /* the bar floats over the foot of the thread: leave room so a card's buttons scroll clear of it */
 #bridgebar [data-bask]:not(:empty) { flex-basis: 100%; color: var(--warn); overflow-wrap: anywhere; }
 .msg[data-role=approve] { border-left: 3px solid var(--warn); }
 .msg[data-role=approve] .row { display: flex; gap: 6px; margin-top: 6px; }
 .msg[data-role=approve][data-done]::after { content: attr(data-done); font-size: 11px; color: var(--dim); }
+/* the change itself on an approval card: changed lines with their line numbers (main.js changeNode, diff.js) */
+.msg[data-role=approve] [data-change] { margin-top: 6px; }
+.msg[data-role=approve] [data-change] > summary { font: 12px/1.45 ui-monospace, monospace; cursor: pointer; }
+.msg[data-role=approve] [data-hunk] { margin-top: 4px; border: 1px solid var(--line); border-radius: 4px; overflow: hidden; font: 12px/1.45 ui-monospace, monospace; }
+.msg[data-role=approve] [data-hunk] > .hh { padding: 1px 6px; color: var(--dim); border-bottom: 1px solid var(--line); }
+.msg[data-role=approve] [data-op] { display: grid; grid-template-columns: 5ch 5ch 1ch minmax(0, 1fr); column-gap: 1ch; padding: 0 6px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.msg[data-role=approve] [data-op] > .ln { text-align: right; color: var(--dim); user-select: none; }
+.msg[data-role=approve] [data-op=add] { background: color-mix(in srgb, var(--ok) 16%, transparent); }
+.msg[data-role=approve] [data-op=del] { background: color-mix(in srgb, var(--danger) 16%, transparent); }
+.msg[data-role=approve] [data-op=add] mark { background: color-mix(in srgb, var(--ok) 38%, transparent); color: inherit; }
+.msg[data-role=approve] [data-op=del] mark { background: color-mix(in srgb, var(--danger) 38%, transparent); color: inherit; }
+.msg[data-role=approve] [data-cut] { color: var(--dim); font-style: italic; }
 .sub { border: 0 !important; padding: 2px 0 !important; }
 #machine .vmout { font: 12px/1.45 ui-monospace, monospace; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 70vh; min-height: 200px; overflow: auto; background: var(--term-bg); color: var(--term-fg); padding: 8px; border-radius: 6px; margin: 6px 0; }
 #machine .vmin { width: 100%; font-family: ui-monospace, monospace; font-size: 12px; }

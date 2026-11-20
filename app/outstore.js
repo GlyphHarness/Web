@@ -80,10 +80,10 @@ export async function present(raw, { want, helper } = {}) {
   return `${tag('ends')}\n${text.slice(0, 900)}\n[...]\n${text.slice(-400)}`;
 }
 
-export async function read({ handle, find, offset = 0, length = 3000 }) {
+export async function read({ handle, find, offset = 0, length = 3000, lines }, ranged = false) {
   const text = await get(String(handle || ''));
   if (text == null) return `No stored output "${handle}".`;
-  return slice(text, { find, offset, length });
+  return ranged ? range(text, { find, lines, offset, length }) : slice(text, { find, offset, length });
 }
 // find: matching lines; else a slice from offset
 export function slice(text, { find, offset = 0, length = 3000 } = {}) {
@@ -95,4 +95,28 @@ export function slice(text, { find, offset = 0, length = 3000 } = {}) {
   return text.slice(o, o + n) + (o + n < text.length ? `\n[${text.length - o - n} chars remain; continue at offset ${o + n}]` : '');
 }
 
-export const handlesIn = text => String(text || '').match(/os:[a-z0-9]{6,12}/g) || [];
+// Ranged reads (strategies with reads: 'ranged'): a range that was asked for comes back whole, up to READ_MAX.
+export const READ_MAX = 12000; // chars of a requested range returned in one result
+// Whole lines starting at line `first`, cut at a line end when over READ_MAX; the last line then says what was left out.
+export function capLines(text, first = 1) {
+  if (text.length <= READ_MAX) return text;
+  const ls = text.split('\n'), last = first + ls.length - 1;
+  let n = 0, size = 0;
+  while (n < ls.length && size + ls[n].length + 1 <= READ_MAX) size += ls[n++].length + 1;
+  if (!n) return `${ls[0].slice(0, READ_MAX)}\n[line ${first} is ${ls[0].length} characters: its first ${READ_MAX} are shown${last > first ? `; lines ${first + 1}-${last} not shown: ask for them with lines "${first + 1}-${last}"` : ''}]`;
+  return `${ls.slice(0, n).join('\n')}\n[lines ${first}-${first + n - 1} shown; lines ${first + n}-${last} not shown (${text.length - size} characters): ask for them with lines "${first + n}-${last}"]`;
+}
+// find: matching lines (as slice); lines "a-b": those lines, counted from 1; else offset and length, in characters
+export function range(text, { find, lines, offset = 0, length = 3000 } = {}) {
+  if (find) return slice(text, { find });
+  if (lines != null && lines !== '') {
+    const all = text.split('\n'), m = /^\s*(\d+)\s*(?:-\s*(\d+)\s*)?$/.exec(String(lines)), a = Number(m?.[1]);
+    if (!m || a < 1) return `lines must be "a-b", counted from 1; the text has ${all.length} lines.`;
+    if (a > all.length) return `No line ${a}: the text has ${all.length} lines.`;
+    return capLines(all.slice(a - 1, Math.max(a, Number(m[2] ?? a))).join('\n'), a);
+  }
+  const o = Math.max(0, Number(offset) || 0), n = Math.min(READ_MAX, Math.max(1, Number(length) || 3000));
+  return text.slice(o, o + n) + (o + n < text.length ? `\n[${text.length - o - n} chars remain; continue at offset ${o + n}]` : '');
+}
+
+export const handlesIn =text => String(text || '').match(/os:[a-z0-9]{6,12}/g) || [];

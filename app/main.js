@@ -38,6 +38,9 @@ import { render } from './widgets.js';
 import * as theme from './theme.js';
 import * as pat from './patterns.js';
 import * as inventory from './inventory.js';
+import { hunks, changed } from './diff.js';
+import { defsAs } from './tools.js'; // tool definitions as the session's strategy has them (ranged reads)
+import { argSummary } from './profile.js';
 import { put, get, handlesIn, setFallback } from './outstore.js';
 import { buildRequest, measure, report, padAttachment, inherit, imitatesNote, keptLines, corePrompt, EDGE_MIN, markedOnly, edgeReplies, turnOf, KINDS } from './context.js';
 
@@ -243,7 +246,7 @@ const provider = () => providers[state.meta.settings.provider] || providers.open
 const profiles = () => (state.meta.profiles ??= []);
 const eff = s => prof.effective(profiles(), s?.profile, state.meta.settings, s?.over);
 const cfg = s => eff(s).settings;
-const toolsFor = s => { const c = eff(s).caps; return defsFor(s).filter(d => prof.allowedTool(d.function.name, c)); };
+const toolsFor = s => { const e = eff(s), c = e.caps; return defsAs(defsFor(s), strategies.spec(e.settings.strategy).reads).filter(d => prof.allowedTool(d.function.name, c)); };
 
 // ---------- message rendering ----------
 
@@ -1082,6 +1085,11 @@ function retitle(s, title) {
   $(`#sessions [data-id="${s.id}"] span`).textContent = title;
 }
 
+// Why a run ended, kept beside the turns and never sent: done, limit (MAX_STEPS tool rounds), failed,
+// stopped (by the person), held (a skipped request) or budget. `at` is the log length at the stop, so a
+// message that follows a limit stop can be told from one that steers (profile.js followUps, wh log).
+const noteStop = (s, why) => { (s.stops ??= []).push({ t: Date.now(), at: s.messages.length, why: why || 'done' }); saveSession(s); };
+
 // One user-initiated run. Branches started inside it go through turns() directly.
 async function run(s) {
   try { return await runInner(s); } finally { transcriptSoon(); }
@@ -1092,7 +1100,7 @@ async function runInner(s) {
   if (!set.model) return notice(s, 'Choose a model first.');
   if (p.needsKey && !state.keys[set.provider]) return notice(s, 'Add an API key in Settings first.');
   busy = true; runningId = s.id; app.setAttribute('data-busy', ''); ctl = new AbortController();
-  try { return await turns(s, 0); }
+  try { const why = await turns(s, 0); noteStop(s, ctl.signal.aborted ? 'stopped' : why); return why; }
   finally { await stemProgress(s).catch(() => {}); busy = false; runningId = null; app.removeAttribute('data-busy'); ctl = null; queueSteward(); if (lookStale) redrawLook(); }
 }
 
@@ -1204,6 +1212,7 @@ async function turnsInner(s, depth, onFirst) {
   const ctx = {
     pads: state.meta.pads, savePads: () => { saveMeta(); renderPads(); },
     depth, fanOut: args => fanOut(s, args, ctx), branchRead,
+    reads: strategies.spec(set.strategy).reads, // 'ranged': a range that is asked for comes back whole (tools.js)
     // attribution and reference checks come from the harness's view of the session
     by: () => ({ session: s.id, message: s.messages.length - 1, model: set.model, t: Date.now() }),
     knownRef: r => !!state.sessions[r] || s.messages.some(m => typeof m.content === 'string' && m.content.includes(r)),
@@ -1294,16 +1303,18 @@ async function turnsInner(s, depth, onFirst) {
     if (acc.content || calls.length) {
       // Long arguments leave the log here, once, before the message is stored:
       // the log keeps {ref, name} and the full text sits in the output store.
-      for (const c of calls) {
+      const kept = {}; // call index -> argument summary (profile.js) of arguments that leave the log: places as written, content as size and hash
+      for (const [j, c] of calls.entries()) {
         if (!SWAPPABLE.has(c.function.name) || c.function.arguments.length <= ARG_MAX) continue;
         let a;
         try { a = JSON.parse(c.function.arguments); } catch { continue; }
+        kept[j] = argSummary(c.function.name, c.function.arguments);
         // what the call was looking for stays inline: it is the hint the next turns read
         c.function.arguments = JSON.stringify({ ref: await put(c.function.arguments), name: String(a.name || a.title || '').slice(0, 60) || undefined, want: a.want ? String(a.want).slice(0, 160) : undefined });
       }
       const m = { role: 'assistant', content: acc.content || null };
       if (calls.length) m.tool_calls = calls;
-      m.x = { model: set.model, usage: acc.usage, ms: Math.round(performance.now() - acc.t0), ...(acc.upstream ? { upstream: acc.upstream } : {}) };
+      m.x = { model: set.model, usage: acc.usage, ms: Math.round(performance.now() - acc.t0), ...(acc.upstream ? { upstream: acc.upstream } : {}), ...(Object.keys(kept).length ? { args: kept } : {}) };
       if (acc.upstream && s.pin !== false) s.upstream = acc.upstream;
       if (acc.reasoning) m.x.reasoning = acc.reasoning;
       push(s, m);
@@ -1619,6 +1630,9 @@ async function relog(s, tc, to) {
   if (!c) return;
   let a = {};
   try { a = JSON.parse(to); } catch {}
+  // the summary kept beside the message follows the rewritten arguments (profile.js reads inline ones itself)
+  const j = m.tool_calls.indexOf(c), swap = SWAPPABLE.has(c.function.name) && to.length > ARG_MAX;
+  if (swap) ((m.x ??= {}).args ??= {})[j] = argSummary(c.function.name, to); else if (m.x?.args) delete m.x.args[j];
   c.function.arguments = SWAPPABLE.has(c.function.name) && to.length > ARG_MAX
     ? JSON.stringify({ ref: await put(to), name: String(a.name || '').slice(0, 60) || undefined, want: a.want ? String(a.want).slice(0, 160) : undefined })
     : to;
@@ -3282,6 +3296,37 @@ async function concernForm() {
 
 // ---------- approvals for outward-facing writes ----------
 
+// The change one written file makes, for the approval card: removed and added lines with their line numbers and a
+// few lines around them (app/diff.js), built once. Hooks: [data-change=edit|write|new][data-path][data-added]
+// [data-removed], [data-hunk], rows [data-op=ctx|del|add][data-old][data-new] > [data-code], the differing part of
+// a replaced line in mark[data-chg]. null when the text it replaces could not be read.
+const CHANGE_ROWS = 400, CHANGE_LINE = 600;
+function changeNode(f) {
+  if (f.old === undefined) return null;
+  const d = hunks(f.old, f.text), kind = f.old === null ? 'new' : f.edited ? 'edit' : 'write';
+  const cut = n => h('span', { 'data-cut': n, text: ` … ${n} characters … ` });
+  const clip = (t, keep, tail) => t.length <= keep + 40 ? [t] : tail ? [cut(t.length - keep), t.slice(-keep)] : [t.slice(0, keep), cut(t.length - keep)];
+  const code = r => {
+    const c = r.pair && changed(r.text, r.pair.text);
+    if (!c || !(c.pre || c.post) || !c.mid) return h('span', { 'data-code': '' }, ...clip(r.text, CHANGE_LINE));
+    return h('span', { 'data-code': '' }, ...clip(c.pre, 160, true), h('mark', { 'data-chg': '' }, ...clip(c.mid, CHANGE_LINE)), ...clip(c.post, 160));
+  };
+  const row = r => {
+    const a = { class: 'dl', 'data-op': r.op };
+    if (r.old != null) a['data-old'] = r.old;
+    if (r.new != null) a['data-new'] = r.new;
+    return h('div', a, h('span', { class: 'ln', text: r.old ?? '' }), h('span', { class: 'ln', text: r.new ?? '' }), h('span', { text: r.op === 'add' ? '+' : r.op === 'del' ? '-' : ' ' }), code(r));
+  };
+  const kids = []; let left = CHANGE_ROWS, hidden = 0;
+  for (const k of d.hunks) {
+    const rs = k.rows.slice(0, Math.max(0, left)); left -= rs.length; hidden += k.rows.length - rs.length;
+    if (rs.length) kids.push(h('div', { 'data-hunk': '', 'data-old-start': k.oldStart, 'data-new-start': k.newStart }, h('div', { class: 'hh', text: `@@ -${k.oldStart},${k.oldLines} +${k.newStart},${k.newLines} @@` }), ...rs.map(row)));
+  }
+  if (hidden) kids.push(h('div', { 'data-cut': '', 'data-cut-rows': hidden, text: `${hidden} more lines of this change are not shown.` }));
+  if (!d.hunks.length) kids.push(h('div', { 'data-cut': '', text: 'No line differs from the file on the branch.' }));
+  return h('details', { open: '', 'data-change': kind, 'data-path': f.path, 'data-added': d.added, 'data-removed': d.removed }, h('summary', { text: `${kind === 'new' ? 'new file' : kind} ${f.path}  +${d.added} -${d.removed}` }), ...kids);
+}
+
 // A repository write waits for a click. The card shows what will be written,
 // built from the resolved changes, not from the model's description of them.
 function approve(s, what) {
@@ -3292,9 +3337,10 @@ function approve(s, what) {
       : `${what.repo} ${what.head} -> ${what.base}\n${what.title}\n\n${what.body}`;
     const ask = { commit: 'Commit to GitHub?', 'pull request': 'Open a pull request?', repository: 'Create a GitHub repository?', issue: 'File this concern as an issue?' }[what.what];
     const detail = what.what === 'repository' ? `${what.repo} (${what.title})\n${what.body}` : what.what === 'issue' ? `${what.repo}\n${what.title}\n\n${what.body}` : head;
-    const files = (what.preview || []).map(f => h('details', {}, h('summary', { text: f.path }), h('pre', { class: 'full', text: f.text.length > 20000 ? f.text.slice(0, 20000) + '\n…' : f.text })));
+    const files = (what.preview || []).map(f => h('details', {}, h('summary', { text: f.text.length > 20000 ? `${f.path} (first 20000 of ${f.text.length} characters)` : f.path }), h('pre', { class: 'full', text: f.text.length > 20000 ? f.text.slice(0, 20000) + '\n…' : f.text })));
+    const changes = (what.preview || []).map(changeNode).filter(Boolean); // the change itself, in the part of the card a look cannot drop
     const yes = h('button', { text: 'allow' }), no = h('button', { text: 'deny' });
-    const card = R.part('approval', { ask, kind: what.what, repo: what.repo || '', text: detail, files: files.length, slots: { ask: [h('b', { text: ask })], what: [h('pre', { text: detail })], files, controls: [h('div', { class: 'row' }, yes, no)] } }, { session: s.id });
+    const card = R.part('approval', { ask, kind: what.what, repo: what.repo || '', text: detail, files: files.length, slots: { ask: [h('b', { text: ask })], what: [h('pre', { text: detail }), ...changes], files, controls: [h('div', { class: 'row' }, yes, no)] } }, { session: s.id });
     const done = v => { yes.disabled = no.disabled = true; card.dataset.done = v ? 'allowed' : 'denied'; ok(v); };
     yes.onclick = () => done(true); no.onclick = () => done(false);
     thread(s).append(card);

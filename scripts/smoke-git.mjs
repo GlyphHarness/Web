@@ -423,6 +423,108 @@ await thread().locator('.msg[data-role=approve]:not([data-done]) button', { hasT
 await idle();
 check('concerns: approved, it is filed by the model with the evidence', issuesMade.length === 2 && issuesMade[1].labels.join() === 'concern,kind:interop' && /Filed by model/.test(issuesMade[1].body) && /--paginate was not passed/.test(issuesMade[1].body));
 
+// ---- approval card: the change itself is on the card, wherever in the file it is (seam: approve(), the approval part) ----
+// A person approves what they can see. The whole-file preview stops at 20,000 characters; an edit at line 2568 of a
+// large file is far past that, so the card shows the changed lines with their line numbers.
+{
+  const big = Array.from({ length: 3000 }, (_, i) => i === 2567 ? '    return tmux ? agentRun(cmd, t, o) : plain(cmd, t, o); // line 2568' : `const filler_${i + 1} = ${i + 1}; // a line of ordinary code, long enough to matter`);
+  branches.main.files['big.js'] = big.join('\n') + '\n';
+  const cardOf = () => thread().locator('.msg[data-role=approve]:not([data-done])').last();
+  const rows = (card, path) => card.locator(`[data-change][data-path="${path}"] [data-op]`).evaluateAll(els => els.map(e => ({ op: e.dataset.op, old: e.dataset.old || null, now: e.dataset.new || null, text: e.querySelector('[data-code]')?.textContent ?? '' })));
+  const attrs = (card, path) => card.locator(`[data-change][data-path="${path}"]`).first().evaluate(e => ({ ...e.dataset })).catch(() => null);
+
+  await page.click('[data-act=new]');
+  await say('repo deep edit please');
+  await page.waitForSelector('.thread:visible .msg[data-role=approve]:not([data-done]) button');
+  const a1 = await attrs(cardOf(), 'big.js'), r1 = await rows(cardOf(), 'big.js');
+  const del = r1.find(r => r.op === 'del'), add = r1.find(r => r.op === 'add'), ctxRows = r1.filter(r => r.op === 'ctx');
+  check('approval card: an edit deep in a large file is on the card as a change, with its counts', branches.main.files['big.js'].length > 100000 && a1?.change === 'edit' && a1.added === '1' && a1.removed === '1', JSON.stringify(a1));
+  check('approval card: the removed and the added line carry their line numbers', del?.old === '2568' && /agentRun\(cmd, t, o\)/.test(del.text) && add?.now === '2568' && /session: s\.id/.test(add.text), JSON.stringify([del, add]));
+  check('approval card: a few lines of context sit around the change, numbered', ctxRows.length >= 4 && ctxRows.length <= 8 && ctxRows.some(r => r.old === '2567' && r.now === '2567') && ctxRows.some(r => r.old === '2569' && r.now === '2569') && r1.length === ctxRows.length + 2, JSON.stringify(r1.map(r => [r.op, r.old, r.now])));
+  check('approval card: the changed lines are visible without opening anything', await cardOf().locator('[data-change][data-path="big.js"] [data-op=add]').first().isVisible());
+  check('approval card: the part of a changed line that differs is marked', await cardOf().locator('[data-change][data-path="big.js"] [data-op=add] [data-chg]').first().textContent().catch(() => '') === '{ ...o, session: s.id }');
+  check('approval card: the change comes before the whole-file preview, which is still there', await cardOf().evaluate(el => { const c = el.querySelector('[data-change]'), f = el.querySelector('details:not([data-change]) pre.full'); return !!c && !!f && !!(c.compareDocumentPosition(f) & Node.DOCUMENT_POSITION_FOLLOWING); }).catch(() => false));
+  await cardOf().locator('button', { hasText: 'allow' }).click();
+  await idle();
+  check('approval card: allowing commits exactly what was shown', branches.deep?.files['big.js'].split('\n')[2567] === '    return tmux ? agentRun(cmd, t, { ...o, session: s.id }) : plain(cmd, t, o); // line 2568' && branches.deep.files['big.js'].split('\n').length === 3001 && branches.main.files['big.js'].split('\n')[2567].includes('agentRun(cmd, t, o)'));
+
+  await say('repo rewrite please');
+  await page.waitForSelector('.thread:visible .msg[data-role=approve]:not([data-done]) button');
+  const w = await attrs(cardOf(), 'a.txt'), wr = await rows(cardOf(), 'a.txt'), n = await attrs(cardOf(), 'notes/new.txt'), nr = await rows(cardOf(), 'notes/new.txt');
+  check('approval card: a whole-file write of an existing file is shown as its difference from the branch head', w?.change === 'write' && w.added === '1' && w.removed === '0' && wr.some(r => r.op === 'add' && r.now === '2' && r.text === 'second line') && wr.some(r => r.op === 'ctx' && r.old === '1' && r.text === 'hello world') && !wr.some(r => r.op === 'del'), JSON.stringify([w, wr]));
+  check('approval card: a new file is shown as new, every line added', n?.change === 'new' && n.added === '2' && nr.length === 2 && nr.every(r => r.op === 'add') && nr[1].now === '2' && nr[1].text === 'two', JSON.stringify([n, nr]));
+  check('approval card: nothing was written while the card waited', !branches.rewrite);
+  await cardOf().locator('button', { hasText: 'deny' }).click();
+  await idle();
+  check('approval card: a denied write leaves the repository as it was', !branches.rewrite && branches.main.files['a.txt'] === 'hello world\n');
+  delete branches.main.files['big.js'];
+}
+
+// ---- ranged reads: a range asked for comes back whole; output_read takes lines; a tool named inside code is explained ----
+// (seams: the strategy spec in app/strategies.js, the tools, the output store.) H1 canary result: a line range over
+// 1,500 characters came back head-and-tail; line numbers were passed where characters were expected; output_read was
+// called from inside run_js. What the model is sent changes, so it is a new strategy version: sessions under the
+// earlier ones are sent what they were sent before.
+{
+  const L = n => `line-${n}-of-the-long-file:${'x'.repeat(26)}`; // one word a line: the mock answers with the result, a word every 15 ms
+  const longText = Array.from({ length: 400 }, (_, i) => L(i + 1)).join('\n');
+  branches.main.files['long.txt'] = longText + '\n';
+  const stored = () => page.evaluate(() => JSON.parse(localStorage['wh:s:' + JSON.parse(localStorage['wh:meta']).active]));
+  const lastTool = async () => (await stored()).messages.filter(m => m.role === 'tool').at(-1)?.content ?? '';
+  const toolsSent = async () => (JSON.parse(await page.textContent('#req') || '{}').tools || []).map(t => t.function);
+  const paste = settings => page.evaluate(() => document.querySelector('[data-act=cfgpaste]').click()).then(() => page.fill('.modal textarea', JSON.stringify({ settings }))).then(() => page.click('.modal .primary'));
+  const strategy = () => page.evaluate(() => JSON.parse(localStorage['wh:meta']).settings.strategy || null);
+  const exact = (text, a, b) => text.split('\n').slice(0, b - a + 1).join('\n') === Array.from({ length: b - a + 1 }, (_, i) => L(a + i)).join('\n');
+  const before = await strategy();
+
+  // the earlier strategies: nothing they are sent changes
+  await page.click('[data-act=new]');
+  await say('repo read path long.txt lines 100-160'); await idle();
+  const old1 = await lastTool(), oldTools = await toolsSent(), oldRead = oldTools.find(t => t.name === 'output_read');
+  await say('js reads os:nothing00'); await idle();
+  const oldJs = await lastTool();
+  check('ranged reads: under a strategy without them, the tools and the results are what they were', !!oldRead && !('lines' in oldRead.parameters.properties) && /^\[os:\w+ \d+L ends\]/.test(old1) && oldJs.trim().split('\n').length === 1 && /output_read is not defined/.test(oldJs), JSON.stringify([Object.keys(oldRead?.parameters.properties || {}), old1.slice(0, 40), oldJs]));
+
+  await paste({ strategy: 'strat-serial-2.0' });
+  check('ranged reads: a strategy version that has them can be chosen', await strategy() === 'strat-serial-2.0', String(await strategy()));
+  await page.click('[data-act=new]');
+  await say('repo read path long.txt lines 100-160'); await idle();
+  const r1 = await lastTool(), s1 = await stored(), newTools = await toolsSent();
+  check('ranged reads: a line range asked of a file comes back whole, exactly those lines', exact(r1, 100, 160) && r1.split('\n').length === 61 && !/os:\w+/.test(r1), JSON.stringify([r1.length, r1.slice(0, 60)]));
+  check('ranged reads: the request ran under that strategy (ledger row)', s1.ledger.at(-1)?.strat === 'strat-serial-2.0', String(s1.ledger.at(-1)?.strat));
+  const p = newTools.find(t => t.name === 'output_read')?.parameters.properties || {};
+  check('ranged reads: output_read is described with a line range, and its offset and length say their unit', p.lines?.type === 'string' && !!p.lines.description && !!p.offset?.description && !!p.length?.description, JSON.stringify(p));
+  const differ = newTools.filter((t, i) => JSON.stringify(t) !== JSON.stringify(oldTools[i])).map(t => t.name);
+  check('ranged reads: the same tools in the same order; only the two reading tools are described anew', newTools.map(t => t.name).join() === oldTools.map(t => t.name).join() && differ.join() === [...differ].filter(n => n === 'output_read' || n === 'repo_read').join() && differ.includes('output_read') && differ.includes('repo_read'), differ.join());
+  const chk = (s1.inventory?.checks || []).at(-1);
+  check('ranged reads: the check record of that read is a slice with its range, come back whole', chk?.read === 'slice' && chk.range === '100-160', JSON.stringify(chk));
+
+  // over the cap: cut at a whole line, the last line names the lines left out, and asking for those gives the rest
+  await say('repo read path long.txt lines 1-400'); await idle();
+  const r2 = await lastTool(), body2 = r2.split('\n'), k = body2.length - 1, rest = /(\d+)-400/.exec(body2.at(-1))?.[1];
+  check('ranged reads: a range over the cap is cut at a whole line, and the last line names the lines left out', r2.length > 4000 && r2.length <= 12500 && exact(r2, 1, k) && Number(rest) === k + 1, JSON.stringify([r2.length, k, body2.at(-1)]));
+  await say(`repo read path long.txt lines ${rest || 399}-400`); await idle();
+  const r3 = await lastTool();
+  check('ranged reads: asking for the lines left out returns the rest', !!rest && exact(r3, Number(rest), 400) && r3.split('\n').length === 400 - Number(rest) + 1, JSON.stringify([rest, r3.length]));
+
+  // a read without a range is still a short view with a handle; what the handle holds is read by lines or by characters
+  await say('repo read path long.txt'); await idle();
+  const r4 = await lastTool(), handle = /os:[a-z0-9]+/.exec(r4)?.[0];
+  check('ranged reads: a read without a range is still a short view with a handle', !!handle && r4.length < 2000, r4.slice(0, 60));
+  await say(`slice ${handle} lines 120-180`); await idle();
+  const r5 = await lastTool();
+  check('ranged reads: output_read returns a line range counted from 1, whole', exact(r5, 120, 180) && r5.split('\n').length === 61, JSON.stringify([r5.length, r5.slice(0, 60)]));
+  await say(`slice ${handle} offset 1000 length 6000`); await idle();
+  const r6 = await lastTool();
+  check('ranged reads: offset and length are characters, and a slice that long comes back whole', r6.startsWith(longText.slice(1000, 7000)) && r6.length < 6200, JSON.stringify([r6.length, r6.slice(0, 40)]));
+  await say(`js reads ${handle}`); await idle();
+  const r7 = await lastTool();
+  check('ranged reads: a tool named inside code is answered with the error and a line naming it as a call of its own', /output_read is not defined/.test(r7) && r7.split('\n').some(l => /^\[.*\boutput_read\b.*\]$/.test(l)), r7);
+
+  await paste({ strategy: before || 'strat-stem-1.0' });
+  delete branches.main.files['long.txt'];
+}
+
 // ---- credential scope check: intended use vs what the token can do (no model) ----
 await page.click('[data-pane=insp]');
 await page.evaluate(() => { document.querySelector('#ghintentbox').open = true; document.querySelector('#ghintentbox').closest('details:not(#ghintentbox)').open = true; document.querySelector('[data-act=ghderive]').click(); });

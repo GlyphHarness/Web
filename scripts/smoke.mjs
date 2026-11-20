@@ -1028,6 +1028,42 @@ await say('hello reasoning');
   check('inventory: building it writes no label or record id into any session', pg.ok && pg.sameSessions && pg.written === false, JSON.stringify({ sameSessions: pg.sameSessions, written: pg.written }));
 }
 
+// ---- stop reason: why each run ended is harness data, so a turn that ran out of tool rounds is not read as a model that needed steering ----
+await page.click('[data-act=new]');
+await say('round after round');
+await say('continue');
+await say('now something else');
+{
+  const r = await page.evaluate(async () => {
+    const id = sessionStorage.getItem('wh:tab-active'), s = JSON.parse(localStorage['wh:s:' + id]), P = await import('./app/profile.js'), p = P.profile(s);
+    const users = s.messages.map((m, i) => m.role === 'user' ? i : -1).filter(i => i >= 0);
+    const old = P.profile({ id: 'x', title: 'x', ledger: [], messages: [{ role: 'user', content: 'a' }, { role: 'assistant', content: 'b' }, { role: 'user', content: 'c' }, { role: 'assistant', content: 'd' }] });
+    return { stops: (s.stops || []).map(x => x.why), at: (s.stops || []).map(x => x.at), users, n: s.messages.length, turns: p.perTurn.map(t => [t.stop, t.after]), follow: p.followUps, short: p.perTurn.map(t => t.shortFollowUp), old: old.followUps, oldTurns: old.perTurn.map(t => [t.stop, t.after]) };
+  });
+  check('stop reason: a run that ends at the tool-round limit is recorded as limit, a finished one as done', r.stops.join() === 'limit,done,done', JSON.stringify(r.stops));
+  check('stop reason: each record says where in the log the run stopped', r.at.length === 3 && r.at[0] === r.users[1] && r.at[1] === r.users[2] && r.at[2] === r.n, JSON.stringify([r.at, r.users, r.n]));
+  check('profile: each turn carries how it stopped and how the turn before it stopped', JSON.stringify(r.turns) === JSON.stringify([['limit', null], ['done', 'limit'], ['done', 'done']]), JSON.stringify(r.turns));
+  check('profile: a message after a round-limit stop is a limit continuation, counted apart from steering', r.follow?.limitContinuations === 1 && r.follow?.steering === 1 && r.follow?.unrecorded === 0, JSON.stringify(r.follow));
+  check('profile: the size proxy for follow-ups is unchanged', JSON.stringify(r.short) === JSON.stringify([false, true, true]), JSON.stringify(r.short));
+  check('profile: a session recorded before stop reasons counts its follow-ups as unrecorded, not as steering', r.old?.unrecorded === 1 && r.old?.steering === 0 && r.old?.limitContinuations === 0 && JSON.stringify(r.oldTurns) === JSON.stringify([[null, null], [null, null]]), JSON.stringify([r.old, r.oldTurns]));
+}
+
+// ---- argument summary: what each call was aimed at stays readable from the records, without what it carried ----
+// (seams: the turn loop where long arguments leave the log for a handle; app/profile.js. The rest is scripts/test-profile.mjs.)
+await page.click('[data-act=new]');
+await say('long script');
+{
+  const r = await page.evaluate(async () => {
+    const id = sessionStorage.getItem('wh:tab-active'), s = JSON.parse(localStorage['wh:s:' + id]), P = await import('./app/profile.js'), p = P.profile(s);
+    const m = s.messages.find(m => m.tool_calls?.length), sent = JSON.parse(document.querySelector('#req').textContent || '{}');
+    return { logged: JSON.parse(m.tool_calls[0].function.arguments), kept: m.x?.args?.[0] ?? null, turn: p.perTurn[0]?.args ?? null, sentKeys: [...new Set((sent.messages || []).flatMap(x => Object.keys(x)))], leak: /padding|total=4950/.test(JSON.stringify([m.x?.args ?? null, p])) };
+  });
+  const isSum = v => !!v && typeof v.length === 'number' && typeof v.hash === 'string' && Object.keys(v).length === 2;
+  check('argument summary: a call stored by handle keeps the summary of its arguments beside the message', /^os:/.test(r.logged.ref || '') && isSum(r.kept?.code) && r.kept.code.length > 400 && isSum(r.kept.want), JSON.stringify([r.logged, r.kept]));
+  check('argument summary: the profile lists it for that call, with no content', r.turn?.length === 1 && r.turn[0].name === 'run_js' && isSum(r.turn[0].args?.code) && r.turn[0].args.code.length === r.kept?.code?.length && !r.leak, JSON.stringify(r.turn));
+  check('argument summary: it is harness data, not part of what is sent', r.sentKeys.length > 0 && !r.sentKeys.includes('x'), r.sentKeys.join());
+}
+
 check('layout: the page itself does not scroll',await page.evaluate(() => document.documentElement.scrollHeight <= innerHeight && scrollY === 0));
 if (shot) await page.screenshot({ path: shot });
 check('no page errors', errors.filter(e => !/schema 99|ERR_TUNNEL|Failed to load resource/.test(e)).length === 0, errors.join(' | '));

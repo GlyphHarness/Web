@@ -153,7 +153,11 @@ const mock = {
       return;
     }
     const concern = last.role === 'user' && /^concern (\S+):/.exec(last.content);
-    if (/^wrap up/.test(last.content || '')) text = 'OUTCOME: done\nRESULT: slow-path numbers: line 399 is the worst case\nEVIDENCE: 3 measurements\nOPEN: none';
+    // "round after round": a tool call after every result, so the turn ends at the harness's round limit
+    const lastUser = body.messages.findLast(m => m.role === 'user');
+    if (/\bround after round\b/.test(typeof lastUser?.content === 'string' ? lastUser.content : '')) {
+      yield { choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_' + Date.now(), type: 'function', function: { name: 'run_js', arguments: JSON.stringify({ code: 'return ' + body.messages.filter(m => m.role === 'tool').length }) } }] } }] };
+    } else if (/^wrap up/.test(last.content || '')) text ='OUTCOME: done\nRESULT: slow-path numbers: line 399 is the worst case\nEVIDENCE: 3 measurements\nOPEN: none';
     else if (concern) text = `OUTCOME: done\nRESULT: mock result for ${concern[1]}\nEVIDENCE: folds received: ${(last.content.match(/^fold \S+/gm) || []).length}\nOPEN: none`;
     else if (last.role === 'tool') text = 'The tool returned:\n\n```text\n' + last.content + '\n```';
     else if (/^event \S+: /.test(last.content || '')) text = 'Got the event: ' + last.content;
@@ -192,6 +196,11 @@ const mock = {
       yield { choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_' + Date.now(), type: 'function', function: { name: 'run_js', arguments: JSON.stringify({ code }) } }] } }] };
     } else if (/^shell: /.test(last.content || '')) {
       yield { choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_' + Date.now(), type: 'function', function: { name: 'shell', arguments: JSON.stringify({ cmd: last.content.slice(7), timeout: 600 }) } }] } }] };
+    } else if (/repo (deep edit|rewrite)/.test(last.content || '')) {
+      // "repo deep edit": one edit far down a large file; "repo rewrite": an existing file written whole, and a new file
+      const changes = /deep edit/.test(last.content) ? [{ path: 'big.js', edits: [{ find: 'agentRun(cmd, t, o)', replace: 'agentRun(cmd, t, { ...o, session: s.id })' }] }]
+        : [{ path: 'a.txt', content: 'hello world\nsecond line\n' }, { path: 'notes/new.txt', content: 'one\ntwo' }];
+      yield { choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_' + Date.now(), type: 'function', function: { name: 'repo_commit', arguments: JSON.stringify({ repo: 'o/r', branch: /deep edit/.test(last.content) ? 'deep' : 'rewrite', message: 'Change files\n\nfrom the mock', changes }) } }] } }] };
     } else if (/repo (read|commit|pr)/.test(last.content || '')) {
       const op = /repo (read|commit|pr)/.exec(last.content)[1];
       // "repo read path <path> [lines a-b]" reads that path (a slice with lines); plain "repo read" reads a.txt whole
@@ -204,6 +213,13 @@ const mock = {
       yield { choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_' + Date.now(), type: 'function', function: { name: 'pattern_run', arguments: JSON.stringify({ id: /run pattern (pt:\w+)/.exec(last.content)[1], values: { a: 6, b: 7 } }) } }] } }] };
     } else if (/store pattern/.test(last.content || '')) {
       yield { choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_' + Date.now(), type: 'function', function: { name: 'pattern_put', arguments: JSON.stringify({ kind: 'recipe', title: 'multiply two numbers', labels: ['math'], slots: ['a', 'b'], recipe: { tool: 'run_js', args: { code: 'return {{a}} * {{b}}' } }, refs: ['os:doesnotexist'] }) } }] } }] };
+    } else if (/slice (os:\w+) (?:lines (\d+-\d+)|offset (\d+) length (\d+))/.test(last.content || '')) {
+      // "slice os:… lines a-b" / "slice os:… offset n length m": a stored output read by line range or by characters
+      const [, handle, lines, offset, length] = /slice (os:\w+) (?:lines (\d+-\d+)|offset (\d+) length (\d+))/.exec(last.content);
+      yield { choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_' + Date.now(), type: 'function', function: { name: 'output_read', arguments: JSON.stringify(lines ? { handle, lines } : { handle, offset: Number(offset), length: Number(length) }) } }] } }] };
+    } else if (/js reads (os:\w+)/.test(last.content || '')) {
+      // "js reads os:…": code that calls a tool by name as if it were a function there
+      yield { choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_' + Date.now(), type: 'function', function: { name: 'run_js', arguments: JSON.stringify({ code: `return await output_read({ handle: "${/js reads (os:\w+)/.exec(last.content)[1]}" })` }) } }] } }] };
     } else if (/\bpull ([a-z][a-z0-9]{5})\b/.test(last.content || '')) {
       yield { choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_' + Date.now(), type: 'function', function: { name: 'output_read', arguments: JSON.stringify({ handle: /\bpull ([a-z][a-z0-9]{5})\b/.exec(last.content)[1] }) } }] } }] };
     } else if (/read (os:\w+)/.test(last.content || '')) {

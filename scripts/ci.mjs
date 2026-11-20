@@ -9,8 +9,8 @@ import fs from 'node:fs';
 const args = process.argv.slice(2);
 const flag = (n, d) => { const i = args.indexOf('--' + n); return i >= 0 ? args.splice(i, 2)[1] : d; };
 const url = flag('url', 'http://localhost:8787/'), out = flag('out', 'ci-record.json');
-const FILES = { main: 'scripts/smoke.mjs', git: 'scripts/smoke-git.mjs', cpu: 'scripts/test-cpu-shares.mjs', keys: 'scripts/test-paste-keys.mjs', local: 'scripts/test-localbridge.mjs', vm: 'scripts/smoke-vm.mjs', validators: 'scripts/test-validators.mjs' };
-const want = args.length ? args : ['main', 'git', 'cpu', 'keys', 'local', 'validators'];
+const FILES = { main: 'scripts/smoke.mjs', git: 'scripts/smoke-git.mjs', cpu: 'scripts/test-cpu-shares.mjs', keys: 'scripts/test-paste-keys.mjs', local: 'scripts/test-localbridge.mjs', vm: 'scripts/smoke-vm.mjs', validators: 'scripts/test-validators.mjs', wh: 'scripts/test-wh.mjs', profile: 'scripts/test-profile.mjs' };
+const want = args.length ? args : ['main', 'git', 'cpu', 'keys', 'local', 'validators', 'profile'];
 
 const run = suite => new Promise(ok => {
   const t0 = Date.now();

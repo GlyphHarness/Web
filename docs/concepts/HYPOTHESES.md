@@ -13,6 +13,7 @@ Read for this: `docs/STEMS.md` (§3, §5b-d, §7, §8), `origin/spec-recraft:doc
 - **Operator nudge** = any `wh say` after the first message that is not an approval answer. Counted from the `wh` log.
 - **Repeat rate** = tool results byte-identical to an earlier result of the same tool in the session / all tool calls (the rule `watchCall` already applies without a model).
 - **First-try edit success** = `repo_commit` calls with `edits` that succeed / all such calls.
+- **Operator nudge, split (appended 2026-11-20, H1 canary lesson 3).** A `wh say` sent right after the harness stopped the turn at its tool-round limit is a **limit continuation** and is counted on its own line; every other `wh say` after the first message that is not an approval answer is a steering nudge, and only those count against "nudges = 0". The harness records why each run stopped (`stops` in the session record: `done`, `limit`, `failed`, `stopped`, `held`, `budget`); `wh log` prints both counts, and the turn profile reports them as `followUps`.
 
 ## Hypotheses, ranked by value x cheapness
 
