@@ -14,7 +14,7 @@ import { run as lb } from './localbridge.js';
 // stored arguments again.
 const REF_NOTE = ' An earlier call may appear as {ref, name}: its arguments are stored under that handle and are implied; calling with {ref} repeats it.';
 const REF_PROPS = { ref: { type: 'string' }, name: { type: 'string', description: 'short name for this call, kept as its label' } };
-export const SWAPPABLE = new Set(['run_js', 'show_widget', 'repo_commit', 'shell']);
+export const SWAPPABLE = new Set(['run_js', 'show_widget', 'repo_commit', 'shell', 'file_edit', 'file_write']);
 export const ARG_MAX = 400; // chars of arguments kept inline in the log
 
 const WORKER = `
@@ -234,6 +234,77 @@ export const vmTools = [
       return (r.out || '(no output)') + (r.timedOut ? `\n[timed out after ${a.timeout || 120}s; interrupted]` : `\n[exit ${r.code}]`);
     }),
 ];
+// Files on the machine the shell runs on, when that is a host: group 'files', offered with 'vm' when the session's
+// "host files" setting is on (main.js toolsFor); ctx.files is localbridge.js hostFiles for the session's target.
+// Bytes are kept exactly: a read shows numbered lines (a CR before a line end is not shown; the first line says the
+// file uses CRLF), an edit changes only the bytes it replaces, a write puts the text as given (UTF-8).
+export const FILE_VIEW_MAX = 40000; // chars of numbered lines one read returns
+const NO_FILES = 'No files are available.';
+const UTF8 = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }); // a byte-order mark stays in the text, so it is written back
+const decode = (p, bytes) => { try { const t = UTF8.decode(bytes); if (!t.includes('\0')) return t; } catch {} return null; };
+const lineCount = t => t === '' ? 0 : t.replace(/\n$/, '').split('\n').length;
+const occurrences = (t, f) => { let n = 0; for (let i = t.indexOf(f); i >= 0; i = t.indexOf(f, i + f.length)) n++; return n; };
+const sha256 = async bytes => Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)), x => x.toString(16).padStart(2, '0')).join('');
+function numbered(p, text, lines) {
+  const all = text === '' ? [] : text.replace(/\n$/, '').split('\n'), n = all.length;
+  const head = `${p}: ${n} line${n === 1 ? '' : 's'}${/\r\n/.test(text) ? ', CRLF line endings' : ''}${text && !text.endsWith('\n') ? ', no newline at the end' : ''}`;
+  if (!n) return head + ' (empty)';
+  let a = 1, z = n;
+  if (lines != null && lines !== '') {
+    const m = /^\s*(\d+)\s*(?:-\s*(\d+)\s*)?$/.exec(String(lines));
+    if (!m || Number(m[1]) < 1) return `lines must be "a-b", counted from 1; ${p} has ${n} lines.`;
+    a = Number(m[1]); z = Math.min(n, Math.max(a, Number(m[2] ?? m[1])));
+    if (a > n) return `No line ${a}: ${p} has ${n} lines.`;
+  }
+  const w = String(z).length, out = [];
+  let size = head.length, i = a;
+  for (; i <= z; i++) {
+    const l = `${String(i).padStart(w)}\t${all[i - 1].replace(/\r$/, '')}`;
+    if (size + l.length + 1 > FILE_VIEW_MAX) { if (!out.length) { out.push(l.slice(0, FILE_VIEW_MAX - size - 1)); out.push(`[line ${i} is ${l.length} characters: its first ${FILE_VIEW_MAX - size - 1} are shown${i < z ? `; lines ${i + 1}-${z} not shown: ask for them with lines "${i + 1}-${z}"` : ''}]`); return [head + (a > 1 || z < n ? `; lines ${a}-${z}` : ''), ...out].join('\n'); } break; }
+    out.push(l); size += l.length + 1;
+  }
+  if (i <= z) out.push(`[lines ${a}-${i - 1} shown; lines ${i}-${z} not shown: ask for them with lines "${i}-${z}"]`);
+  return [head + (a > 1 || z < n ? `; lines ${a}-${z}` : ''), ...out].join('\n');
+}
+export const fileTools = [
+  fn('file_read',
+    'Read a text file on the machine the shell runs on, as numbered lines (each one its number, a \\t and its text). path is relative to the folder commands start in, or absolute inside it. lines "a-b" (counted from 1) picks a range; without it, the whole file. The first line gives the path, the total number of lines and the line endings. Up to ' + FILE_VIEW_MAX + ' characters come back whole; when cut, the last line says which lines were left out and how to ask for them.',
+    { path: { type: 'string' }, lines: { type: 'string', description: 'line range "a-b", counted from 1' } }, ['path'],
+    async (a, ctx) => {
+      if (!ctx.files) return NO_FILES;
+      const p = String(a.path ?? ''), { bytes } = await ctx.files.read(p), text = decode(p, bytes);
+      const view = text == null ? `${p}: ${bytes.length} bytes, not UTF-8 text; not shown (read it with the shell)` : numbered(p, text, a.lines);
+      return ctx.files.view ? ctx.files.view(view) : view;
+    }),
+  fn('file_edit',
+    'Replace one exact piece of text in a file on the machine the shell runs on. find must occur exactly once in the file: include enough of the surrounding lines to make it unique, without the line numbers file_read shows. It is replaced by replace; every other byte of the file is kept, line endings included (in a file with CRLF line endings, a newline in find or replace stands for CRLF). path as for file_read.' + REF_NOTE,
+    { path: { type: 'string' }, find: { type: 'string' }, replace: { type: 'string' }, ...REF_PROPS }, [],
+    async (a, ctx) => {
+      if (!ctx.files) return NO_FILES;
+      const p = String(a.path ?? ''), find = String(a.find ?? ''), rep = String(a.replace ?? '');
+      if (!find) throw new Error(`${p}: find is empty`);
+      const { bytes } = await ctx.files.read(p), text = decode(p, bytes);
+      if (text == null) throw new Error(`${p}: not UTF-8 text; change it with the shell`);
+      let f = find, r = rep, n = occurrences(text, find), viaCrlf = false;
+      // a newline the model wrote for a CRLF line end: matched as CRLF (only when the text as written is not found)
+      if (!n && /\r\n/.test(text) && find.includes('\n') && !find.includes('\r')) { const f2 = find.replace(/\n/g, '\r\n'), n2 = occurrences(text, f2); if (n2) { f = f2; n = n2; viaCrlf = true; } }
+      if (n !== 1) throw new Error(`${p}: find occurs ${n} times (must be once)`);
+      // in a file whose line ends are all CRLF (or when find was matched so), the replacement's newlines are CRLF too
+      if (viaCrlf || (/\r\n/.test(text) && !/(^|[^\r])\n/.test(text))) r = r.replace(/\r?\n/g, '\r\n');
+      const at = text.indexOf(f), next = text.slice(0, at) + r + text.slice(at + f.length);
+      await ctx.files.write(p, new TextEncoder().encode(next), { expect: await sha256(bytes) });
+      return `Edited ${p}: line ${text.slice(0, at).split('\n').length}, ${f.split('\n').length} line${f.includes('\n') ? 's' : ''} replaced by ${r.split('\n').length}; the file has ${lineCount(next)} lines.`;
+    }),
+  fn('file_write',
+    'Create a file, or replace one whole, on the machine the shell runs on, with content exactly as given (UTF-8). Missing folders are made. path as for file_read. For a change to part of a file, file_edit is shorter.' + REF_NOTE,
+    { path: { type: 'string' }, content: { type: 'string' }, ...REF_PROPS }, [],
+    async (a, ctx) => {
+      if (!ctx.files) return NO_FILES;
+      if (typeof a.content !== 'string') throw new Error('content is the whole text of the file');
+      const p = String(a.path ?? ''), r = await ctx.files.write(p, new TextEncoder().encode(a.content));
+      return `Wrote ${p}: ${r.size} bytes, ${lineCount(a.content)} lines.`;
+    }),
+];
 // Questions to the person (or the agent orchestrating the session); ask.js.
 export const askTools = [
   fn('ask',
@@ -275,12 +346,12 @@ export const localTools = [
     { folder: { type: 'string' }, path: { type: 'string' } }, ['folder'],
     (a, ctx) => ctx.local ? lb.read(ctx.local, a) : noLocal(ctx)),
 ];
-const all = () => [...tools, ...repoTools, ...vmTools, ...askTools, ...valueTools, ...localTools];
+const all = () => [...tools, ...repoTools, ...vmTools, ...fileTools, ...askTools, ...valueTools, ...localTools];
 
-const WHOLE = new Set(['ask', 'value_request', 'value_set', 'value_get', 'entry_read', 'fan_out', 'output_read', 'branch_read', 'pattern_find', 'pattern_get', 'pattern_put', 'pattern_run']);
+const WHOLE = new Set(['file_read', 'file_edit', 'file_write', 'ask', 'value_request', 'value_set', 'value_get', 'entry_read', 'fan_out', 'output_read', 'branch_read', 'pattern_find', 'pattern_get', 'pattern_put', 'pattern_run']);
 
 export const toolDefs = tools.map(t => t.def);
-export const defsFor = s => [...toolDefs, ...(s.tools?.includes('ask') ? askTools.map(t => t.def) : []), ...(s.tools?.includes('values') ? valueTools.map(t => t.def) : []), ...(s.tools?.includes('repo') ? repoTools.map(t => t.def) : []), ...(s.tools?.includes('vm') ? vmTools.map(t => t.def) : []), ...(s.tools?.includes('local') ? localTools.map(t => t.def) : [])];
+export const defsFor = s => [...toolDefs, ...(s.tools?.includes('ask') ? askTools.map(t => t.def) : []), ...(s.tools?.includes('values') ? valueTools.map(t => t.def) : []), ...(s.tools?.includes('repo') ? repoTools.map(t => t.def) : []), ...(s.tools?.includes('vm') ? vmTools.map(t => t.def) : []), ...(s.tools?.includes('vm') && s.tools?.includes('files') ? fileTools.map(t => t.def) : []), ...(s.tools?.includes('local') ? localTools.map(t => t.def) : [])];
 
 // Ranged reads: how the two reading tools are described to a session whose strategy has `reads: 'ranged'`
 // (strategies.js). A range that is asked for comes back whole up to READ_MAX, and output_read takes a line range.

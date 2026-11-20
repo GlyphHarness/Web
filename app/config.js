@@ -40,9 +40,19 @@ export const FIELDS = {
   machineCpu: { check: v => Number.isInteger(v) && v >= 2 && v <= 1024, hint: 'CPU shares per session job, 2 to 1024; 1024 = a normal share' },
   shellOn: { check: v => v === 'machine' || /^host:[\w-]{1,32}$/.test(v), hint: 'where the shell tool runs: machine (the in-page Linux machine) or host:NAME (an --exec target of the local bridge)' },
   vmTmux: { check: v => typeof v === 'boolean', hint: 'true/false: the shell tool\'s commands run in one lasting tmux session per session (the "agent pty"), in the in-page machine or on the host' },
+  hostFiles: { check: v => typeof v === 'boolean', hint: 'true/false: a session whose shell runs on a host also gets file_read, file_edit and file_write there' },
+  toolRounds: { check: v => Number.isInteger(v) && v >= 1 && v <= 100, hint: 'tool rounds in one turn before it stops, 1 to 100 (default 8)' },
   newProfile: { check: v => typeof v === 'string', hint: 'a profile name' },
   metricsLayout: { check: v => validLayout(v).ok, hint: 'a metrics layout: {slots: {slot: [{id}]}} (docs/METRICS-PANEL.md)' },
 };
+// Settings typed as text (the scope grid, a profile card) that are not strings: the text read as the field's type,
+// undefined when it is not a valid value of the field.
+export const TYPED = new Set(['hostFiles', 'toolRounds']);
+export function fromText(k, raw) {
+  const t = String(raw ?? '').trim();
+  const v = k === 'hostFiles' ? (/^(true|on|yes|1)$/i.test(t) ? true : /^(false|off|no|0)$/i.test(t) ? false : undefined) : k === 'toolRounds' ? (/^\d+$/.test(t) ? Number(t) : undefined) : t;
+  return v !== undefined && FIELDS[k]?.check(v, {}) ? v : undefined;
+}
 const SECRET = /token|key|pem|secret|passw|credential|auth|bearer/i;
 // first and last four of a credential, never the whole of it
 export const mask = v => { v = String(v ?? ''); return !v ? '(none)' : v.length > 12 ? v.slice(0, 4) + '…' + v.slice(-4) + ' (' + v.length + ' chars)' : '•'.repeat(v.length); };

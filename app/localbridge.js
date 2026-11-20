@@ -90,12 +90,69 @@ export function hostShell(b, name) {
     async run(cmd, timeoutS = 120) {
       let r;
       try { r = await b.exec(name, { cmd: String(cmd ?? '') || ':', timeout: timeoutS }); }
-      catch (e) {
-        const said = e?.kind === 'busy' ? 'the machine is busy with other commands; try again shortly' : e?.kind === 'launcher' ? 'the machine could not start the command' : 'the machine is not available';
-        throw Object.assign(new Error(said), { detail: `Shell on host "${name}": ${explain(e, b.url)}`, kind: e?.kind || 'unreachable' });
-      }
+      catch (e) { throw unavailable(e, b, name, 'Shell'); }
       const out = r.out + (r.truncated ? `\n[output cut at ${r.out.length} characters]` : '');
       return { out, code: r.timedOut ? null : r.code, ...(r.timedOut ? { timedOut: true } : {}) };
+    },
+  };
+}
+// a failure to reach the host: plain words for the model, the reason for the person on .detail
+function unavailable(e, b, name, what) {
+  const said = e?.kind === 'busy' ? 'the machine is busy with other commands; try again shortly' : e?.kind === 'launcher' ? 'the machine could not start the command' : 'the machine is not available';
+  return Object.assign(new Error(said), { detail: `${what} on host "${name}": ${explain(e, b.url)}`, kind: e?.kind || 'unreachable' });
+}
+
+// The file tools' runner on an exec target (tools.js fileTools, setting hostFiles):
+//   read(path) -> {bytes: Uint8Array}        write(path, bytes, {expect}) -> {size}   (expect: sha256 hex the file must still have)
+// Through the same route as the shell (POST /exec/NAME), so the bridge's token, limits and folder rule hold and nothing is
+// added to the bridge. bash in the target does the work with coreutils (realpath, stat, base64, sha256sum); the bytes
+// travel as base64 both ways, so no terminal or decoder touches them. A path is relative to the target's folder or
+// absolute inside it, and must stay inside it once links are resolved. The script's first line names a one-time
+// marker; its status line is "<marker> <word> ...", so nothing a login shell prints can be mistaken for it.
+export const FILE_MAX = 2e6; // bytes of one file read or written
+const FILE_SECONDS = 60;
+const toB64 = bytes => { let s = ''; for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000)); return btoa(s); };
+const fromB64 = t => { const s = atob(t), out = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) out[i] = s.charCodeAt(i); return out; };
+const FILE_SAID = {
+  bad: p => `${p}: not a usable path`, outside: p => `${p}: outside the folder commands start in`, missing: p => `${p}: no such file`,
+  notfile: p => `${p}: not a regular file`, unreadable: p => `${p}: not readable`, changed: p => `${p}: changed since it was read; nothing was written`,
+  nodir: p => `${p}: its folder could not be made`, big: (p, n) => `${p}: ${n} bytes; this tool reads and writes files up to ${FILE_MAX} bytes (use the shell for larger ones)`,
+};
+export function hostFiles(b, name) {
+  const mark = () => 'F' + Array.from(crypto.getRandomValues(new Uint8Array(9)), x => x.toString(16).padStart(2, '0')).join('');
+  const where = (M, p) => `M=${M}\nP=$(printf %s '${toB64(new TextEncoder().encode(p))}' | base64 -d) || { echo "$M bad"; exit 0; }\nR=$(pwd -P)\ncase "$P" in /*) A=$P;; *) A=$R/$P;; esac\nF=$(realpath -m -- "$A" 2>/dev/null) || { echo "$M bad"; exit 0; }\ncase "$F" in "$R"|"$R"/*) ;; *) echo "$M outside"; exit 0;; esac\n`;
+  const call = async (p, script) => {
+    p = String(p ?? '');
+    if (!p || p.length > 1024 || /[\0\r\n]/.test(p)) throw new Error('path is the file\'s path: one line, relative to the folder commands start in or absolute inside it');
+    let r;
+    try { r = await b.exec(name, { cmd: script, timeout: FILE_SECONDS }); }
+    catch (e) { throw unavailable(e, b, name, 'Files'); }
+    return r;
+  };
+  // -> {word, args, before, after}: the status line and what came before it (an error the target printed) and after it (data)
+  const status = (M, out, p) => {
+    const ls = String(out).split('\n'), i = ls.findIndex(l => l.startsWith(M + ' '));
+    if (i < 0) throw new Error(`${p}: the file operation did not complete${ls.filter(Boolean).length ? ' (' + ls.filter(Boolean).at(-1).slice(0, 200) + ')' : ''}`);
+    const [word, ...args] = ls[i].slice(M.length + 1).trim().split(' ');
+    if (word !== 'ok') { const f = FILE_SAID[word]; throw new Error(f ? f(p, args[0]) : `${p}: ${word}${ls.slice(0, i).filter(Boolean).length ? ' (' + ls.slice(0, i).filter(Boolean).at(-1).slice(0, 200) + ')' : ''}`); }
+    return { args, after: ls.slice(i + 1) };
+  };
+  return {
+    async read(p) {
+      const M = mark();
+      const r = await call(p, where(M, String(p ?? '')) + `[ -e "$F" ] || { echo "$M missing"; exit 0; }\n[ -f "$F" ] || { echo "$M notfile"; exit 0; }\n[ -r "$F" ] || { echo "$M unreadable"; exit 0; }\nS=$(stat -c %s -- "$F") || { echo "$M unreadable"; exit 0; }\n[ "$S" -le ${FILE_MAX} ] || { echo "$M big $S"; exit 0; }\necho "$M ok $S"\nbase64 -w0 -- "$F"; echo\n`);
+      const { args, after } = status(M, r.out, p), size = Number(args[0]);
+      const bytes = fromB64((after[0] || '').trim());
+      if (bytes.length !== size) throw new Error(`${p}: changed while it was read; read it again`);
+      return { bytes };
+    },
+    async write(p, bytes, { expect } = {}) {
+      if (bytes.length > FILE_MAX) throw new Error(FILE_SAID.big(p, bytes.length));
+      const M = mark(), x = /^[0-9a-f]{64}$/.test(expect || '') ? expect : '';
+      const data = toB64(bytes).replace(/.{76}/g, '$&\n');
+      const r = await call(p, where(M, String(p ?? '')) + `[ -d "$F" ] && { echo "$M notfile"; exit 0; }\nX='${x}'\nif [ -n "$X" ]; then H=$(sha256sum -- "$F" 2>/dev/null | cut -c1-64); [ "$H" = "$X" ] || { echo "$M changed"; exit 0; }; fi\nmkdir -p -- "$(dirname -- "$F")" 2>/dev/null || { echo "$M nodir"; exit 0; }\nif base64 -d > "$F" <<'@@B64'\n${data}\n@@B64\nthen echo "$M ok $(stat -c %s -- "$F")"; else echo "$M failed"; fi\n`);
+      const { args } = status(M, r.out, p);
+      return { size: Number(args[0]) };
     },
   };
 }

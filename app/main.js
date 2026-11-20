@@ -247,7 +247,8 @@ const provider = () => providers[state.meta.settings.provider] || providers.open
 const profiles = () => (state.meta.profiles ??= []);
 const eff = s => prof.effective(profiles(), s?.profile, state.meta.settings, s?.over);
 const cfg = s => eff(s).settings;
-const toolsFor = s => { const e = eff(s), c = e.caps; const sp = strategies.spec(e.settings.strategy); return defsAs(defsFor(s), sp.reads, sp.wording).filter(d => prof.allowedTool(d.function.name, c)); };
+// (a session whose shell runs on a host gets the file tools there too while its "host files" setting is on: hostFilesOn)
+const toolsFor = s => { const e = eff(s), c = e.caps; const sp = strategies.spec(e.settings.strategy); return defsAs(defsFor(hostFilesOn(s) ? { ...s, tools: [...s.tools, 'files'] } : s), sp.reads, sp.wording).filter(d => prof.allowedTool(d.function.name, c)); };
 
 // ---------- message rendering ----------
 
@@ -740,7 +741,7 @@ function inlineEdit(head, edit, input, { label, show = v => v, save }) {
 // ---------- this session's scope, attribute by attribute ----------
 
 const SCOPE_ROWS = [...prof.SETTING_KEYS.map(k => ({ k, kind: 'set' })), ...prof.CAP_KEYS.map(k => ({ k, kind: 'cap' }))];
-const SCOPE_LABEL = { shellOn: 'shell runs on (machine | host:NAME)', watchModel: 'watcher model', strategy: 'strategy', machineGh: 'machine GitHub auth', machineUser: 'machine user', machineQuota: 'machine quota (MB)', machineCpu: 'machine CPU shares', logRepo: 'log repo', logTranscripts: 'transcripts', model: 'model', helper: 'helper model', policyModel: 'policy model', pace: 'pace', branchBudget: 'branch budget', run_js: 'run code', fanout: 'fan out', ask: 'ask and values', vm: 'machine', repo: 'repositories' };
+const SCOPE_LABEL = { shellOn: 'shell runs on (machine | host:NAME)', hostFiles: 'file tools on the host (true | false)', toolRounds: 'tool rounds per turn (default 8)',watchModel: 'watcher model', strategy: 'strategy', machineGh: 'machine GitHub auth', machineUser: 'machine user', machineQuota: 'machine quota (MB)', machineCpu: 'machine CPU shares', logRepo: 'log repo', logTranscripts: 'transcripts', model: 'model', helper: 'helper model', policyModel: 'policy model', pace: 'pace', branchBudget: 'branch budget', run_js: 'run code', fanout: 'fan out', ask: 'ask and values', vm: 'machine', repo: 'repositories' };
 // levels from this session up: session, each profile leaf to root, defaults
 function scopeLevels(s) {
   const ch = eff(s).chain;
@@ -812,7 +813,9 @@ function scopeSet(el) {
   const level = tr.querySelector('[data-sl]').value, raw = tr.querySelector('[data-sv]').value.trim();
   const v = row.kind === 'cap' ? (raw === '' ? null : k === 'repo' ? raw : raw === '1') : raw === '' ? null : k === 'branchBudget' ? Number(raw) || null : k === 'logTranscripts' ? raw === 'true' : raw;
   if (k === 'logRepo' && v && !/^[\w.-]+\/[\w.-]+$/.test(v)) return modal({ title: 'Not changed', body: 'log repo is owner/name.' });
-  const err = setAt(s, level, k, v, row.kind);
+  // settings that are not text (config.js TYPED): read as their type and checked like Paste config
+  if (v != null && config.TYPED.has(k) && config.fromText(k, raw) === undefined) return modal({ title: 'Not changed', body: `${SCOPE_LABEL[k] || k}: ${config.FIELDS[k].hint}.` });
+  const err = setAt(s, level, k, v != null && config.TYPED.has(k) ? config.fromText(k, raw) : v, row.kind);
   if (!err) openEdit = null;
   if (err) return modal({ title: 'Not changed', body: `${SCOPE_LABEL[k]}: ${err}.` });
   if (level === 'default') showSettings();
@@ -1221,6 +1224,7 @@ async function turnsInner(s, depth, onFirst) {
     onPatterns: renderPatterns,
     helper: set.helper ? (want, text) => helper(s, want, text) : null,
     vm: s.tools?.includes('vm') ? shellRunner(s) : null,
+    files: hostFilesOn(s) ? hostFileRunner(s) : null, // file_read, file_edit, file_write on the shell's host
     local: s.tools?.includes('local') ? localClient() : null,
     // the file explorer's baseline is the in-browser machine's; if that machine cannot run, the shell call itself says so (plainly)
     fsMark: () => hostOf(s) ? null : fsMark(s).catch(() => { fsState.delete(s.id); }),
@@ -1235,7 +1239,9 @@ async function turnsInner(s, depth, onFirst) {
     runtime: (id, what) => smell(s, { kind: 'policy-runtime', tool: 'shell', policy: id, detail: what.slice(0, 200), rule: policyList().find(p => p.name === id)?.rule }),
     git: s.tools?.includes('repo') ? gitClient({ token: gh.token, trace, get, confirm: what => approve(s, what), readOnly: () => [state.meta.settings.logRepo].filter(Boolean), scope: repo => eff(s).repoAllowed(repo) ? null : `${repo} is not available in this session.` }) : null,
   };
-  for (let step = 0; step < MAX_STEPS; step++) {
+  // tool rounds per turn: the session's toolRounds setting (1..100), else MAX_STEPS; a fan_out branch keeps MAX_STEPS
+  const rounds = !depth && Number.isInteger(set.toolRounds) && set.toolRounds >= 1 && set.toolRounds <= 100 ? set.toolRounds : MAX_STEPS;
+  for (let step = 0; step < rounds; step++) {
     const body = buildRequest(s, set.model, toolsFor(s));
     // Cache affinity: ask OpenRouter for the upstream that served this session last, so
     // its prefix cache is warm. Fallbacks stay allowed. Outside the messages, so the prefix is unchanged.
@@ -1381,11 +1387,11 @@ async function turnsInner(s, depth, onFirst) {
       push(s, m);
     }
   }
-  notice(s, `Stopped after ${MAX_STEPS} tool rounds.`);
+  notice(s, `Stopped after ${rounds} tool rounds.`);
   return 'limit';
 }
 
-const tools_known = name => defsFor({ tools: ['ask', 'repo', 'vm', 'local'] }).some(d => d.function.name === name);
+const tools_known = name => defsFor({ tools: ['ask', 'repo', 'vm', 'files', 'local'] }).some(d => d.function.name === name);
 
 // ---------- scoped values (values.js) ----------
 
@@ -2227,7 +2233,7 @@ function bind() {
     else if (f === 'parent') p.parent = v || undefined;
     else if (f === 'color') p.color = v;
     else if (f === 'repos') p.repos = v ? v.split(/[\s,]+/).filter(Boolean) : undefined;
-    else if (f.startsWith('set.')) { const k = f.slice(4); p.settings ??= {}; if (v === '') delete p.settings[k]; else p.settings[k] = k === 'branchBudget' ? Number(v) || undefined : k === 'logTranscripts' ? !/^(false|off|no|0)$/i.test(v) : v; }
+    else if (f.startsWith('set.')) { const k = f.slice(4); p.settings ??= {}; if (v === '') delete p.settings[k]; else p.settings[k] = k === 'branchBudget' ? Number(v) || undefined : k === 'logTranscripts' ? !/^(false|off|no|0)$/i.test(v) : config.TYPED.has(k) ? config.fromText(k, v) : v; if (p.settings[k] === undefined) delete p.settings[k]; }
     else if (f.startsWith('lock.')) { const k = f.slice(5); p.locks = (p.locks || []).filter(x => x !== k); if (v) p.locks.push(k); }
     else if (f.startsWith('cap.')) { const k = f.slice(4); p.caps ??= {}; if (v === '') delete p.caps[k]; else p.caps[k] = k === 'repo' ? v : v === '1'; }
     saveMeta();
@@ -2244,7 +2250,7 @@ function bind() {
   $('#pace').value = pace(cur());
   $('#pace').addEventListener('change', e => { if (e.target.value === 'run') letLoose(); else { state.meta.settings.pace = e.target.value; saveMeta(); } });
   $('#polmodel').value = state.meta.settings.policyModel || '';
-  $('#toolnames').replaceChildren(...['*', ...defsFor({ tools: ['repo', 'vm', 'local'] }).map(d => d.function.name)].map(n => h('option', { value: n })));
+  $('#toolnames').replaceChildren(...['*', ...defsFor({ tools: ['repo', 'vm', 'files', 'local'] }).map(d => d.function.name)].map(n => h('option', { value: n })));
   renderPolicies();
   $('#policies').addEventListener('change', e => {
     const f = e.target.dataset.pf, card = e.target.closest('[data-pol]');
@@ -2655,6 +2661,19 @@ async function scratchDraft(ask, onStep = () => {}) {
 // (results pass the "down" hooks: known secrets are masked before the model reads them)
 const hostOf = s => /^host:([\w-]{1,32})$/.exec(cfg(s).shellOn || '')?.[1] || '';
 const shellWanted = profile => (vmWanted() && vmReady()) || /^host:/.test(prof.effective(profiles(), profile, state.meta.settings).settings.shellOn || '');
+// host files (setting hostFiles, off unless true): file_read, file_edit and file_write on the host the session's shell runs on
+const hostFilesOn = s => !!(s?.tools?.includes('vm') && hostOf(s) && cfg(s).hostFiles === true);
+// their runner: the session's exec target through the local bridge (localbridge.js hostFiles); a failure to reach it reads as
+// the shell's does and the person gets the reason; what a read shows passes the "down" hooks like the shell's output
+function hostFileRunner(s) {
+  const via = f => async (...a) => {
+    const host = hostOf(s), b = localClient();
+    if (!b) { notice(s, `Files on host "${host}": the local bridge is not set up (Settings: its URL and token).`); throw new Error('the machine is not available'); }
+    try { return await f(lbridge.hostFiles(b, host), ...a); }
+    catch (e) { if (e?.detail) notice(s, e.detail); throw e; }
+  };
+  return { read: via((h, p) => h.read(p)), write: via((h, p, bytes, o) => h.write(p, bytes, o)), view: down };
+}
 function shellRunner(s) {
   const o = shellOpt(s);
   const onMachine = async (cmd, t, opt) => { await syncGhFile(s); return INSTALL_ONLY.test(cmd) ? vm().run(cmd, t, { ...opt, session: s.id }) : state.meta.settings.vmTmux ? agentRun(cmd, t, o) : vm().run(cmd, t, { ...o, ...opt }); };

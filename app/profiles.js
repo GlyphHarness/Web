@@ -15,13 +15,15 @@
 // a repo must be allowed by every profile in the chain that lists repos;
 // policies accumulate, and a lower profile cannot replace an ancestor's policy.
 
-export const SETTING_KEYS = ['model', 'helper', 'policyModel', 'pace', 'branchBudget', 'logRepo', 'logTranscripts', 'machineUser', 'machineQuota', 'machineCpu', 'machineGh', 'strategy', 'watchModel', 'shellOn'];
+export const SETTING_KEYS = ['model', 'helper', 'policyModel', 'pace', 'branchBudget', 'logRepo', 'logTranscripts', 'machineUser', 'machineQuota', 'machineCpu', 'machineGh', 'strategy', 'watchModel', 'shellOn', 'hostFiles', 'toolRounds'];
 // shellOn: where the session's shell tool runs: 'machine' (the in-browser machine; also when absent) or 'host:NAME'
 // (an exec target of the local bridge). Harness data: the tool the model is sent is the same bytes either way.
+// hostFiles: true adds file_read, file_edit and file_write (tools.js group 'files') to a session whose shell runs on a
+// host; absent or false, nothing changes. toolRounds: tool rounds per turn before it stops (absent = 8, main.js MAX_STEPS).
 // Who an attribute is for. harness: configuration the harness uses on the session's
 // behalf; it never appears in anything the model reads. tools: shapes the model's
 // tool list (the model sees the tools, not the setting).
-export const AUDIENCE = { model: 'harness', helper: 'harness', policyModel: 'harness', pace: 'harness', branchBudget: 'harness', logRepo: 'harness', logTranscripts: 'harness', machineUser: 'harness', machineQuota: 'harness', machineCpu: 'harness', machineGh: 'harness', strategy: 'harness', watchModel: 'harness', shellOn: 'harness', run_js: 'tools', fanout: 'tools', ask: 'tools', vm: 'tools', repo: 'tools' };
+export const AUDIENCE = { model: 'harness', helper: 'harness', policyModel: 'harness', pace: 'harness', branchBudget: 'harness', logRepo: 'harness', logTranscripts: 'harness', machineUser: 'harness', machineQuota: 'harness', machineCpu: 'harness', machineGh: 'harness', strategy: 'harness', watchModel: 'harness', shellOn: 'harness', toolRounds: 'harness', hostFiles: 'tools', run_js: 'tools', fanout: 'tools', ask: 'tools', vm: 'tools', repo: 'tools' };
 export const CAP_KEYS = ['run_js', 'fanout', 'ask', 'vm', 'repo', 'local'];
 const REPO_RANK = { none: 0, read: 1, write: 2 };
 const ALL = { run_js: true, fanout: true, ask: true, vm: true, repo: 'write', local: true };
@@ -81,7 +83,7 @@ export function allowedTool(name, caps) {
   if (name === 'run_js') return caps.run_js;
   if (name === 'fan_out' || name === 'branch_read') return caps.fanout;
   if (name === 'ask' || /^value_/.test(name)) return caps.ask;
-  if (name === 'shell') return caps.vm;
+  if (name === 'shell' || /^file_/.test(name)) return caps.vm;
   if (/^local_/.test(name)) return caps.local;
   if (name === 'repo_read') return REPO_RANK[caps.repo] >= 1;
   if (/^repo_/.test(name)) return REPO_RANK[caps.repo] >= 2;
