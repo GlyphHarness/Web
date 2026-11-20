@@ -1286,6 +1286,61 @@ check('layout: the page itself does not scroll',await page.evaluate(() => docume
   check('held note: a call whose arguments are not a handle carries no state', await heldCard().getAttribute('data-ref') === null);
   await release();
   await paste({ settings: { pace: 'run' } });
+  // ---- the held mark is written by the page (concept eilzry, term "held mark"; seam: app/main.js turnsInner / hold) ----
+  // spec (red): the tool message of a call that waited at a hold, released or skipped, carries x.held === true; a call that never waited carries no
+  // held key at all (not false): pace 'run', a nameless call, a call out of the session's scope. The mark is metadata (x): what the model is sent
+  // does not change, and it is kept when the session is saved and loaded again. The profile of the session classes the call held.
+  const skip = async () => { await page.click(HELD + ' [data-hold=skip]'); await page.waitForSelector('#app:not([data-busy])', { state: 'attached', timeout: 20000 }); };
+  const toolMsgs = async () => (await sess()).messages.filter(m => m.role === 'tool');
+  const hasKey = m => !!m.x && 'held' in m.x;
+  const profHeld = () => page.evaluate(async () => { const id = sessionStorage.getItem('wh:tab-active'); return (await import('./app/profile.js')).profile(JSON.parse(localStorage['wh:s:' + id])).calls?.byResultClass?.held ?? 0; });
+  const heldCards = () => visible().locator('.msg[data-role=held]').count();
+  // no hold: pace 'run'
+  await page.click('[data-act=new]');
+  await paste({ settings: { pace: 'run' } });
+  await say('please use a tool');
+  const tmRun = await toolMsgs(), viewNoHold = await modelView();
+  check('held mark: a call run at pace run carries no held key at all', tmRun.length === 1 && tmRun.every(m => m.x && !hasKey(m)), JSON.stringify(tmRun.map(m => m.x)));
+  check('held mark: the profile of a session that never held counts no held call', await profHeld() === 0);
+  // held, then released
+  await page.click('[data-act=new]');
+  await paste({ settings: { pace: 'tools' } });
+  await holdSay('please use a tool');
+  await release();
+  const tmRel = await toolMsgs(), viewRel = await modelView();
+  check('held mark: a call that waited and was released has x.held === true on its tool message', tmRel.length === 1 && tmRel[0].x?.held === true && tmRel[0].x.ok === true, JSON.stringify(tmRel.map(m => m.x)));
+  check('held mark: the profile classes that call held (count 1)', await profHeld() === 1);
+  check('held mark: what the model is sent is the same with the hold as without, and holds no held mark', viewRel === viewNoHold && !/held/.test(viewRel), viewRel);
+  // held, then skipped
+  await holdSay('please use a tool');
+  await skip();
+  const tmSkip = await toolMsgs(), viewSkip = await modelView();
+  check('held mark: a call that waited and was skipped is held as well (x.held === true)', tmSkip.length === 2 && tmSkip[1].x?.held === true, JSON.stringify(tmSkip.map(m => m.x)));
+  check('held mark: a skipped call reads as not run, and the model is sent just that', tmSkip[1]?.content === 'Not run: skipped by the user.' && viewSkip.includes('Not run: skipped by the user.') && !/held/.test(viewSkip), String(tmSkip[1]?.content));
+  check('held mark: the profile counts both held calls (released and skipped)', await profHeld() === 2);
+  // saved and loaded again: the mark is kept, and a call run afterwards without a hold carries none
+  await page.reload();
+  await page.waitForSelector('#app #composer', { state: 'attached' });
+  await page.waitForTimeout(500);
+  const tmBack = await toolMsgs();
+  check('held mark: a saved session loaded again keeps x.held on both calls', tmBack.length === 2 && tmBack.every(m => m.x?.held === true), JSON.stringify(tmBack.map(m => m.x)));
+  check('held mark: the profile of the loaded session still counts them', await profHeld() === 2);
+  await paste({ settings: { pace: 'run' } });
+  await say('please use a tool');
+  const tmAfter = await toolMsgs();
+  check('held mark: after a reload the earlier marks stay and a call run without a hold carries none', tmAfter.length === 3 && tmAfter[0].x?.held === true && tmAfter[1].x?.held === true && !hasKey(tmAfter[2]) && await profHeld() === 2, JSON.stringify(tmAfter.map(m => m.x)));
+  // calls refused before the hold never wait, at pace tools too
+  await page.click('[data-act=new]');
+  await paste({ settings: { pace: 'tools' } });
+  await say('broken call');
+  const tmNameless = await toolMsgs();
+  check('held mark: a nameless call is refused before the hold: no hold card, no held key', tmNameless.length === 1 && /^Not run: the call arrived without a tool name/.test(tmNameless[0].content) && !hasKey(tmNameless[0]) && await heldCards() === 0, JSON.stringify(tmNameless.map(m => [m.content.slice(0, 40), m.x])));
+  await page.click('[data-act=new]');
+  await page.evaluate(() => { const tr = document.querySelector('#scope .scope-edit[data-row="run_js"]'); tr.querySelector('[data-sv]').value = '0'; tr.querySelector('[data-act="scope-set"]').click(); });
+  await say('fn tool');
+  const tmScope = await toolMsgs();
+  check('held mark: a call out of the session\'s scope is refused before the hold: no hold card, no held key, profile counts none', tmScope.length === 1 && /^Not run: run_js is not available in this session\.$/.test(tmScope[0].content) && !hasKey(tmScope[0]) && await heldCards() === 0 && await profHeld() === 0, JSON.stringify(tmScope.map(m => [m.content.slice(0, 40), m.x])));
+  await paste({ settings: { pace: 'run' } });
   await paste({ settings: { hostFiles: false } });
   // the round limit: a setting; the turn stops after that many tool rounds and the stop is recorded as before
   await paste({ settings: { toolRounds: 3 } });
