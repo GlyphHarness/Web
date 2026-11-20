@@ -928,7 +928,7 @@ await say('hello reasoning');
     JSON.stringify(cap?.error || cap?.symbol_entries?.[0]));
   const e0 = current('app/strategies.js'), f0 = inv.features.find(f => f.id === e0?.captures?.[0]?.feature_id);
   check('inventory: entries, captures and the capture feature carry their record fields',
-    keys(e0) === 'captured_at,captures,domain,id,kind,label,metadata,source' && e0.domain === 'js' && keys(e0.metadata) === 'hash,mtime,path,size' && e0.metadata.path === 'app/strategies.js' && e0.metadata.size === disk('app/strategies.js').length && keys(e0.captures[0]) === 'feature_id,payload_handle' && keys(f0) === 'applies_to,cost,extracts,how,id' && HOW.includes(f0.how) && new Set(inv.entries.map(e => e.id)).size === files.length,
+    keys(e0) === 'captured_at,captures,domain,id,kind,label,metadata,source' && e0.domain === 'js' && keys(e0.metadata) === 'checksum,hash,mtime,path,size' && e0.metadata.path === 'app/strategies.js' && e0.metadata.size === disk('app/strategies.js').length && keys(e0.captures[0]) === 'feature_id,payload_handle' && keys(f0) === 'applies_to,cost,extracts,how,id' && HOW.includes(f0.how) && new Set(inv.entries.map(e => e.id)).size === files.length,
     JSON.stringify([e0, f0]));
   check('inventory: captures are made by code, none by a model',
     inv.entries.length === files.length && inv.entries.every(e => /^provider:/.test(e.source) && e.captures.length >= 1 && e.captures.every(c => HOW.includes(inv.features.find(f => f.id === c.feature_id)?.how) && !('model' in c))) && outside === 0,
