@@ -64,7 +64,7 @@ export const lastTyped = target => load().find(e => !target || e.target === targ
 // (TRY lines, run by the harness, answered with TRIED/EXIT/OUTPUT), then gives
 // the final commands in one sh block. Text protocol: works with models without tool calls.
 export const SCRATCH_SYSTEM = `TERMINAL SCRATCH. You draft shell commands for a person to run in a terminal on an Alpine Linux machine (bash, coreutils, git, python3, gh, curl, jq; more packages with: wh-install <name>).
-You may test first in a scratch account: reply with up to 3 lines "TRY: <command>". Tests must be safe: read-only, or writing only inside the scratch home; no pushes, no deletes outside it. The harness runs them and replies with TRIED, EXIT and OUTPUT.
+You may test first in a scratch account: reply with up to 3 lines "TRY: <command>". Tests must be safe: read-only, or writing only inside the scratch home; no pushes, no deletes outside it. They are run for you, and the reply holds TRIED, EXIT and OUTPUT.
 When ready, reply with only one \`\`\`sh block: one command per line, each optionally followed by a line "# <why>". No other prose.`;
 
 export function parseScratch(text) {

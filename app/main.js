@@ -31,6 +31,7 @@ import * as metricsPanel from './metrics.js';
 import * as panels from './panels.js';
 import * as prof from './profiles.js';
 import * as lbridge from './localbridge.js';
+import { neutral } from './neutral.js';
 import * as handoff from './handoff.js';
 import * as vals from './values.js';
 import * as bridge from './bridge.js';
@@ -735,7 +736,7 @@ function inlineEdit(head, edit, input, { label, show = v => v, save }) {
 // ---------- this session's scope, attribute by attribute ----------
 
 const SCOPE_ROWS = [...prof.SETTING_KEYS.map(k => ({ k, kind: 'set' })), ...prof.CAP_KEYS.map(k => ({ k, kind: 'cap' }))];
-const SCOPE_LABEL = { watchModel: 'watcher model', strategy: 'strategy', machineGh: 'machine GitHub auth', machineUser: 'machine user', machineQuota: 'machine quota (MB)', machineCpu: 'machine CPU shares', logRepo: 'log repo', logTranscripts: 'transcripts', model: 'model', helper: 'helper model', policyModel: 'policy model', pace: 'pace', branchBudget: 'branch budget', run_js: 'run code', fanout: 'fan out', ask: 'ask and values', vm: 'machine', repo: 'repositories' };
+const SCOPE_LABEL = { shellOn: 'shell runs on (machine | host:NAME)', watchModel: 'watcher model', strategy: 'strategy', machineGh: 'machine GitHub auth', machineUser: 'machine user', machineQuota: 'machine quota (MB)', machineCpu: 'machine CPU shares', logRepo: 'log repo', logTranscripts: 'transcripts', model: 'model', helper: 'helper model', policyModel: 'policy model', pace: 'pace', branchBudget: 'branch budget', run_js: 'run code', fanout: 'fan out', ask: 'ask and values', vm: 'machine', repo: 'repositories' };
 // levels from this session up: session, each profile leaf to root, defaults
 function scopeLevels(s) {
   const ch = eff(s).chain;
@@ -1210,7 +1211,8 @@ async function turnsInner(s, depth, onFirst) {
     helper: set.helper ? (want, text) => helper(s, want, text) : null,
     vm: s.tools?.includes('vm') ? shellRunner(s) : null,
     local: s.tools?.includes('local') ? localClient() : null,
-    fsMark: () => fsMark(s),
+    // the file explorer's baseline is the in-browser machine's; if that machine cannot run, the shell call itself says so (plainly)
+    fsMark: () => hostOf(s) ? null : fsMark(s).catch(() => { fsState.delete(s.id); }),
     // handles (handles.js): this session is the reader; which ids it resolved, with a hash of what came back
     reader: s.id,
     onResolve: (id, h) => { (s.resolved ??= []).push({ t: Date.now(), id, h, at: s.messages.length }); saveSession(s); },
@@ -1720,7 +1722,7 @@ async function aux(s, model, system, content, kind, maxOut) {
 // Watcher: a small (free or cheap) model checks each tool call as it completes and
 // raises a flag only when something needs attention; flags are smells too, so they
 // are tracked over time and reach whoever oversees the session (wh flags, the log repo).
-const WATCH_SYSTEM = 'WATCH. You check one tool call made by an agent, for the harness that runs it. Reply exactly "ok", or "FLAG: <one short line>" when the call failed, repeated earlier work, wasted effort, broke a rule, or its result needs a person. Nothing else.';
+const WATCH_SYSTEM = 'WATCH. You check one tool call made by an agent. Reply exactly "ok", or "FLAG: <one short line>" when the call failed, repeated earlier work, wasted effort, broke a rule, or its result needs a person. Nothing else.';
 // Each call is assessed once: s.watched[callId] = 'ok' | 'flag' (or 'pending' while it runs).
 function watchCall(s, tc, content) {
   const m = cfg(s).watchModel, key = tc.id || '';
@@ -1951,7 +1953,7 @@ const actions = {
   update() { updateAll(); },
   takeover() { const s = cur(); if (s) claimSession(s.id, true); },
   trace() { download('webharness-' + new Date().toISOString().replace(/[:.]/g, '-') + '.trace', { kind: 'webharness.trace', version: 1, build: VERSION, exchanges: trace, trail: pat.trail(), smells: smells.all(), proposals: smells.proposals() }); },
-  new() { logSync('session start'); const np = profiles().some(p => p.id === state.meta.settings.newProfile) ? state.meta.settings.newProfile : undefined; const s = newSession({ keep: true, core: 3, edge: 'marks', ...(np ? { profile: np } : {}), ...(() => { const t = ['ask', 'values', ...(gh.mode() ? ['repo'] : []), ...(vmWanted() && vmReady() ? ['vm'] : [])]; return t.length ? { tools: t } : {}; })() }); redrawSessions(); activate(s.id); $('#input').focus(); },
+  new() { logSync('session start'); const np = profiles().some(p => p.id === state.meta.settings.newProfile) ? state.meta.settings.newProfile : undefined; const s = newSession({ keep: true, core: 3, edge: 'marks', ...(np ? { profile: np } : {}), ...(() => { const t = ['ask', 'values', ...(gh.mode() ? ['repo'] : []), ...(shellWanted(np) ? ['vm'] : [])]; return t.length ? { tools: t } : {}; })() }); redrawSessions(); activate(s.id); $('#input').focus(); },
   import() { $('#file').click(); },
   async export() {
     if (!cur()) return;
@@ -2556,19 +2558,24 @@ function ensureTmux(o = {}) {
   })().catch(e => { tmuxReady.delete(k); throw e; }));
   return tmuxReady.get(k);
 }
-async function agentRun(cmd, timeoutS, o = {}) {
-  await ensureTmux(o);
-  const id = Math.random().toString(36).slice(2, 10), d = '$HOME/.wh';
-  const script = `mkdir -p ${d}; cat > ${d}/c-${id}.sh <<'WH_EOF_${id}'\n${cmd}\nWH_EOF_${id}\n: > ${d}/o-${id}\n`
-    + `tmux pipe-pane -t ${TMUX} -o "cat >> ${d}/o-${id}"\n`
-    + `tmux send-keys -t ${TMUX} "bash ${d}/c-${id}.sh; echo \\$? > ${d}/r-${id}; tmux wait-for -S d-${id}" Enter\n`
-    + `timeout ${timeoutS} tmux wait-for d-${id} || { tmux send-keys -t ${TMUX} C-c; sleep 1; echo "[timed out after ${timeoutS}s; interrupted]" >> ${d}/o-${id}; }\n`
-    + `tmux pipe-pane -t ${TMUX}\n`
+// pty: where the tmux session lives. Default: the in-browser machine (session "agent" of the session's user, made
+// by ensureTmux). A host (hostPty) names its own session, folder and runner, and makes the session in the same script.
+async function agentRun(cmd, timeoutS, o = {}, pty = null) {
+  if (!pty) await ensureTmux(o);
+  const id = Math.random().toString(36).slice(2, 10), d = pty?.dir || '$HOME/.wh', T = pty?.name || TMUX, EOF = `EOF_${id}`;
+  const script = (pty ? `command -v tmux >/dev/null || { echo "tmux is not installed"; exit 127; }\ntmux has-session -t ${T} 2>/dev/null || tmux new-session -d -s ${T} -x 160 -y 48 -c "$PWD"\n` : '')
+    + `mkdir -p ${d}; cat > ${d}/c-${id}.sh <<'${pty ? EOF : 'WH_' + EOF}'\n${cmd}\n${pty ? EOF : 'WH_' + EOF}\n: > ${d}/o-${id}\n`
+    + `tmux pipe-pane -t ${T} -o "cat >> ${d}/o-${id}"\n`
+    + `tmux send-keys -t ${T} "bash ${d}/c-${id}.sh; echo \\$? > ${d}/r-${id}; tmux wait-for -S d-${id}" Enter\n`
+    + `timeout ${timeoutS} tmux wait-for d-${id} || { tmux send-keys -t ${T} C-c; sleep 1; echo "[timed out after ${timeoutS}s; interrupted]" >> ${d}/o-${id}; }\n`
+    + `tmux pipe-pane -t ${T}\n`
     + `sed -e 's/\\x1b\\[[0-9;?]*[ -\\/]*[@-~]//g' -e 's/\\x1b[()][0-9A-B]//g' -e 's/\\r//g' ${d}/o-${id} | grep -v ${shq(`c-${id}.sh`)}\n`
     + `s=$(cat ${d}/r-${id} 2>/dev/null || echo 124); rm -f ${d}/?-${id}*; exit $s`;
-  const r = await vm().run(script, timeoutS + 30, { ...o, display: cmd });
+  const r = await (pty ? pty.run(script, timeoutS + 30) : vm().run(script, timeoutS + 30, { ...o, display: cmd }));
   return { ...r, timedOut: /\[timed out after \d+s; interrupted\]/.test(r.out) || r.timedOut };
 }
+// the agent pty of a session on a host: one tmux session per session tree (the person can attach to it there)
+const hostPty = (s, h) => { let r = s; while (r.parent && state.sessions[r.parent.id]) r = state.sessions[r.parent.id]; return { name: 'agent-' + r.id.slice(-8).toLowerCase().replace(/[^a-z0-9]/g, ''), dir: '$HOME/.cache/agent-pty', run: (script, t) => h.run(script, t) }; };
 // The guest's GitHub credential, added by the page (machineGh "inject", the default):
 // a repository call gets that repository's token (App: minted for it; else the PAT),
 // a call that names no repository (gh api user, gh auth status) gets the PAT.
@@ -2621,12 +2628,29 @@ async function scratchDraft(ask, onStep = () => {}) {
   }
 }
 
-// what the shell tool runs on for a session: its own user, plain or in its agent pty
-// (installing a package is one command of its own, run as root)
+// what the shell tool runs on for a session. "Shell runs on" (shellOn: defaults, a profile or the session) picks
+// the backend: the in-browser machine (its own user there), or a host of the person's through the local bridge
+// (host:NAME, an exec target started with --exec NAME=...). Either one plain or in the session's agent pty (tmux).
+// The model is sent the same tool and reads the same result text whichever runs its command; a failure to run
+// reads plainly and names nothing (neutral.js), and the person gets the reason as a notice.
+// (on the machine, installing a package is one command of its own, run as root)
 // (results pass the "down" hooks: known secrets are masked before the model reads them)
+const hostOf = s => /^host:([\w-]{1,32})$/.exec(cfg(s).shellOn || '')?.[1] || '';
+const shellWanted = profile => (vmWanted() && vmReady()) || /^host:/.test(prof.effective(profiles(), profile, state.meta.settings).settings.shellOn || '');
 function shellRunner(s) {
   const o = shellOpt(s);
-  const go = async (cmd, t, opt) => { await syncGhFile(s); return INSTALL_ONLY.test(cmd) ? vm().run(cmd, t, { ...opt, session: s.id }) : state.meta.settings.vmTmux ? agentRun(cmd, t, o) : vm().run(cmd, t, { ...o, ...opt }); };
+  const onMachine = async (cmd, t, opt) => { await syncGhFile(s); return INSTALL_ONLY.test(cmd) ? vm().run(cmd, t, { ...opt, session: s.id }) : state.meta.settings.vmTmux ? agentRun(cmd, t, o) : vm().run(cmd, t, { ...o, ...opt }); };
+  const onHost = async (host, cmd, t) => {
+    const b = localClient();
+    if (!b) throw Object.assign(new Error('the machine is not available'), { detail: `Shell on host "${host}": the local bridge is not set up (Settings: its URL and token).` });
+    const h = lbridge.hostShell(b, host);
+    return state.meta.settings.vmTmux ? agentRun(cmd, t, o, hostPty(s, h)) : h.run(cmd, t);
+  };
+  const go = (cmd, t, opt) => { const host = hostOf(s); return (host ? onHost(host, cmd, t) : onMachine(cmd, t, opt)).catch(e => {
+    const msg = String(e?.message || e), said = neutral(msg, 'the machine is not available');
+    if (e?.detail || said !== msg) notice(s, e?.detail || 'Shell: ' + msg);
+    throw new Error(said);
+  }); };
   return { run: (cmd, t, opt = {}) => go(cmd, t, opt).then(r => ({ ...r, out: down(r.out || '') })) };
 }
 
@@ -2645,6 +2669,7 @@ async function machineDiag() {
     ['machine started', !!vmInst && /ready/.test(vmInst.status()), vmInst ? vmInst.status() : 'not yet: it starts when a session first uses it, or with "start now"'],
     ['runs in', true, !vmInst || vmInst.role() === 'idle' ? 'whichever tab needs it first (or open a machine tab)' : vmInst.role() === 'host' ? (MACHINE_TAB ? 'this machine tab' : 'this tab: closing or reloading it stops the machine (homes are saved for an update)') : `another tab (${vmInst.host()?.dedicated ? 'the machine tab' : 'tab ' + vmInst.host()?.tab}, build ${vmInst.host()?.version || '?'})`],
     ['this session’s user', true, s ? (userOf(s) ? `${userOf(s)} (home ${homeOf(s)}, quota ${shellOpt(s).quotaMB || 'none'} MB, cpu ${shellOpt(s).cpuShares} shares)` : 'root (/root)') : '-'],
+    ['this session’s shell runs on', true, s && hostOf(s) ? `host "${hostOf(s)}" through the local bridge (${localClient() ? 'URL and token set' : 'not set up: Settings → Local bridge'}); the rows above are about the in-page machine, which this session does not use` : 'the in-page machine (scope: "shell runs on" = host:NAME sends it to a host)'],
   ];
   const box = $('#vmdiag');
   const start = btn('start now', { class: 'primary' });

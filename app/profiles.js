@@ -15,11 +15,13 @@
 // a repo must be allowed by every profile in the chain that lists repos;
 // policies accumulate, and a lower profile cannot replace an ancestor's policy.
 
-export const SETTING_KEYS = ['model', 'helper', 'policyModel', 'pace', 'branchBudget', 'logRepo', 'logTranscripts', 'machineUser', 'machineQuota', 'machineCpu', 'machineGh', 'strategy', 'watchModel'];
+export const SETTING_KEYS = ['model', 'helper', 'policyModel', 'pace', 'branchBudget', 'logRepo', 'logTranscripts', 'machineUser', 'machineQuota', 'machineCpu', 'machineGh', 'strategy', 'watchModel', 'shellOn'];
+// shellOn: where the session's shell tool runs: 'machine' (the in-browser machine; also when absent) or 'host:NAME'
+// (an exec target of the local bridge). Harness data: the tool the model is sent is the same bytes either way.
 // Who an attribute is for. harness: configuration the harness uses on the session's
 // behalf; it never appears in anything the model reads. tools: shapes the model's
 // tool list (the model sees the tools, not the setting).
-export const AUDIENCE = { model: 'harness', helper: 'harness', policyModel: 'harness', pace: 'harness', branchBudget: 'harness', logRepo: 'harness', logTranscripts: 'harness', machineUser: 'harness', machineQuota: 'harness', machineCpu: 'harness', machineGh: 'harness', strategy: 'harness', watchModel: 'harness', run_js: 'tools', fanout: 'tools', ask: 'tools', vm: 'tools', repo: 'tools' };
+export const AUDIENCE = { model: 'harness', helper: 'harness', policyModel: 'harness', pace: 'harness', branchBudget: 'harness', logRepo: 'harness', logTranscripts: 'harness', machineUser: 'harness', machineQuota: 'harness', machineCpu: 'harness', machineGh: 'harness', strategy: 'harness', watchModel: 'harness', shellOn: 'harness', run_js: 'tools', fanout: 'tools', ask: 'tools', vm: 'tools', repo: 'tools' };
 export const CAP_KEYS = ['run_js', 'fanout', 'ask', 'vm', 'repo', 'local'];
 const REPO_RANK = { none: 0, read: 1, write: 2 };
 const ALL = { run_js: true, fanout: true, ask: true, vm: true, repo: 'write', local: true };

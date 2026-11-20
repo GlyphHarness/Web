@@ -77,6 +77,7 @@ const bpSeen = new Set(); // prefixes written at explicit breakpoints
 let mockStalled = false;
 const mock = {
   label: 'Mock (offline)', needsKey: false,
+  requests: [], // the last bodies it was sent, as sent (scripted checks read what a model was given)
   async models() {
     return [
       { id: 'mock-1', name: 'Mock 1', ctx: 32000, tools: true, pricing: { prompt: '0.00000015', completion: '0.0000006', input_cache_read: '0.000000003' } },
@@ -86,6 +87,7 @@ const mock = {
     ];
   },
   async *stream(body, _key, signal) {
+    mock.requests.push(body); if (mock.requests.length > 400) mock.requests.shift();
     // explicit breakpoints (cache_control): entries are written only at marked points, and a
     // request reads the longest written prefix it starts with (the provider looks back from its tail)
     let bp = null;
