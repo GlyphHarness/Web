@@ -466,7 +466,7 @@ check('concerns: approved, it is filed by the model with the evidence', issuesMa
 // called from inside run_js. What the model is sent changes, so it is a new strategy version: sessions under the
 // earlier ones are sent what they were sent before.
 {
-  const L = n => `line ${n} of the long file: ${'x'.repeat(24)}`;
+  const L = n => `line-${n}-of-the-long-file:${'x'.repeat(26)}`; // one word a line: the mock answers with the result, a word every 15 ms
   const longText = Array.from({ length: 400 }, (_, i) => L(i + 1)).join('\n');
   branches.main.files['long.txt'] = longText + '\n';
   const stored = () => page.evaluate(() => JSON.parse(localStorage['wh:s:' + JSON.parse(localStorage['wh:meta']).active]));
