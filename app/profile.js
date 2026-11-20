@@ -14,7 +14,8 @@ const SHORT = 240; // a follow-up shorter than this many characters is short
 const med = a => { if (!a.length) return null; const s = [...a].sort((x, y) => x - y), m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
 const len = c => typeof c === 'string' ? c.length : c == null ? 0 : JSON.stringify(c).length;
 
-// a tool result's outcome class, by its leading words only (the class name is reported, the text is not)
+// a tool result's outcome class, by its leading words only (the class name is reported, the text is not).
+// There is no held class here: that a call was held is metadata the harness recorded (x.held on the tool message, read in profile()), never words in the text.
 export function resultClass(text) {
   const t = String(text ?? '');
   if (/^Not run/.test(t)) return 'not-run';
@@ -22,7 +23,6 @@ export function resultClass(text) {
   if (/find occurs \d+ times|must be once/.test(t)) return 'find-ambiguous';
   if (/^(Tool error|Error:)/.test(t)) return 'error';
   if (/refused|not available|not allowed|denied/i.test(t.slice(0, 200))) return 'refused';
-  if (/HELD|awaiting approval|approval/i.test(t.slice(0, 120))) return 'held';
   if (!t.trim()) return 'empty';
   return 'ok';
 }
@@ -101,7 +101,7 @@ export function profile(s) {
 
   // message shape
   const results = new Map(); // tool_call_id -> {class, chars}
-  for (const m of msgs) if (m.role === 'tool') results.set(m.tool_call_id, { cls: resultClass(m.content), chars: len(m.content) });
+  for (const m of msgs) if (m.role === 'tool') results.set(m.tool_call_id, { cls: m.x?.held === true ? 'held' : resultClass(m.content), chars: len(m.content) });
   const calls = [], byRef = new Map(); // tool + handle -> the summary kept when the arguments were stored
   msgs.forEach((m, i) => (m.tool_calls || []).forEach((t, j) => {
     const args = t.function?.arguments ?? '';
@@ -120,7 +120,7 @@ export function profile(s) {
     else if (cur && m.role === 'assistant') { cur.assistantMsgs++; cur.assistantChars += len(m.content); }
   });
   for (const c of calls) { const t = [...turns].reverse().find(t => t.start <= c.msg); if (t) t.calls.push(c); }
-  // how each turn's run stopped (session.stops, written by the harness: done, limit, failed, stopped, held, budget);
+  // how each turn's run stopped (session.stops, written by the harness: done, limit, failed, stopped, held, budget; held = a model request skipped at a hold);
   // null where nothing was recorded (sessions from before stop reasons, runs cut off by a reload)
   turns.forEach((t, n) => { const end = turns[n + 1]?.start ?? Infinity; t.stop = (s.stops || []).filter(x => x.at > t.start && x.at <= end).at(-1)?.why ?? null; });
   // follow-up turns by what came before them: after a round-limit stop the message continues the run; a short message
