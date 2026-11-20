@@ -77,7 +77,12 @@ function openaiCompatible({ label, base }) {
 export const retry = { delays: [1000, 3000] };
 const RETRY_STATUS = new Set([502, 503, 504, 429]);
 const statusOf = e => e?.status ?? (/^HTTP (\d{3})\b/.exec(e?.message || '')?.[1] | 0);
-const transient = e => RETRY_STATUS.has(statusOf(e)) || (e?.name === 'TypeError' && !statusOf(e));
+// Only the messages a failed fetch produces count as a network error: a TypeError from a bug in the
+// client (e.g. reading a property of undefined) must reach the caller at once, not after two retries.
+const NETWORK_MESSAGES = ['Failed to fetch', 'NetworkError when attempting to fetch resource.', 'Load failed', 'fetch failed', 'network error'];
+const isNetworkError = e => e?.name === 'TypeError' && !statusOf(e)
+  && NETWORK_MESSAGES.some(msg => e.message?.toLowerCase().includes(msg.toLowerCase()));
+const transient = e => RETRY_STATUS.has(statusOf(e)) || isNetworkError(e);
 const abortError = () => new DOMException('Aborted', 'AbortError');
 const wait = (ms, signal) => new Promise((ok, no) => {
   if (signal?.aborted) return no(abortError());
