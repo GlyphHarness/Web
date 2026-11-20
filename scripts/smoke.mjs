@@ -322,7 +322,7 @@ await page.evaluate(sel => {
 await page.hover(rowSel);
 await page.waitForSelector('#uptext:not([hidden])', { timeout: 3000 }).catch(() => {});
 const upw = await page.evaluate(() => ({ ...window.__upw, scrolls: window.__upw.scrolls.slice(0, 12), hidden: document.querySelector('#uptext').hidden, text: document.querySelector('#uptext').textContent.slice(0, 40), modal: !!document.querySelector('.modal') }));
-check('uptext: hovering a truncated label shows its full value above it', await page.evaluate(t => { const u = document.querySelector('#uptext'); return !u.hidden && u.textContent === t; }, longTitle), upw);
+check('uptext: hovering a truncated label shows its full value above it', await page.evaluate(t => { const u = document.querySelector('#uptext'); return !u.hidden && u.textContent === t; }, longTitle), JSON.stringify(upw));
 await page.mouse.move(700, 450);
 await page.waitForTimeout(100);
 check('uptext: it goes away on leave', await page.evaluate(() => document.querySelector('#uptext').hidden));
