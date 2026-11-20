@@ -343,9 +343,12 @@ await attempt('config: the tmux option (vmTmux) is true or false in Paste config
     ['WebHarness', 'GlyphHarness', 'the harness', 'glyphharness.github.io', 'a browser', 'this page', 'another tab', 'the tabs', 'this app', 'the bridge', 'in-browser', 'cross-origin', 'service worker', 'wh-local'].every(t => neutralMod.found(t).length)
       && neutralMod.found('a table in a side pane, with pagination, on a stable machine; the application').length === 0, neutralMod.TERMS.join(' | ')]);
   // every request shape a session can have: both log forms, every core prompt level, every tool group
+  // spec change (strategy wording): the neutral wording is strategy data (strat-serial-3.0); these checks now read the
+  // definitions as that strategy sends them, since the strategies registered before it keep their original bytes
+  const S3 = await import('../app/strategies.js').then(m => m.spec('strat-serial-3.0')), { defsAs: asSent } = await import('../app/tools.js');
   const variants = ['calls', 'notes'].flatMap(wire => [0, 1, 2, 3].flatMap(core => ['off', 'marks'].map(edge => ({ wire, core, edge, keep: true, system: '', tools: ['ask', 'values', 'repo', 'vm', 'local'], messages: [] }))));
-  const hits = variants.flatMap(s => found(JSON.stringify(buildRequest(s, 'm', defsFor(s)))));
-  check('neutral: no request the harness builds (core prompt, every tool definition) holds an identifying term', hits.length === 0, [...new Set(hits)].join(', '));
+  const hits = variants.flatMap(s => found(JSON.stringify(buildRequest(s, 'm', asSent(defsFor(s), S3.reads, S3.wording)))));
+  check('neutral: no request the harness builds under strat-serial-3.0 (core prompt, every tool definition) holds an identifying term', S3.id === 'strat-serial-3.0' && hits.length === 0, S3.id + ' ' + [...new Set(hits)].join(', '));
   // the helper prompts and fixed lines kept as module data (the watcher's and the filter's prompts are checked on the page, suite main)
   const fixed = [];
   for (const [file, key] of [['../app/policy.js', 'FIX_SYSTEM'], ['../app/smells.js', 'REVIEW_SYSTEM'], ['../app/term.js', 'SCRATCH_SYSTEM'], ['../app/context.js', 'KEEP_NOTE'], ['../app/context.js', 'HANDOFF_LINE'], ['../app/values.js', 'INDEX_HEAD']])
@@ -353,7 +356,7 @@ await attempt('config: the tmux option (vmTmux) is true or false in Paste config
   const badFixed = fixed.filter(p => p.length < 40 || /import failed/.test(p) || found(p).length);
   check('neutral: helper prompts and fixed lines kept as module data hold no identifying term', badFixed.length === 0, badFixed.map(p => p.slice(0, 120) + ' [' + found(p).join(',') + ']').join(' | '));
   // what each tool answers when what it needs is not there
-  const bare = { pads: [], savePads() {}, by: () => ({}), depth: 1 };
+  const bare = { pads: [], savePads() {}, by: () => ({}), depth: 1, wording: S3.wording };
   const answers = [];
   for (const d of defsFor({ tools: ['ask', 'values', 'repo', 'vm', 'local'] }).filter(d => /^(shell|local_|repo_|concern_file|ask|value_|fan_out)/.test(d.function.name)))
     answers.push(d.function.name + ': ' + await execTool({ function: { name: d.function.name, arguments: '{}' } }, bare).catch(e => String(e)));
@@ -369,6 +372,41 @@ await attempt('config: the tmux option (vmTmux) is true or false in Paste config
   await nb.close();
   const badOuts = outs.filter(o => !/^Tool error: /.test(o) || found(o).length);
   check('neutral: local tool failures come back as tool errors with no identifying term', badOuts.length === 0, badOuts.join(' | '));
+}
+
+// ---- the neutral wording is strategy data: a registered strategy keeps the bytes it was registered with (seams: strategies.js
+// register / spec, tools.js defsAs, the helper lines). strat-serial-1.0 (and every strategy registered before the wording
+// changed) is sent what it was sent before aa62df3; strat-serial-2.0 is that plus ranged reads only; strat-serial-3.0 is 2.0
+// plus the neutral wording. The old bytes are scripts/fixtures/model-view-pre-aa62df3.json (from git show aa62df3^:...).
+{
+  const OLD = JSON.parse(fs.readFileSync(new URL('./fixtures/model-view-pre-aa62df3.json', import.meta.url), 'utf8'));
+  const found = t => neutralMod ? neutralMod.found(String(t)) : ['(app/neutral.js is missing)'];
+  const strategies = await import('../app/strategies.js'), toolsMod = await import('../app/tools.js');
+  const smellsMod = await import('../app/smells.js'), termMod = await import('../app/term.js');
+  const ALL = { tools: ['ask', 'values', 'repo', 'vm', 'local'] };
+  const view = id => { const sp = strategies.spec(id); return toolsMod.defsAs(defsFor(ALL), sp.reads, sp.wording); };
+  const differs = (a, b) => a.filter((d, i) => JSON.stringify(d) !== JSON.stringify(b[i])).map(d => d.function.name).sort().join();
+  const answer = async (name, wording) => execTool({ function: { name, arguments: '{}' } }, { pads: [], by: () => ({}), depth: 1, wording });
+  for (const id of ['strat-serial-1.0', 'strat-checkpoint-1.0', 'strat-stem-1.0', 'strat-stem-2.0'])
+    await attempt(`strategy wording: ${id} is sent the tool definitions it was registered with, byte for byte`, () => { const v = view(id); return [JSON.stringify(v) === JSON.stringify(OLD.defs), differs(v, OLD.defs)]; });
+  await attempt('strategy wording: strat-serial-2.0 is strat-serial-1.0 plus ranged reads only (output_read, repo_read)', () => {
+    const two = view('strat-serial-2.0'); return [differs(two, OLD.defs) === 'output_read,repo_read' && JSON.stringify(two) === JSON.stringify(toolsMod.defsAs(OLD.defs, 'ranged')), differs(two, OLD.defs)];
+  });
+  await attempt('strategy wording: strat-serial-3.0 is registered as strat-serial-2.0 plus the neutral wording', () => {
+    const sp = strategies.known('strat-serial-3.0') && strategies.spec('strat-serial-3.0'), two = strategies.spec('strat-serial-2.0');
+    return [!!sp && sp.reads === 'ranged' && sp.wording === 'neutral' && !two.wording && sp.stems === two.stems && JSON.stringify(sp.checkpoints) === JSON.stringify(two.checkpoints) && sp.handles === two.handles, JSON.stringify(sp)];
+  });
+  await attempt('strategy wording: under strat-serial-3.0 only shell, concern_file and local_* differ from 2.0, and no definition holds an identifying term', () => {
+    const three = view('strat-serial-3.0'), two = view('strat-serial-2.0'); return [differs(three, two) === 'concern_file,local_http,local_info,local_read,shell' && found(JSON.stringify(three)).length === 0, differs(three, two) + ' ' + found(JSON.stringify(three))];
+  });
+  await attempt('strategy wording: the local tools answer as before when nothing is set up, and plainly under 3.0', async () => {
+    const before = await answer('local_info'), after = await answer('local_info', strategies.spec('strat-serial-3.0').wording);
+    return [before === OLD.answers.local_info && /^No /.test(after) && found(after).length === 0, JSON.stringify([before, after])];
+  });
+  await attempt('strategy wording: the watcher line and the scratch-helper line are the registered ones, and plain under 3.0', () => {
+    const w = strategies.spec('strat-serial-3.0').wording, old = strategies.spec('strat-serial-1.0').wording;
+    return [smellsMod.watchLine?.(old) === OLD.watch && termMod.scratchLine?.(old) === OLD.scratch && found(smellsMod.watchLine?.(w)).length === 0 && found(termMod.scratchLine?.(w)).length === 0 && /^WATCH\./.test(smellsMod.watchLine?.(w)) && /^TERMINAL SCRATCH\./.test(termMod.scratchLine?.(w)), String(smellsMod.watchLine?.(old)).slice(0, 80)];
+  });
 }
 
 fs.rmSync(tmp, { recursive: true, force: true });

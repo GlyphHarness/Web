@@ -1,0 +1,870 @@
+{
+ "from": "aa62df3^ (git show aa62df3^:app/tools.js, app/term.js, app/main.js WATCH_SYSTEM)",
+ "note": "What strat-serial-1.0 sent before the neutral wording (aa62df3): every tool definition of every group, the local tools' answer with nothing set up, the watcher line and the scratch-helper line. Generated once; do not edit.",
+ "defs": [
+  {
+   "type": "function",
+   "function": {
+    "name": "run_js",
+    "description": "Run JavaScript in an isolated runtime. The code is the body of an async function: use `return` for the result. console output is captured. Returns the result as text, then any console output. If the output may be long, say in `want` what you are looking for (a few words) and only that comes back. An earlier call may appear as {ref, name}: its arguments are stored under that handle and are implied; calling with {ref} repeats it.",
+    "parameters": {
+     "type": "object",
+     "properties": {
+      "code": {
+       "type": "string"
+      },
+      "want": {
+       "type": "string"
+      },
+      "ref": {
+       "type": "string"
+      },
+      "name": {
+       "type": "string",
+       "description": "short name for this call, kept as its label"
+      }
+     },
+     "required": []
+    }
+   }
+  },
+  {
+   "type": "function",
+   "function": {
+    "name": "scratchpad_read",
+    "description": "Read a labelled scratchpad. With no label, lists the available labels.",
+    "parameters": {
+     "type": "object",
+     "properties": {
+      "label": {
+       "type": "string"
+      }
+     },
+     "required": []
+    }
+   }
+  },
+  {
+   "type": "function",
+   "function": {
+    "name": "scratchpad_write",
+    "description": "Create or replace a labelled scratchpad.",
+    "parameters": {
+     "type": "object",
+     "properties": {
+      "label": {
+       "type": "string"
+      },
+      "text": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "label",
+      "text"
+     ]
+    }
+   }
+  },
+  {
+   "type": "function",
+   "function": {
+    "name": "show_widget",
+    "description": "Show something to the user in a side pane. kind and its data: html {html} (self-contained; call emit(value) to report an interaction), text {text}, image|audio|video|embed {url} (https), table {columns, rows}, chart {type: bar|line, labels, values}, form {fields: [{name, label, type: text|number|select|checkbox|textarea, options, value}], submit}. Reusing a slot replaces what it shows. A user interaction arrives later as an `event <slot>: <json>` message. An earlier call may appear as {ref, name}: its arguments are stored under that handle and are implied; calling with {ref} repeats it.",
+    "parameters": {
+     "type": "object",
+     "properties": {
+      "slot": {
+       "type": "string"
+      },
+      "kind": {
+       "type": "string",
+       "enum": [
+        "html",
+        "text",
+        "image",
+        "audio",
+        "video",
+        "embed",
+        "table",
+        "chart",
+        "form"
+       ]
+      },
+      "title": {
+       "type": "string"
+      },
+      "data": {
+       "type": "object"
+      },
+      "ref": {
+       "type": "string"
+      },
+      "name": {
+       "type": "string",
+       "description": "short name for this call, kept as its label"
+      }
+     },
+     "required": []
+    }
+   }
+  },
+  {
+   "type": "function",
+   "function": {
+    "name": "output_read",
+    "description": "Read what a handle holds now: stored output (os:...) or an id you were given. Give `find` to get matching lines, or `offset` and `length` for a slice.",
+    "parameters": {
+     "type": "object",
+     "properties": {
+      "handle": {
+       "type": "string"
+      },
+      "find": {
+       "type": "string"
+      },
+      "offset": {
+       "type": "number"
+      },
+      "length": {
+       "type": "number"
+      }
+     },
+     "required": [
+      "handle"
+     ]
+    }
+   }
+  },
+  {
+   "type": "function",
+   "function": {
+    "name": "fan_out",
+    "description": "Work several concerns in parallel, each in its own isolated continuation of this conversation, and get back one compact fold per concern (OUTCOME, RESULT, EVIDENCE, OPEN). Use it for work whose intermediate steps are not needed here. `after` makes a concern wait for the folds of the listed concern ids.",
+    "parameters": {
+     "type": "object",
+     "properties": {
+      "concerns": {
+       "type": "array",
+       "items": {
+        "type": "object",
+        "properties": {
+         "id": {
+          "type": "string"
+         },
+         "task": {
+          "type": "string"
+         },
+         "after": {
+          "type": "array",
+          "items": {
+           "type": "string"
+          }
+         }
+        },
+        "required": [
+         "id",
+         "task"
+        ]
+       }
+      }
+     },
+     "required": [
+      "concerns"
+     ]
+    }
+   }
+  },
+  {
+   "type": "function",
+   "function": {
+    "name": "branch_read",
+    "description": "Read the working transcript behind a fold, by its branch id. Use only when the fold lacks a needed detail.",
+    "parameters": {
+     "type": "object",
+     "properties": {
+      "branch": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "branch"
+     ]
+    }
+   }
+  },
+  {
+   "type": "function",
+   "function": {
+    "name": "pattern_find",
+    "description": "Search stored solutions, gotchas, patterns, philosophies and recipes before working something out again. Returns one line per match.",
+    "parameters": {
+     "type": "object",
+     "properties": {
+      "query": {
+       "type": "string"
+      },
+      "labels": {
+       "type": "array",
+       "items": {
+        "type": "string"
+       }
+      },
+      "kind": {
+       "type": "string",
+       "enum": [
+        "solution",
+        "gotcha",
+        "pattern",
+        "philosophy",
+        "recipe"
+       ]
+      }
+     },
+     "required": []
+    }
+   }
+  },
+  {
+   "type": "function",
+   "function": {
+    "name": "pattern_get",
+    "description": "Read one stored pattern in full, by id.",
+    "parameters": {
+     "type": "object",
+     "properties": {
+      "id": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "id"
+     ]
+    }
+   }
+  },
+  {
+   "type": "function",
+   "function": {
+    "name": "pattern_put",
+    "description": "Store what was learned once something non-obvious works or a quirk costs time: the approach, the gotcha, the design reason, or a recipe. Terse. A recipe is a stored call {tool, args} whose string values may hold {{slot}} placeholders named in `slots`. `refs` are handles of outputs or branches that show it. `supersedes` replaces an earlier id.",
+    "parameters": {
+     "type": "object",
+     "properties": {
+      "kind": {
+       "type": "string",
+       "enum": [
+        "solution",
+        "gotcha",
+        "pattern",
+        "philosophy",
+        "recipe"
+       ]
+      },
+      "title": {
+       "type": "string"
+      },
+      "body": {
+       "type": "string"
+      },
+      "labels": {
+       "type": "array",
+       "items": {
+        "type": "string"
+       }
+      },
+      "slots": {
+       "type": "array",
+       "items": {
+        "type": "string"
+       }
+      },
+      "recipe": {
+       "type": "object",
+       "properties": {
+        "tool": {
+         "type": "string"
+        },
+        "args": {
+         "type": "object"
+        }
+       }
+      },
+      "refs": {
+       "type": "array",
+       "items": {
+        "type": "string"
+       }
+      },
+      "supersedes": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "kind",
+      "title"
+     ]
+    }
+   }
+  },
+  {
+   "type": "function",
+   "function": {
+    "name": "pattern_run",
+    "description": "Run a stored recipe with concrete slot values.",
+    "parameters": {
+     "type": "object",
+     "properties": {
+      "id": {
+       "type": "string"
+      },
+      "values": {
+       "type": "object"
+      }
+     },
+     "required": [
+      "id"
+     ]
+    }
+   }
+  },
+  {
+   "type": "function",
+   "function": {
+    "name": "entry_read",
+    "description": "Open a condensed record of an earlier reply, by the handle in its [os:... kind] line. part: gotchas (what failed), steps (the calls made), transcript (the full reply), summary. State the specific reason in `why`.",
+    "parameters": {
+     "type": "object",
+     "properties": {
+      "handle": {
+       "type": "string"
+      },
+      "part": {
+       "type": "string",
+       "enum": [
+        "gotchas",
+        "steps",
+        "transcript",
+        "summary"
+       ]
+      },
+      "why": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "handle",
+      "part",
+      "why"
+     ]
+    }
+   }
+  },
+  {
+   "type": "function",
+   "function": {
+    "name": "ask",
+    "description": "Ask the person you are working for one or more questions and wait for the answers. Use it when a decision is theirs or a needed fact is missing, not to report progress. Each question: {id, prompt, type: text|number|choice|multi|confirm|json, options (choice, multi), default, min, max (number), schema (json: a JSON Schema the answer must satisfy), optional}. Returns the answers as JSON keyed by id, or that they declined.",
+    "parameters": {
+     "type": "object",
+     "properties": {
+      "questions": {
+       "type": "array",
+       "items": {
+        "type": "object",
+        "properties": {
+         "id": {
+          "type": "string"
+         },
+         "prompt": {
+          "type": "string"
+         },
+         "type": {
+          "type": "string",
+          "enum": [
+           "text",
+           "number",
+           "choice",
+           "multi",
+           "confirm",
+           "json"
+          ]
+         },
+         "options": {
+          "type": "array",
+          "items": {
+           "type": "string"
+          }
+         },
+         "default": {},
+         "min": {
+          "type": "number"
+         },
+         "max": {
+          "type": "number"
+         },
+         "schema": {
+          "type": "object"
+         },
+         "optional": {
+          "type": "boolean"
+         }
+        },
+        "required": [
+         "id",
+         "prompt",
+         "type"
+        ]
+       }
+      }
+     },
+     "required": [
+      "questions"
+     ]
+    }
+   }
+  },
+  {
+   "type": "function",
+   "function": {
+    "name": "value_request",
+    "description": "Ask the person for a value you need and keep it in scope for later (an endpoint, a region, a naming rule, a decision). Give a short label, a role, and the purpose it serves. type: text|number|choice|json; options for choice. Returns the stored value line.",
+    "parameters": {
+     "type": "object",
+     "properties": {
+      "label": {
+       "type": "string"
+      },
+      "role": {
+       "type": "string"
+      },
+      "purpose": {
+       "type": "string"
+      },
+      "type": {
+       "type": "string",
+       "enum": [
+        "text",
+        "number",
+        "choice",
+        "json"
+       ]
+      },
+      "options": {
+       "type": "array",
+       "items": {
+        "type": "string"
+       }
+      },
+      "why": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "label",
+      "purpose"
+     ]
+    }
+   }
+  },
+  {
+   "type": "function",
+   "function": {
+    "name": "value_set",
+    "description": "Record a value worth keeping in scope, or revise one by id (a new revision; earlier ones are kept). Set hidden: true to retire one. scope: session (default) or profile.",
+    "parameters": {
+     "type": "object",
+     "properties": {
+      "id": {
+       "type": "string"
+      },
+      "label": {
+       "type": "string"
+      },
+      "role": {
+       "type": "string"
+      },
+      "value": {},
+      "purpose": {
+       "type": "string"
+      },
+      "scope": {
+       "type": "string",
+       "enum": [
+        "session",
+        "profile"
+       ]
+      },
+      "hidden": {
+       "type": "boolean"
+      },
+      "why": {
+       "type": "string"
+      }
+     },
+     "required": []
+    }
+   }
+  },
+  {
+   "type": "function",
+   "function": {
+    "name": "value_get",
+    "description": "Read a value in scope by id, or its revision history with history: true.",
+    "parameters": {
+     "type": "object",
+     "properties": {
+      "id": {
+       "type": "string"
+      },
+      "history": {
+       "type": "boolean"
+      }
+     },
+     "required": [
+      "id"
+     ]
+    }
+   }
+  },
+  {
+   "type": "function",
+   "function": {
+    "name": "repo_read",
+    "description": "Read a GitHub repository. op: file (path, optional lines \"a-b\"; a directory path lists it), tree (all file paths, optional path prefix), log (optional path, n), diff (base, head, optional path), branches, prs (state). ref is a branch, tag or commit; default branch if omitted. Say in `want` what you are looking for when the output may be long.",
+    "parameters": {
+     "type": "object",
+     "properties": {
+      "repo": {
+       "type": "string",
+       "description": "owner/name"
+      },
+      "op": {
+       "type": "string",
+       "enum": [
+        "file",
+        "tree",
+        "log",
+        "diff",
+        "branches",
+        "prs"
+       ]
+      },
+      "path": {
+       "type": "string"
+      },
+      "ref": {
+       "type": "string"
+      },
+      "lines": {
+       "type": "string"
+      },
+      "n": {
+       "type": "integer"
+      },
+      "base": {
+       "type": "string"
+      },
+      "head": {
+       "type": "string"
+      },
+      "state": {
+       "type": "string"
+      },
+      "want": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "repo"
+     ]
+    }
+   }
+  },
+  {
+   "type": "function",
+   "function": {
+    "name": "repo_commit",
+    "description": "Commit changes to a branch in one commit; the branch is created from `from` (default branch if omitted) when it does not exist. Each change is {path, content}, {path, edits: [{find, replace}]} (each find must occur exactly once in the current file; prefer this for small changes), {path, from: \"os:...\"} or {path, delete: true}. The user approves each commit. An earlier call may appear as {ref, name}: its arguments are stored under that handle and are implied; calling with {ref} repeats it.",
+    "parameters": {
+     "type": "object",
+     "properties": {
+      "repo": {
+       "type": "string"
+      },
+      "branch": {
+       "type": "string"
+      },
+      "from": {
+       "type": "string"
+      },
+      "message": {
+       "type": "string"
+      },
+      "changes": {
+       "type": "array",
+       "items": {
+        "type": "object",
+        "properties": {
+         "path": {
+          "type": "string"
+         },
+         "content": {
+          "type": "string"
+         },
+         "from": {
+          "type": "string",
+          "description": "an os: handle whose stored text becomes the file"
+         },
+         "edits": {
+          "type": "array",
+          "items": {
+           "type": "object",
+           "properties": {
+            "find": {
+             "type": "string"
+            },
+            "replace": {
+             "type": "string"
+            }
+           },
+           "required": [
+            "find",
+            "replace"
+           ]
+          }
+         },
+         "delete": {
+          "type": "boolean"
+         }
+        },
+        "required": [
+         "path"
+        ]
+       }
+      },
+      "ref": {
+       "type": "string"
+      },
+      "name": {
+       "type": "string",
+       "description": "short name for this call, kept as its label"
+      }
+     },
+     "required": []
+    }
+   }
+  },
+  {
+   "type": "function",
+   "function": {
+    "name": "repo_pr",
+    "description": "Open a pull request from head into base (default branch if omitted). The user approves it.",
+    "parameters": {
+     "type": "object",
+     "properties": {
+      "repo": {
+       "type": "string"
+      },
+      "head": {
+       "type": "string"
+      },
+      "base": {
+       "type": "string"
+      },
+      "title": {
+       "type": "string"
+      },
+      "body": {
+       "type": "string"
+      },
+      "draft": {
+       "type": "boolean"
+      }
+     },
+     "required": [
+      "repo",
+      "head",
+      "title"
+     ]
+    }
+   }
+  },
+  {
+   "type": "function",
+   "function": {
+    "name": "concern_file",
+    "description": "File a concern about the harness itself as an issue in its repository, for later: a pattern worth keeping or fixing, input formed badly for a tool or an interop, a protocol gap, a policy or cost problem. Give the evidence, not a claim. The user approves each one.",
+    "parameters": {
+     "type": "object",
+     "properties": {
+      "kind": {
+       "type": "string",
+       "enum": [
+        "pattern",
+        "interop",
+        "protocol",
+        "policy",
+        "cost",
+        "ui",
+        "other"
+       ]
+      },
+      "title": {
+       "type": "string"
+      },
+      "what": {
+       "type": "string",
+       "description": "what happened: the call, the output, the evidence"
+      },
+      "expected": {
+       "type": "string"
+      },
+      "intent": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "kind",
+      "title",
+      "what"
+     ]
+    }
+   }
+  },
+  {
+   "type": "function",
+   "function": {
+    "name": "repo_create",
+    "description": "Create a new repository, private unless private is false, with a README unless readme is false. owner is an organization; omit it for the account itself. The user approves it.",
+    "parameters": {
+     "type": "object",
+     "properties": {
+      "name": {
+       "type": "string"
+      },
+      "owner": {
+       "type": "string"
+      },
+      "private": {
+       "type": "boolean"
+      },
+      "description": {
+       "type": "string"
+      },
+      "readme": {
+       "type": "boolean"
+      }
+     },
+     "required": [
+      "name"
+     ]
+    }
+   }
+  },
+  {
+   "type": "function",
+   "function": {
+    "name": "shell",
+    "description": "Run a bash script on a Linux machine (Alpine: bash, coreutils, git, python3, gh, curl, jq; more with wh-install <name>, e.g. tmux). State persists between calls until the page is reloaded. Returns the combined output and the exit status. Outbound HTTPS works only for hosts that allow cross-origin requests: the GitHub API does (gh is authenticated), git clone/push over HTTPS does not. If the output may be long, say in `want` what you are looking for.",
+    "parameters": {
+     "type": "object",
+     "properties": {
+      "cmd": {
+       "type": "string"
+      },
+      "timeout": {
+       "type": "integer",
+       "description": "seconds, default 120, max 600"
+      },
+      "want": {
+       "type": "string"
+      },
+      "ref": {
+       "type": "string"
+      },
+      "name": {
+       "type": "string",
+       "description": "short name for this call, kept as its label"
+      }
+     },
+     "required": []
+    }
+   }
+  },
+  {
+   "type": "function",
+   "function": {
+    "name": "local_info",
+    "description": "List what the local bridge exposes on the computer you are running for: services (name -> origin) you can call with local_http, and folders you can read with local_read.",
+    "parameters": {
+     "type": "object",
+     "properties": {},
+     "required": []
+    }
+   }
+  },
+  {
+   "type": "function",
+   "function": {
+    "name": "local_http",
+    "description": "Call a local web service the person exposed through the bridge. service is a name from local_info; path starts with / and may carry a query. Returns [status type, size] then the body. The status is the service itself, not the bridge.",
+    "parameters": {
+     "type": "object",
+     "properties": {
+      "service": {
+       "type": "string"
+      },
+      "method": {
+       "type": "string",
+       "enum": [
+        "GET",
+        "POST",
+        "PUT",
+        "PATCH",
+        "DELETE"
+       ]
+      },
+      "path": {
+       "type": "string"
+      },
+      "body": {
+       "description": "string, or an object sent as JSON"
+      }
+     },
+     "required": [
+      "service"
+     ]
+    }
+   }
+  },
+  {
+   "type": "function",
+   "function": {
+    "name": "local_read",
+    "description": "Read a file, or list a folder (path ending at a directory), from a folder the person exposed through the bridge (read-only). folder is a name from local_info; path starts with /.",
+    "parameters": {
+     "type": "object",
+     "properties": {
+      "folder": {
+       "type": "string"
+      },
+      "path": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "folder"
+     ]
+    }
+   }
+  }
+ ],
+ "answers": {
+  "local_info": "No local bridge is configured.",
+  "local_http": "No local bridge is configured.",
+  "local_read": "No local bridge is configured."
+ },
+ "watch": "WATCH. You check one tool call made by an agent, for the harness that runs it. Reply exactly \"ok\", or \"FLAG: <one short line>\" when the call failed, repeated earlier work, wasted effort, broke a rule, or its result needs a person. Nothing else.",
+ "scratch": "TERMINAL SCRATCH. You draft shell commands for a person to run in a terminal on an Alpine Linux machine (bash, coreutils, git, python3, gh, curl, jq; more packages with: wh-install <name>).\nYou may test first in a scratch account: reply with up to 3 lines \"TRY: <command>\". Tests must be safe: read-only, or writing only inside the scratch home; no pushes, no deletes outside it. The harness runs them and replies with TRIED, EXIT and OUTPUT.\nWhen ready, reply with only one ```sh block: one command per line, each optionally followed by a line \"# <why>\". No other prose."
+}

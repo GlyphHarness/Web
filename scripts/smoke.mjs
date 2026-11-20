@@ -1115,7 +1115,17 @@ check('layout: the page itself does not scroll',await page.evaluate(() => docume
   // spec correction (own commit): the credential label is the person's own words and goes into the first message as they wrote it
   // (this suite's earlier label names an organisation), so the session here gets a plain one; and the helper prompts are
   // counted from requests made in this block (an earlier reload empties what the mock provider keeps): a watcher and a filter.
-  await paste({ settings: { ghlabel: 'test repos', watchModel: 'mock-1', helper: 'mock-1' } });
+  // spec (strategy wording): a strategy registered before the neutral wording keeps its bytes; the neutral wording is
+  // strat-serial-3.0, so the checks below that nothing names what runs the tools run under that strategy
+  await page.click('[data-act=new]');
+  await page.evaluate(() => { const e = document.querySelector('#vmtools'); e.checked = true; e.dispatchEvent(new Event('change', { bubbles: true })); });
+  await say('shell: echo nv-zero');
+  {
+    const OLD = JSON.parse(fs.readFileSync(new URL('./fixtures/model-view-pre-aa62df3.json', import.meta.url), 'utf8'));
+    const r = await lastReq(), s0 = await sess(), sh = d => (d || []).find(t => t.function?.name === 'shell');
+    check('strategy wording: a session under a strategy registered before the neutral wording is sent the shell tool it was registered with', s0.ledger.at(-1)?.strat !== 'strat-serial-3.0' && !!sh(r.tools) && JSON.stringify(sh(r.tools)) === JSON.stringify(sh(OLD.defs)), s0.ledger.at(-1)?.strat + ' ' + JSON.stringify(sh(r.tools)?.function?.description).slice(0, 80));
+  }
+  await paste({ settings: { ghlabel: 'test repos', watchModel: 'mock-1', helper: 'mock-1', strategy: 'strat-serial-3.0' } });
   await page.click('[data-act=new]');
   // this session gets the shell tool and the local tools by its own switches (the in-browser machine is off in this suite)
   await page.evaluate(() => { for (const id of ['vmtools', 'localtools']) { const e = document.querySelector('#' + id); e.checked = true; e.dispatchEvent(new Event('change', { bubbles: true })); } });
@@ -1172,7 +1182,8 @@ check('layout: the page itself does not scroll',await page.evaluate(() => docume
 
   await page.click('[data-act=new]');
   check('host shell: new sessions get the shell tool while the defaults name a host', await page.isChecked('#vmtools'));
-  await paste({ settings: { localBridge: '', shellOn: 'machine', watchModel: '' }, keys: { localbridge: '' } });
+  check('strategy wording: the host-shell checks above ran under strat-serial-3.0', await page.evaluate(() => JSON.parse(localStorage['wh:meta']).settings.strategy) === 'strat-serial-3.0');
+  await paste({ settings: { localBridge: '', shellOn: 'machine', watchModel: '', strategy: 'strat-stem-1.0' }, keys: { localbridge: '' } });
   await bctx.unroute(BR + '/**');
 }
 
