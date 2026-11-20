@@ -659,7 +659,7 @@ function policyList() {
 function uptext() {
   const tip = h('div', { id: 'uptext', role: 'tooltip', hidden: '' });
   document.body.append(tip);
-  let timer = null, shownFor = null;
+  let timer = null, shownFor = null, pending = null;
   const full = el => el.dataset?.full || (el.classList?.contains('slot') ? el.getAttribute('data-v') : '') || slotText(el).trim();
   const truncated = el => el.scrollWidth > el.clientWidth + 1 || el.scrollHeight > el.clientHeight + 1;
   const target = start => {
@@ -671,7 +671,7 @@ function uptext() {
     }
     return null;
   };
-  const hide = () => { clearTimeout(timer); timer = null; tip.hidden = true; shownFor = null; };
+  const hide = () => { clearTimeout(timer); timer = null; tip.hidden = true; shownFor = null; pending = null; };
   const show = el => {
     const text = full(el);
     if (!text) return;
@@ -686,17 +686,18 @@ function uptext() {
     const el = target(e.target);
     if (el === shownFor) return;
     hide();
-    if (el) timer = setTimeout(() => show(el), 400);
+    if (el) { pending = el; timer = setTimeout(() => show(el), 400); }
   });
   document.addEventListener('pointerout', e => { if (e.pointerType !== 'touch' && shownFor && !shownFor.contains(e.relatedTarget)) hide(); });
   document.addEventListener('pointerdown', e => {
     hide();
     if (e.pointerType !== 'touch') return;
     const el = target(e.target);
-    if (el) timer = setTimeout(() => show(el), 450); // press and hold
+    if (el) { pending = el; timer = setTimeout(() => show(el), 450); } // press and hold
   });
   for (const ev of ['pointerup', 'pointercancel']) document.addEventListener(ev, e => { if (e.pointerType === 'touch') { clearTimeout(timer); timer = null; setTimeout(hide, shownFor ? 1500 : 0); } });
-  document.addEventListener('scroll', hide, true);
+  // only a scroll that moves the labelled element hides its bubble; a transcript or log scrolling elsewhere does not
+  document.addEventListener('scroll', e => { const el = shownFor || pending; if (el && (e.target === document || e.target.contains?.(el))) hide(); }, true);
   document.addEventListener('keydown', e => { if (e.key === 'Escape') hide(); });
   // a held press that showed a bubble should not also click
   document.addEventListener('click', e => { if (shownFor && e.pointerType === 'touch') { e.preventDefault(); e.stopPropagation(); } }, true);
