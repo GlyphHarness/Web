@@ -861,7 +861,7 @@ await say('hello reasoning');
 
 // ---- a transient provider error is asked again at the provider seam; the ledger row says how often, the model is never told ----
 {
-  await page.evaluate(async () => { const R = await import('./app/providers.js'); if (R.retry) R.retry.delays = [0, 0]; });
+  await page.evaluate(async () => { const R = await import('./app/providers.js'); if (R.retry) R.retry.delays = [80, 80]; });
   const state = () => page.evaluate(async () => {
     const id = sessionStorage.getItem('wh:tab-active'), s = JSON.parse(localStorage['wh:s:' + id]), m = (await import('./app/providers.js')).providers.mock;
     return { retries: s.ledger.map(e => e.retries ?? null), rows: s.ledger.length, last: s.messages.at(-1)?.role, stops: (s.stops || []).map(x => x.why), sentWord: m.requests.some(b => /retr/i.test(JSON.stringify(b))) };
