@@ -21,7 +21,7 @@ Stance as FLOWS.md: state and transition, no person comparison, no rigid baselin
 
 ## Records (fields only; harness data, stored beside turns)
 - inventory entry: id, label, kind, domain, metadata{size, mtime, path|uri}, captures[{feature_id, payload_handle}], source, captured_at.
-- capture feature: id, applies_to (domain or kind), extracts, how (ast|regex|parser|metadata|iac), cost.
+- capture feature: id, applies_to (domain or kind), extracts, how (ast|regex|parser|metadata|iac|lsp), cost.
 - query shape: id, policy_id, over (domains or labels), asks[{what, returns_fields}], rendered_text (what the model is given).
 - check record: id, session, entry_id, read (whole|slice|capture only), range, at_turn, t, source_hash.
 - has/has-not view: derived, not stored: per entry {entry_id, held (captures), checked (read kinds), stale (hash differs)}.
@@ -49,12 +49,29 @@ Stance as FLOWS.md: state and transition, no person comparison, no rigid baselin
 - The autonomous route asserts the seam contracts of the FLOWS.md "Seam contracts" section: seams, interface points, domain contracts.
 - Handlers see semantic entries; inventory entries and captures are a natural source of them.
 
+## Language intelligence and structural edits
+1. A language service (a language server, as in VS Code) exposes symbols, definitions, references and types as a materialized reference, so nothing reads the codebase verbatim; it is an alternative capture source to walking an AST ourselves.
+2. The agent selects the seams it wants to edit; tools fetch what it is interested in, and only the pertinent details of where things exist, not verbose content.
+3. Edits are structural: AST graphs are altered in place and the code is built from them (codegen), not by editing files directly.
+- Terms: language intelligence (the service as capture source; capture feature how: lsp), symbol entry, reference edge, seam selection, structural edit, codegen (as used here: regenerating files from an altered graph).
+- symbol entry: name, kind, container, file, range, signature, references_count.
+- reference edge: from_symbol, to_symbol, kind (call|import|extends|reads|writes).
+- seam selection: session, symbols[] chosen, why (semantic entry ref), at_turn.
+- structural edit: target (symbol or node path), operation (insert|replace|remove|rename|wrap), payload, preconditions[].
+- codegen result: files_regenerated[], diff_handle, checks_run[{name, outcome}].
+- Invariants. (a) A structural edit names a node, never a text position found by searching. (b) Codegen output is a normal diff and goes through the same approval and specs as any commit. (c) The symbol view is a capture: the has/has-not rule applies (a symbol entry is not a read of the body).
+- Relations. Today's edit path is `repo_commit` with `edits` [{find, replace}] (app/tools.js CHANGE and repo_commit; app/git.js ~lines 110-130): each find must occur exactly once in the file at the branch head, else it throws "find occurs N times (must be once)". The measure "first-try edit success" and H1 are in docs/concepts/HYPOTHESES.md; find strings copied wrongly are the failure a structural edit removes. The seams list in .claude/agents/seams.md is the first target for seam selection. The semantic-entry handler of FLOWS.md picks entries; symbol entries are such entries. No language service or codegen exists in app/ today.
+
 ## Open (QI series; the person's wording where given)
 - QI1 Who builds the inventory and when: policy-driven, autonomous, or both; at session start or on demand.
 - QI2 Staleness after a write: the source_hash differs; does the view mark stale only, or re-capture.
 - QI3 How much capture goes to the model versus stays queryable behind the query shape.
 - QI4 Trust in the autonomous route: how its asserted seams are checked.
 - QI5 Network sources: which IaC and datapoint formats, and which captures are allowed.
+- QI6 Which engine and where it runs: in the page, in the machine (app/vm.js), or outside.
+- QI7 Fidelity of comments and formatting through codegen.
+- QI8 Languages beyond JS.
+- QI9 How a structural edit is shown for approval (as a node-level description, the diff, or both).
 
 ## First order of work (hypotheses; smallest first; none built)
 - I1 Capture only: from state "app/*.js not inventoried", an inventory of exports and function names can be built by extraction alone (no model); the transition to "inventoried" occurs for every file. Falsified if any file needs a model to yield its names. Needs: a parser pass, one capture feature.
@@ -62,3 +79,6 @@ Stance as FLOWS.md: state and transition, no person comparison, no rigid baselin
 - I3 Has/has-not from data alone: for any session, which entries were checked and in what way is answerable from check records without reading transcripts. Falsified if an answer needs turn text. Needs: check records logged at repo_read.
 - I4 Autonomous seams: the seams the autonomous route asserts for app/ match the list in .claude/agents/seams.md. Falsified if it misses or invents seams beyond a few. Needs: I1, one assertion pass.
 - I5 Network: one IaC source yields a network inventory (ranges, rules, allow/deny) by extraction alone, with a query shape. Falsified if a rule needs a model to capture. Needs: one IaC file, one capture feature.
+- I6 Language service: from state "app/*.js not inventoried", a language service yields symbol entries and reference edges for every file with no file read by a model; the transition to "inventoried" occurs. Falsified if any symbol or edge needs a model read. Needs: one service, I1's check records.
+- I7 Structural edit: from state "symbol selected", a rename or signature change expressed as a structural edit regenerates files whose diff is exactly the intended change, with the suites green. Falsified if the diff has any unintended hunk or a suite fails. Needs: I6, a codegen path, a mock-provider session.
+- I8 Select then fetch: given symbol entries in the query shape, state "seam selected", the projected edit lands at the right seam and first-try edit success is recorded as data per strategy and model, not a contest. Falsified if the recorded rate does not move. Needs: I6, I7, one strategy id, silo canary (PROGRAMME.md).
