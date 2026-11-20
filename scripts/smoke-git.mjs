@@ -140,6 +140,25 @@ check('bridge: fragment removed from the address bar', !page.url().includes('#')
 const hello = await until(async () => (await upEvents()).find(e => e.type === 'hello'));
 check('bridge: hello arrives encrypted on the branch', hello?.data?.build && !JSON.stringify(branches['bridge/t1'].files).includes('"build"'));
 
+// base64url must not depend on the call stack: a ~225 KB file made a batch of events fail with "Maximum call stack size exceeded" and the batch was lost
+{
+  const n = 1.5 * 1024 * 1024, pat = i => (i * 31 + (i >> 8)) & 255;
+  const got = await page.evaluate(async ([n]) => {
+    const { b64u } = await import('./app/bridge.js');
+    const buf = new Uint8Array(n);
+    for (let i = 0; i < n; i++) buf[i] = (i * 31 + (i >> 8)) & 255;
+    try {
+      const s = b64u.enc(buf), back = b64u.dec(s);
+      let same = back.length === n;
+      for (let i = 0; same && i < n; i++) if (back[i] !== buf[i]) same = false;
+      return { len: s.length, same, head: s.slice(0, 40), tail: s.slice(-40) };
+    } catch (e) { return { error: String(e?.message || e) }; }
+  }, [n]);
+  const ref = Buffer.alloc(n); for (let i = 0; i < n; i++) ref[i] = pat(i);
+  const want = ref.toString('base64url');
+  check('bridge: base64url round-trips a 1.5 MB buffer, same text as the agent side', got.same === true && got.len === want.length && got.head === want.slice(0, 40) && got.tail === want.slice(-40), JSON.stringify(got).slice(0, 200));
+}
+
 // the session list: new sessions get repo tools while a token is set
 await page.fill('#ghlabel', 'test token: o/r contents + PRs'); await page.dispatchEvent('#ghlabel', 'change');
 await page.click('[data-act=ghcheck]');
@@ -277,6 +296,8 @@ const directive = async (name, args = {}) => {
 };
 const st = await directive('state');
 check('bridge: state directive answered', st?.ok && st.data.sessions.length >= 1);
+const bigDom = await directive('dom', { sel: '*:not(:has(#ghpem)):not(#ghpem)', html: true, max: 5000 }); // not the key field's placeholder text: a later check scans every reply for the key header
+check('bridge: a reply of several hundred KB goes up (the batch is not lost)', bigDom?.ok === true && JSON.stringify(bigDom.data).length > 225000, bigDom ? String(bigDom.error || JSON.stringify(bigDom.data).length) : 'no reply');
 check('bridge: replies never carry the token', !(await upEvents()).some(e => JSON.stringify(e).includes(TOKEN)) && JSON.stringify(await directive('dom', { sel: '#ghkey', html: true })).includes('ghkey'));
 const tr = await directive('trace');
 check('bridge: trace has the GitHub calls without the Authorization header', tr?.ok && tr.data.some(r => /graphql/.test(r.url)) && !JSON.stringify(tr.data).includes(TOKEN));

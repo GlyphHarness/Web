@@ -20,7 +20,7 @@ import { slot } from './styles.js';
 const API = 'https://api.github.com';
 const POLL_MS = 3000;
 const MAX_AGE = 10 * 60e3; // directives older than this are dropped (replay guard)
-const b64u = {
+export const b64u = {
   enc: buf => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''),
   dec: s => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0)),
 };
