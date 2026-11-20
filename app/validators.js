@@ -140,13 +140,16 @@ export function commitMessages(line) {
     if (!(i < seg.length && GIT.test(seg[i].w))) continue;
     for (i++; i < seg.length && seg[i].w.startsWith('-'); i += GIT_VAL.has(seg[i].w) ? 2 : 1);
     if (seg[i]?.w !== 'commit') continue;
+    // git joins the -m arguments of one commit into one message, paragraphs separated by a blank line
+    let msgs = [];
     for (let j = i + 1; j < seg.length; j++) {
       const x = seg[j], m = x.w.match(/^--message=([\s\S]*)$/) || x.w.match(/^-[aesnqvipo]*m([\s\S]+)$/);
       if (x.w === '--') break;
-      if (x.w === '--message' || /^-[aesnqvipo]*m$/.test(x.w)) { const v = seg[++j]; if (v && !v.open) out.push(v.w); }
-      else if (m) { if (!x.open) out.push(m[1]); }
+      if (x.w === '--message' || /^-[aesnqvipo]*m$/.test(x.w)) { const v = seg[++j]; if (v && !v.open) msgs.push(v.w); }
+      else if (m) { if (!x.open) msgs.push(m[1]); }
       else if (COMMIT_VAL.has(x.w)) j++;
     }
+    if (msgs.length) out.push(msgs.join('\n\n'));
   }
   return out;
 }
