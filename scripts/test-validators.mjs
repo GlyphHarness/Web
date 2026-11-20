@@ -129,6 +129,17 @@ check('resolve: a stale source marks the validator unresolved, not passed, even 
   return (rs[1].outcome === 'unresolved' && rs[2].outcome === 'pass') || outcomes(rs);
 });
 check('resolve: a source that was not read leaves the validator unresolved', () => res(good, {}).every(r => r.outcome === 'unresolved') || outcomes(res(good, {})));
+// ---- a profile carrying an argument summary per call: kept fields are evidence, so path and command steps resolve
+const withArgs = profile(good);
+check('resolve: a profile with argument summaries resolves a path step and a command step', () => {
+  const rs = res(withArgs);
+  return (rs[1].outcome === 'pass' && rs[1].at_turn === 0 && rs[2].outcome === 'pass' && rs[2].at_turn === 0) || outcomes(rs);
+});
+check('resolve: an old profile without argument summaries stays exactly as unresolved as before', () => {
+  const old = JSON.parse(fs.readFileSync(path.join(ROOT, 'docs/concepts/profile-2026-11-19.json'), 'utf8')).sessions[0];
+  const rs = res(old);
+  return same(outcomes(rs), ['unresolved', 'unresolved', 'unresolved', 'unresolved', 'unresolved', 'pass']) || outcomes(rs);
+});
 check('resolve: a record with no tool arguments (a turn profile) leaves what needs them unresolved; cost still resolves', () => {
   const rs = res(profile(good));
   return same(outcomes(rs), ['unresolved', 'unresolved', 'unresolved', 'unresolved', 'unresolved', 'pass']) || outcomes(rs);
