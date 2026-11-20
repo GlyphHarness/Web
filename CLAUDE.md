@@ -6,6 +6,7 @@ Work on `dev`; every piece of work follows the rigid order below.
 ## Branches
 - `dev`: working branch. Keep it releasable.
 - `main`: the released site (GitHub Pages, builds in `b/<commit>/`, `version.json`). Release = merge `dev` into `main`, only after the judge passes.
+- A clone made for one branch tracks only that branch, and tools then report other branches as "no remote branch" or "unpushed" after a good push. Once per clone: `git config remote.origin.fetch '+refs/heads/*:refs/remotes/origin/*' && git config push.autoSetupRemote true && git fetch origin`.
 
 ## Agents (`.claude/agents/`)
 - `steward.md`: owns the order, delegates, merges catalog inboxes, releases.
