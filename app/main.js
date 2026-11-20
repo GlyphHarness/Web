@@ -2686,7 +2686,7 @@ function shellRunner(s) {
   const go = (cmd, t, opt) => { const host = hostOf(s); return (host ? onHost(host, cmd, t) : onMachine(cmd, t, opt)).catch(e => {
     const msg = String(e?.message || e), said = neutral(msg, 'the machine is not available');
     if (e?.detail || said !== msg) notice(s, e?.detail || 'Shell: ' + msg);
-    throw new Error(said);
+    throw Object.assign(new Error(said), host ? {} : { raw: msg }); // raw: what a strategy before the neutral wording reads (tools.js shell)
   }); };
   return { run: (cmd, t, opt = {}) => go(cmd, t, opt).then(r => ({ ...r, out: down(r.out || '') })) };
 }

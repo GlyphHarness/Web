@@ -52,9 +52,9 @@ export function client({ url, token, fetch: f = globalThis.fetch } = {}) {
     health: async () => json(await call('/health'), 'health'),
     info: async () => json(await call('/info'), 'info'),
     // {status, type, text|bytes}: the service's own status, not the bridge's
-    async http(name, { method = 'GET', path = '/', body, headers } = {}) {
+    async http(name, { method = 'GET', path = '/', body, headers } = {}, what = 'call') {
       const r = await call(`/http/${encodeURIComponent(name)}${enc(path.split('?')[0])}${path.includes('?') ? '?' + path.split('?').slice(1).join('?') : ''}`, { method, body, headers });
-      if (!r.headers.has('x-wh-status')) await json(r, 'call');
+      if (!r.headers.has('x-wh-status')) await json(r, what);
       const type = r.headers.get('x-wh-content-type') || '';
       const buf = new Uint8Array(await r.arrayBuffer());
       return { status: Number(r.headers.get('x-wh-status')), type, bytes: buf.length, text: textLike(type, buf) ? new TextDecoder().decode(buf) : null };
@@ -180,17 +180,19 @@ export async function check({ url, token, fetch: f } = {}) {
 }
 
 // For the model: what the tools return. A failure says what did not work, never how the computer is reached
-// (those words are for the person: explain(), the Settings status line).
+// (those words are for the person: explain(), the Settings status line). That is the neutral wording
+// (strat-serial-3.0); a strategy registered before it reads what these tools said before it: the bridge's own
+// words (scripts/fixtures/failures-pre-aa62df3.json), so a failure passes up unchanged and a refused call says "bridge".
 const clip = (s, n = 200000) => s.length > n ? s.slice(0, n) + `\n[cut at ${n} characters of ${s.length}]` : s;
-const plainly = f => async (b, a) => {
-  try { return await f(b, a); }
-  catch (e) { if (!(e instanceof BridgeError)) throw e; throw new Error(e.kind === 'refused' ? neutral(e.message, 'the request was refused') : 'the local connection is not available'); }
+const plainly = f => async (b, a, wording) => {
+  try { return await f(b, a, wording); }
+  catch (e) { if (!(e instanceof BridgeError) || wording !== 'neutral') throw e; throw new Error(e.kind === 'refused' ? neutral(e.message, 'the request was refused') : 'the local connection is not available'); }
 };
 export const run = Object.fromEntries(Object.entries({
   async info(b) { const i = await b.info(); return JSON.stringify({ services: i.http, folders: i.dirs, limits: i.limits }); },
-  async http(b, a) {
+  async http(b, a, wording) {
     if (!a.service) throw new Error('service is required (see local_info)');
-    const r = await b.http(String(a.service), { method: String(a.method || 'GET').toUpperCase(), path: String(a.path || '/'), body: a.body == null ? undefined : typeof a.body === 'string' ? a.body : JSON.stringify(a.body), headers: a.body != null && typeof a.body !== 'string' ? { 'content-type': 'application/json' } : undefined });
+    const r = await b.http(String(a.service), { method: String(a.method || 'GET').toUpperCase(), path: String(a.path || '/'), body: a.body == null ? undefined : typeof a.body === 'string' ? a.body : JSON.stringify(a.body), headers: a.body != null && typeof a.body !== 'string' ? { 'content-type': 'application/json' } : undefined }, wording === 'neutral' ? 'call' : 'bridge');
     return `[${r.status}${r.type ? ' ' + r.type : ''}, ${r.bytes} bytes]\n` + (r.text == null ? '(binary; not shown)' : clip(r.text));
   },
   async read(b, a) {

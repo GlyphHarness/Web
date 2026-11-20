@@ -228,7 +228,9 @@ export const vmTools = [
     async (a, ctx) => {
       if (!ctx.vm) return 'No machine is available.';
       await ctx.fsMark?.(); // first use in this session: mark and baseline for the file explorer
-      const r = await ctx.vm.run(String(a.cmd ?? ''), Math.min(Math.max(Number(a.timeout) || 120, 5), 600));
+      // a failure: the neutral wording (strat-serial-3.0) reads the plain text main.js shellRunner made of it; a strategy
+      // registered before it reads the machine's own message, as it did (e.raw; a host's failures have none: they stay plain)
+      const r = await ctx.vm.run(String(a.cmd ?? ''), Math.min(Math.max(Number(a.timeout) || 120, 5), 600)).catch(e => { throw ctx.wording !== 'neutral' && e?.raw ? new Error(e.raw) : e; });
       // runtime policy markers (vm.js shims) are recorded by the harness and taken out of the text
       r.out = String(r.out || '').replace(/__WH_RUNTIME_POLICY (\S+) ([^\n]*?)__\n?/g, (_, id, what) => { ctx.runtime?.(id, what); return ''; }).trimEnd();
       return (r.out || '(no output)') + (r.timedOut ? `\n[timed out after ${a.timeout || 120}s; interrupted]` : `\n[exit ${r.code}]`);
@@ -336,15 +338,15 @@ export const localTools = [
   fn('local_info',
     'List what the person has made available on their own computer: services (name -> origin) you can call with local_http, and folders you can read with local_read.',
     {}, [],
-    (a, ctx) => ctx.local ? lb.info(ctx.local) : noLocal(ctx)),
+    (a, ctx) => ctx.local ? lb.info(ctx.local, a, ctx.wording) : noLocal(ctx)),
   fn('local_http',
     'Call a local web service the person made available. service is a name from local_info; path starts with / and may carry a query. Returns [status type, size] then the body. The status is the one the service itself answered with.',
     { service: { type: 'string' }, method: { type: 'string', enum: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] }, path: { type: 'string' }, body: { description: 'string, or an object sent as JSON' } }, ['service'],
-    (a, ctx) => ctx.local ? lb.http(ctx.local, a) : noLocal(ctx)),
+    (a, ctx) => ctx.local ? lb.http(ctx.local, a, ctx.wording) : noLocal(ctx)),
   fn('local_read',
     'Read a file, or list a folder (path ending at a directory), from a folder the person made available (read-only). folder is a name from local_info; path starts with /.',
     { folder: { type: 'string' }, path: { type: 'string' } }, ['folder'],
-    (a, ctx) => ctx.local ? lb.read(ctx.local, a) : noLocal(ctx)),
+    (a, ctx) => ctx.local ? lb.read(ctx.local, a, ctx.wording) : noLocal(ctx)),
 ];
 const all = () => [...tools, ...repoTools, ...vmTools, ...fileTools, ...askTools, ...valueTools, ...localTools];
 
