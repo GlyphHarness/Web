@@ -218,6 +218,46 @@ check('repository tools switch: on adds them back, with the access line once in 
   check('check records: a later read is a new record; earlier records are not rewritten', recordsOf(s2).checks.length === 4 && JSON.stringify(recordsOf(s2).checks.slice(0, 3)) === JSON.stringify(c1) && JSON.stringify(recordsOf(s2).entries.slice(0, 2)) === JSON.stringify(recordsOf(s1).entries), String(recordsOf(s2).checks.length));
   const turnsText = JSON.stringify(s2.messages) + '\n' + (s2.system || ''), r2 = recordsOf(s2);
   check('check records: no record id or entry label is written into turn content', r2.checks.length === 4 && ![...r2.checks.map(c => c.id), ...r2.entries.map(e => e.id), ...r2.entries.map(e => e.label)].some(x => !x || turnsText.includes(x)));
+
+  // one file, two labels (INVENTORY.md QI10): the build labels it by its file path, repo_read by its git path;
+  // the entries whose normalized checksum is equal are the same thing, and the view joins them into one row
+  const crlf1 = 'export const a = 1;\r\nexport function f() { return a; }\r\n', lf1 = crlf1.replace(/\r\n/g, '\n'), more = 'export const b = 2;\n';
+  branches.main.files['src/y.js'] = crlf1; // a blob that holds CRLF
+  await say('repo read path src/y.js'); await idle();
+  const s3 = await stored(), r3 = recordsOf(s3), gitLabel = 'o/r:src/y.js', mem = I.memStore();
+  const copy = o => JSON.parse(JSON.stringify(o)), onlyY = r => { const ids = new Set(r.entries.filter(e => e.metadata?.path === 'src/y.js').map(e => e.id)); return { entries: r.entries.filter(e => ids.has(e.id)), checks: r.checks.filter(c => ids.has(c.entry_id)) }; }, soft = async f => { try { return await f(); } catch (e) { return { error: String(e?.message || e) }; } };
+  const into = (inv, label, text) => soft(() => I.build(inv, { language: 'js', scope: [label] }, { read: async () => text, put: mem.put }));
+  const rowsOf = inv => { try { const v = I.view(inv, { session: s3.id, join: true }); return Array.isArray(v) ? v : []; } catch { return []; } };
+  const withLabel = (rows, l) => rows.find(r => (r.labels || []).includes(l));
+  const labelsOf = r => (r?.labels || []).slice().sort().join();
+  const invA = { ...copy(onlyY(r3)), features: [] };
+  await into(invA, 'checkout/src/y.js', lf1); await into(invA, 'win/src/y.js', crlf1);
+  const snapA = JSON.stringify(invA), rowsA = rowsOf(invA), gA = withLabel(rowsA, gitLabel);
+  check('joined view: a file built under its file path and read through repo_read under its git path is one row with both labels, held and checked',
+    labelsOf(gA) === 'checkout/src/y.js,o/r:src/y.js,win/src/y.js' && rowsA.length === 1 && gA.held.length >= 1 && gA.checked.join() === 'whole' && gA.stale === false && keys(gA) === 'checked,checksum,entry_ids,held,labels,stale', JSON.stringify(rowsA));
+  const eOf = (inv, label) => inv.entries.filter(e => e.label === label).at(-1), ck3 = r3.checks.at(-1);
+  check('joined view: the read and both builds (CRLF checkout, LF checkout, CRLF blob) have one checksum; the raw hashes still differ by line ending',
+    !!ck3?.source_checksum && ck3.source_checksum === eOf(invA, 'checkout/src/y.js')?.metadata?.checksum && ck3.source_checksum === eOf(invA, 'win/src/y.js')?.metadata?.checksum && ck3.source_hash === eOf(invA, 'win/src/y.js')?.metadata?.hash && ck3.source_hash !== eOf(invA, 'checkout/src/y.js')?.metadata?.hash, JSON.stringify([ck3, eOf(invA, 'checkout/src/y.js')?.metadata]));
+  check('joined view: computing it rewrites no stored record', rowsA.length > 0 && rowsA.every(r => Array.isArray(r.labels)) && JSON.stringify(invA) === snapA && JSON.stringify(rowsOf(invA)) === JSON.stringify(rowsA) && JSON.stringify(copy(r3)) === JSON.stringify(r3));
+
+  // the file changes on the build side only: the new checksum no longer equals the read label's, so they part
+  const invB = { ...copy(onlyY(r3)), features: [] };
+  await into(invB, 'checkout/src/y.js', lf1);
+  const oneRow = rowsOf(invB).length;
+  await into(invB, 'checkout/src/y.js', lf1 + more);
+  const rowsB = rowsOf(invB), gB = withLabel(rowsB, gitLabel), cB = withLabel(rowsB, 'checkout/src/y.js');
+  check('joined view: after the file changes the labels are apart again: the changed one is held, unchecked; the other keeps what was checked',
+    oneRow === 1 && rowsB.length === 2 && gB !== cB && labelsOf(gB) === gitLabel && labelsOf(cB) === 'checkout/src/y.js' && cB.held.length >= 1 && cB.checked.length === 0 && gB.checked.join() === 'whole' && gB.stale === false && gB.checksum !== cB.checksum, JSON.stringify(rowsB));
+
+  // the file changes in the repository and is read again: the read label is stale (its last check differs from its entry) and stays apart
+  branches.main.files['src/y.js'] = crlf1 + more.replace(/\n/g, '\r\n');
+  await say('repo read path src/y.js'); await idle();
+  const r4 = recordsOf(await stored()), invC = { ...copy(onlyY(r4)), features: [] };
+  await into(invC, 'checkout/src/y.js', lf1); await into(invC, 'checkout/src/y.js', lf1 + more);
+  const rowsC = rowsOf(invC), gC = withLabel(rowsC, gitLabel), cC = withLabel(rowsC, 'checkout/src/y.js');
+  check('joined view: a read label whose last read saw other content than its entry holds is stale and stays apart from the rebuilt file path',
+    r4.checks.length === r3.checks.length + 1 && gC !== cC && labelsOf(gC) === gitLabel && gC.stale === true && gC.checked.join() === 'whole' && labelsOf(cC) === 'checkout/src/y.js' && cC.stale === false && cC.checked.length === 0, JSON.stringify(rowsC));
+  delete branches.main.files['src/y.js'];
 }
 
 // ---- sandbox ----

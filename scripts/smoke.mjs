@@ -971,6 +971,41 @@ await say('hello reasoning');
     !!unknown?.error && plugged?.entry?.domain === 'speclang' && plugged.entry.source === 'provider:spec-fake' && plugged.entry.captures[0].feature_id === 'speclang-names' && plugged.feature?.id === 'speclang-names' && plugged.symbols[0]?.name === 'alpha',
     JSON.stringify([unknown, plugged?.error || plugged?.entry]));
 
+  // identity is the checksum (INVENTORY.md QI10): equal checksums are one thing whatever the labels, and the
+  // has/has-not view joins them into one row that keeps every label; stored entries are never rewritten
+  const ck = (s, t) => { try { return I.checksum(s) === I.checksum(t); } catch { return null; } };
+  const long = n => 'x'.repeat(n);
+  check('inventory: the checksum normalizes line endings as git does for text: CRLF is LF; a lone CR, a BOM and trailing white space are real differences',
+    ck('a\r\nb\r\n', 'a\nb\n') === true && ck('a\rb', 'a\nb') === false && ck('﻿a', 'a') === false && ck('a \n', 'a\n') === false && ck('a\r\nb', 'a\r\nb') === true, String(typeof I.checksum));
+  check('inventory: a file with a NUL in its first 8,000 bytes is binary and hashed raw; a NUL after them does not make it binary',
+    ck('a\0\r\nb', 'a\0\nb') === false && ck(long(7999) + '\0\r\n', long(7999) + '\0\n') === false && ck(long(8000) + '\0\r\n', long(8000) + '\0\n') === true, String(typeof I.checksum));
+  const joined = await safely(async () => {
+    const mk = async items => { const m = Object.fromEntries(items), v = I.create(); await I.build(v, { language: 'speclang', scope: items.map(([l]) => l) }, { read: async l => m[l], put: store.put, get: store.get }); return { v, m }; };
+    const text = 'alpha\nbeta\n', bin = 'alpha\0\nbeta\n', crlf = s => s.replace(/\n/g, '\r\n');
+    const { v, m } = await mk([['win/a.spec', crlf(text)], ['unix/a.spec', text], ['p/bin.spec', crlf(bin)], ['q/bin.spec', bin], ['x/empty.spec', ''], ['y/empty.spec', ''], ['z/other.spec', 'gamma']]);
+    const snap = JSON.stringify(v), rows = I.view(v, { join: true }), plain = I.view(v);
+    const rowWith = (r, label) => r.find(x => (x.labels || []).includes(label));
+    const unchanged = JSON.stringify(v) === snap;
+    const before = rows.length;
+    await I.build(v, { language: 'speclang', scope: ['unix/a.spec'] }, { read: async () => text + 'gamma\n', put: store.put, get: store.get });
+    const rows2 = I.view(v, { join: true });
+    return { v, rows, plain, rowWith, unchanged, before, rows2, snap, snap2: JSON.stringify(v.entries.slice(0, 7)) };
+  });
+  const jr = joined?.rows, jw = joined?.rowWith, E = l => joined?.v?.entries?.find(e => e.label === l);
+  check('inventory: an entry keeps the raw hash and adds the checksum as its own field; one file with CRLF and with LF has two hashes and one checksum',
+    !!E('win/a.spec')?.metadata?.checksum && E('win/a.spec').metadata.checksum === E('unix/a.spec').metadata.checksum && E('win/a.spec').metadata.hash !== E('unix/a.spec').metadata.hash && E('win/a.spec').metadata.checksum === I.checksum('alpha\nbeta\n'),
+    JSON.stringify([E('win/a.spec')?.metadata, E('unix/a.spec')?.metadata, joined?.error]));
+  check('inventory: the same file with CRLF on one path and LF on the other is one row in the joined view, with both labels, held',
+    jw?.(jr, 'win/a.spec') === jw?.(jr, 'unix/a.spec') && jw(jr, 'win/a.spec')?.labels?.slice().sort().join() === 'unix/a.spec,win/a.spec' && jw(jr, 'win/a.spec').entry_ids.length === 2 && jw(jr, 'win/a.spec').held.length >= 1 && keys(jw(jr, 'win/a.spec')) === 'checked,checksum,entry_ids,held,labels,stale',
+    JSON.stringify(jr?.slice(0, 2) ?? joined?.error));
+  check('inventory: a binary file (a NUL in it) with CRLF bytes is not normalized: it does not join its LF twin',
+    !!jw?.(jr, 'p/bin.spec') && jw(jr, 'p/bin.spec') !== jw(jr, 'q/bin.spec') && jw(jr, 'p/bin.spec').labels.join() === 'p/bin.spec' && jw(jr, 'q/bin.spec').labels.join() === 'q/bin.spec', JSON.stringify(jr?.map(r => r.labels)));
+  check('inventory: identical content in different files joins them, and the row keeps every label (a known limit: nothing is hidden)',
+    jw?.(jr, 'x/empty.spec') === jw?.(jr, 'y/empty.spec') && jw(jr, 'x/empty.spec')?.labels?.slice().sort().join() === 'x/empty.spec,y/empty.spec' && jw(jr, 'z/other.spec')?.labels?.join() === 'z/other.spec' && jr.length === 5 && joined.plain.length === 7, JSON.stringify(jr?.map(r => r.labels)));
+  check('inventory: when a file changes its new checksum no longer equals the other label: the labels are apart again, each in its own row',
+    joined?.rows2?.length === 6 && jw?.(joined.rows2, 'win/a.spec') !== jw(joined.rows2, 'unix/a.spec') && jw(joined.rows2, 'win/a.spec').labels.join() === 'win/a.spec' && jw(joined.rows2, 'unix/a.spec').labels.join() === 'unix/a.spec' && jw(joined.rows2, 'unix/a.spec').held.length >= 1, JSON.stringify(joined?.rows2?.map(r => r.labels) ?? joined?.error));
+  check('inventory: the joined view is derived: computing it rewrites no stored record, and a change appends a record', joined?.unchanged === true && jr?.length > 0 && jr.every(r => Array.isArray(r.labels)) && joined.v.entries.length === 8 && joined.snap2 === JSON.stringify(JSON.parse(joined.snap).entries), String(joined?.v?.entries?.length ?? joined?.error));
+
   // the page: same module, same files, read over the static server
   const pg = await page.evaluate(async files => {
     try {
