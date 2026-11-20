@@ -1,0 +1,2 @@
+{"to":"nomenclature","id":"helytb","term":"stored call","means":"A tool call whose long arguments sit in the output store under a handle; the log keeps {ref, name, want} and an argument summary.","see":"app/main.js","aka":["swapped call","arguments stored by handle","SWAPPABLE call"],"since":"2026-11-20"}
+{"to":"nomenclature","id":"udztiu","term":"held call view","means":"What a held tool call's card and wh held show: the tool name and its arguments, resolved from the handle for a stored call.","see":"app/main.js","aka":["held card text","what is held"],"since":"2026-11-20"}
