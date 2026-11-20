@@ -21,7 +21,13 @@ const API = 'https://api.github.com';
 const POLL_MS = 3000;
 const MAX_AGE = 10 * 60e3; // directives older than this are dropped (replay guard)
 export const b64u = {
-  enc: buf => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''),
+  // in chunks: spreading a whole buffer into one call overflows the stack from about 125 KB
+  enc: buf => {
+    const b = new Uint8Array(buf);
+    let s = '';
+    for (let i = 0; i < b.length; i += 0x8000) s += String.fromCharCode.apply(null, b.subarray(i, i + 0x8000));
+    return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  },
   dec: s => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0)),
 };
 const PAIR = /([\w.-]+\/[\w.-]+)~([\w\/.-]+)~([\w-]+)/;
