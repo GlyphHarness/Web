@@ -79,6 +79,15 @@ export function parseExec(spec) {
 // mark, so the bridge can stop the whole group inside the target; stopping the launcher's client would not.
 const BOOT = mark => `IFS= read -r -d '' c; f=$(mktemp) || exit 125; printf %s "$c" > "$f"; set -m; bash "$f" </dev/null 2>&1 & p=$!; echo "${mark} $p" >&2; wait $p; s=$?; rm -f "$f"; exit $s\n`;
 const STOP = pg => `kill -TERM -- -${pg} 2>/dev/null; sleep 1; kill -KILL -- -${pg} 2>/dev/null; exit 0\n`;
+// The command's environment. On this computer (local:) only what a login shell needs to start, never the bridge's own
+// variables (its token, a cloud key the person happened to export). Through wsl.exe or a container client the
+// launcher needs its Windows or engine environment to start, and the target does not inherit it (WSL passes only
+// WSLENV's list; podman/docker exec only what -e names); the token is dropped there too.
+const KEEP_ENV = ['PATH', 'HOME', 'USER', 'LOGNAME', 'SHELL', 'LANG', 'LANGUAGE', 'LC_ALL', 'LC_CTYPE', 'TERM', 'TMPDIR', 'TMP', 'TEMP', 'TZ', 'USERPROFILE'];
+export function commandEnv(t, env = process.env) {
+  if (LAUNCHERS[t.kind]?.here) return Object.fromEntries(KEEP_ENV.filter(k => env[k] != null).map(k => [k, env[k]]));
+  const e = { ...env, WSL_UTF8: '1' }; delete e.WH_BRIDGE_TOKEN; return e;
+}
 const text = b => (b.includes(0) ? b.toString('utf16le') : b.toString('utf8')); // wsl.exe's own messages can be UTF-16
 const killTree = p => {
   if (p.exitCode != null || p.signalCode != null) return;
@@ -90,7 +99,7 @@ function execRun(t, cwd, cmd, seconds, outCap, signal) {
   return new Promise(resolve => {
     const L = LAUNCHERS[t.kind], pre = L.argv(t, cwd), t0 = Date.now(), mark = randomBytes(9).toString('hex');
     // the bridge's own token never rides along in the command's environment
-    const env = { ...process.env, WSL_UTF8: '1' }; delete env.WH_BRIDGE_TOKEN;
+    const env = commandEnv(t);
     const opts = { cwd: L.here ? cwd : undefined, windowsHide: true, detached: process.platform !== 'win32', env };
     const launch = last => { const a = [...pre, 'bash', ...last]; return spawn(a[0], a.slice(1), { ...opts, stdio: ['pipe', 'pipe', 'pipe'] }); };
     let child, group = 0, n = 0, truncated = false, timedOut = false, stopped = false, settled = false, err = Buffer.alloc(0), hard = null;
@@ -204,7 +213,8 @@ export async function start(opts = {}) {
         if (typeof a.cmd !== 'string' || !a.cmd || a.cmd.includes('\0')) return send(400, { error: 'cmd is the command text' });
         if (a.timeout != null && !(typeof a.timeout === 'number' && Number.isFinite(a.timeout))) return send(400, { error: 'timeout is a number of seconds' });
         const rel = a.cwd == null ? '' : a.cwd;
-        if (typeof rel !== 'string' || rel.length > 1024 || rel.includes('\0') || /^[\\/]/.test(rel) || /^[a-z]:/i.test(rel) || rel.split(/[\\/]/).includes('..')) return send(400, { error: 'cwd is a path inside the target\'s folder (relative, no ..)' });
+        // it reaches the launcher's command line (wsl.exe --cd, podman -w): plain characters only, never a leading -
+        if (typeof rel !== 'string' || rel.length > 1024 || (rel && !/^[\w.][\w./-]*$/.test(rel)) || rel.split('/').includes('..')) return send(400, { error: 'cwd is a path inside the target\'s folder (relative; letters, digits, . _ - and /; no ..)' });
         let cwd = t.dir;
         if (rel) {
           if (!LAUNCHERS[t.kind].here) cwd = path.posix.join(t.dir, rel);
