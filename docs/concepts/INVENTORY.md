@@ -1,6 +1,7 @@
 # Inventory, captures and the has/has-not view (hypothesis, 2026-11-20)
 
 Status: hypothesis. Rigid order steps 1 (name) and 2 (concept records) only; nothing is built.
+Status update 2026-11-20: I1 (capture only, verdict promote), I3 (has/has-not from data alone, verdict retest) and QI10 (identity by checksum, joined view, verdict promote) are built and measured with no model or the mock provider (`app/inventory.js`, `app/capture-js.js`); I2 and I4 to I9 are not built or measured. Results: `HYPOTHESES.md`, "Results".
 1. A development target is partly defined, partly nebulous; resolving it means knowing what can be checked and what has been checked, because content qualifies itself only once looked in.
 2. An inventory enumerates blobs by label with metadata and high-level captures (for code: function names, member declarations, signatures); a query shape tells the agent what it can ask.
 3. Check records say what was actually read; the agent then starts from an exact has vs has not and moves concern to concern (FLOWS.md concern queue), outside policies driving or enhancing.

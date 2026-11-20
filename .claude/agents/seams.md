@@ -16,6 +16,9 @@ model: sonnet
   - handles: `app/handles.js` mint, point, resolve
   - checkpoints: `app/checkpoints.js` choose, apply, credit
   - machine: `app/vm.js`, `app/vmhost.js`
+  - shell runner choice: `shellRunner(s)` in `app/main.js` picks, per session, the in-browser machine or an exec target by the "shell runs on" setting (`shellOn`: `machine` or `host:NAME`); the host runner is `hostShell(b, name).run(cmd, seconds)` in `app/localbridge.js` (same tool definition and result shape), targets and launchers in `localbridge/wh-local.mjs`
+  - inventory / capture provider: `app/inventory.js` `register(p)`, `capture`, `build`, `check`, `view` (one provider per language); `app/capture-js.js` is the JavaScript provider (acorn, vendored as `app/vendor-acorn.js`)
+  - validate: `app/validators.js` `register(check, fn)` adds a check kind, `reader(fn)` adds a record shape; `resolve` never blocks (operator entry `scripts/validators.mjs`)
   - coordination: `app/coord.js` gates
   - UI: `rule(name, css)` and `slot(el, value)` in `app/styles.js`
 - Never implements before the red commit. Never edits a check to make it pass. Never runs a real model in a suite.
@@ -37,6 +40,7 @@ Steps 3 and 4 of the rigid order in `CLAUDE.md` (steps 1-2 are `context`'s).
 - A production fault becomes a check before its fix.
 - New behaviour that changes what the model sees (turns, handles, tools) is a new strategy major version: register a new `strat-<name>-<major>.0`, never edit a registered spec (`register` throws on a taken id). Harness-side tuning is a minor version.
 - Add a mock trigger in `app/providers.js` when a check needs a model behaviour.
+- Text the harness gives a model contains no identifying term of `app/neutral.js` (checks in `scripts/test-localbridge.mjs`); reword, do not excuse.
 - A passing suite is silent; a failing one opens one `ci-failure` concern, the next pass closes it.
 
 ## Records

@@ -1,6 +1,7 @@
 # Flows, tags and turn allocation (hypothesis, rev 3, 2026-11-20)
 
 Status: hypothesis. Rigid order steps 1 (name) and 2 (concept records) only; nothing is built.
+Status update 2026-11-20: F1 (validator extraction) is built (`app/validators.js`, `scripts/validators.mjs`) and measured by code with no model (verdict retest); F2 to F9 are not built or measured. Results: `HYPOTHESES.md`, "Results".
 1. A flow is a pre-made sequence of turns held in a catalog; a cheap helper (the flow router) picks which flow starts or joins a conversation, before any provider API is called.
 2. Tags and snap policies, kept beside the turns and never inside them, say which flows a turn qualifies for; step validators lifted from skills check a flow as its turns resolve steps.
 3. Turn stacks and turn dithering allocate turns from parameterized templates; flow lint joins the captured data to find successes, issues and further strategies.

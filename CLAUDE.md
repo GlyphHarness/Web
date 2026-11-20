@@ -33,9 +33,9 @@ Work on `dev`; every piece of work follows the rigid order below.
 8. Release - `steward`
 
 ## Commands (repo root)
-- Suites: `node scripts/smoke.mjs`, `scripts/smoke-git.mjs`, `scripts/smoke-vm.mjs`.
-- CI: `node scripts/ci.mjs` (runs in `.github/workflows/test.yml`; a failing suite opens one ci-failure concern, a pass closes it).
-- Operator: `node scripts/wh.mjs <cmd>` (init, new, say, step, stem, fold, ls, show, assess, flags, review, watch, cost, raw).
+- Suites: `node scripts/smoke.mjs`, `scripts/smoke-git.mjs`, `scripts/smoke-vm.mjs` (these need the repo served and a browser). Plain node, no browser: `node scripts/test-cpu-shares.mjs`, `test-paste-keys.mjs`, `test-localbridge.mjs`, `test-validators.mjs` (suite `validators`), `test-profile.mjs` (suite `profile`). Operator CLI against the mock provider (served page and a browser): `node scripts/test-wh.mjs`.
+- CI: `node scripts/ci.mjs [main git cpu keys local validators profile wh vm]` (runs in `.github/workflows/test.yml`; a failing suite opens one ci-failure concern, a pass closes it).
+- Operator: `node scripts/wh.mjs <cmd>` (init, new, say, sayfile, system, paste, step, stem, fold, ls, show, assess, flags, review, watch, cost, raw, held, dump, log, forget; `node scripts/wh.mjs` prints all). Options `--channel chrome`, `--headed`, `--dir`. Every command is appended to `<dir>/log.jsonl` (sizes and hashes, no message text, no key).
 - Case study: `node scripts/casestudy.mjs --live --repeat N`.
 - Docs: `docs/STEMS.md`, `docs/TABS.md`, `docs/PROTOCOL.md`, `docs/TESTING.md`, `docs/concepts/`.
 
