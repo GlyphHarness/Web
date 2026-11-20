@@ -63,3 +63,21 @@ Hypotheses touched (description only):
 - H10 (templated nudge): silent; every `continue` here followed a limit or a provider failure, none a stall.
 
 Limits: one session, one model, one task, one operator; the operator held and read every step, which a person would not do at this length.
+
+### 2026-11-20 · live stepped session 2 (host files, 40 tool rounds, no run code) · n = 1 session, 27 requests
+Source: `docs/concepts/profile-live2-2026-11-20.json`.
+
+What it looked like: `strat-serial-3.0 | tencent/hy4-flash`, 1 turn, 27 main requests, 0 helper requests, $0.00264 (median $0.00007 per request). 28 calls: `file_read` 11, `file_edit` 9, `shell` 5, `output_read` 3; all results ok. 3 byte-identical repeats in 3 runs (the same line range read again after an edit). Cache 94% overall, first hit at request 1 (20%), 92% or more from request 2. Prompt per request 3.9k, then 17.8k to 24.9k; output 4,459 tokens, 38% reasoning. 3 calls before the first write (`file_edit`), 14 before the first commit. Stop: done. No follow-up messages.
+
+Pointers drilled: none.
+
+Open questions it raises:
+- Session 1 and session 2 differ in task and in four options at once. Which of the four accounts for the drop from 125 requests to 27 cannot be read from these two runs; a pair on one task with one option changed would say.
+- The two whole-file reads cost about 14k prompt tokens that every later request re-sent. Would a brief that names line ranges, or a cap on a whole read, change the total?
+- Is re-reading a range after each edit worth its request? 3 of 27 requests here.
+
+Hypotheses touched (description only):
+- F1: 5 of 11 checkable validators pass on this profile (4 of 11 on session 1). Still no flow attribution.
+- H7 (repeat note): the 3 repeats here are reads of text that had just changed; a repeat note keyed on byte-identical calls would have fired on useful reads.
+
+Limits: one session, one model, one small task.

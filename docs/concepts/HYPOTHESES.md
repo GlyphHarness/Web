@@ -240,3 +240,34 @@ Not a model run: mock provider and the real bridge only. It answers points 2 to 
 - What a host session with the options on is sent (`strat-serial-3.0`, `hostFiles` true, run code denied, no repository or local tools): 19 tools, `scratchpad_read, scratchpad_write, show_widget, output_read, fan_out, branch_read, pattern_find, pattern_get, pattern_put, pattern_run, entry_read, ask, value_request, value_set, value_get, shell, file_read, file_edit, file_write`; the first request (12,089 chars as built in node) holds none of WebHarness, browser, page, tab, bridge, Alpine, wh-install, harness, in-page. Under the strategies registered before `strat-serial-3.0` the `shell` description names the page (they keep their registered bytes), so a host session that must not learn it runs under 3.0.
 
 Not measured: whether a real model uses the file tools in place of patch scripts and `sed -n`, and how many requests that saves; that needs a session like the one above with the options on.
+
+### Live stepped session 2 · 2026-11-20 · the same kind of task with host files, 40 tool rounds and no run code
+
+Not a silo pair and not a controlled comparison with session 1: the task is smaller and the options differ in four ways at once (strategy wording 3.0, `hostFiles`, `toolRounds` 40, run code denied). It is recorded as the first real model run of the host file tools.
+
+Setup. Model `tencent/hy4-flash`, `strat-serial-3.0`, `pace both` (every request and tool call held and released one at a time), watcher and helper off, the installed Chrome with a visible window, page served from a checkout at `a678a76`. Shell on `host:box` (the same Podman container, repository at `a678a76` on a branch of its own). Profile `host-work` with the run code capability denied; `hostFiles` true; `toolRounds` 40. The task was one message (2,314 chars): make `commitMessages` return one message per commit (several `-m` joined as paragraphs), checks first in a `Spec:` commit, then the implementation, `node scripts/ci.mjs validators profile` green, no push. The brief named the two existing table rows that the change contradicts and allowed changing them (lesson 7 of session 1).
+
+| Outcome | Turns / requests / tool calls | Operator messages | Result classes | Tokens | Cost (ledger) |
+| --- | --- | --- | --- | --- | --- |
+| completed in the first turn: two commits in the container, `validators ok (46/46), profile ok (34/34)`; applied on `dev` at `5dc8b2a` as `0ccc249` and `1f57fc9` (2 files, +16 -4) with the same result | 1 / 27 / 28 (11 `file_read`, 9 `file_edit`, 5 `shell`, 3 `output_read`) | 0 steering, 0 `continue`; every held step released, none skipped | ok 28 | 573,951 prompt, 539,648 cached (94%), 4,459 out (1,691 reasoning); prompt per request 3.9k, then 17.8k to 24.9k | $0.00264; per request median $0.00007 |
+
+Profile (metadata only): `docs/concepts/profile-live2-2026-11-20.json`.
+
+Side by side with session 1, as two numbers each and no ranking: turns 18 and 1; requests 125 and 27; tool calls 145 and 28; results other than ok 7 and 0; operator messages after the first 17 and 0; cost $0.01206 and $0.00264; change size +21 -3 and +16 -4.
+
+What the model was told about where it ran. 19 tools were offered (the 17 of session 1 without `run_js`, plus `file_read`, `file_edit`, `file_write`). The first request's body (14,398 chars, from the saved trace) held none of these as words: WebHarness, browser, page, tab, bridge, Alpine, wh-install, harness, in-page, widget, sandbox, iframe, localhost, 127.0.0.1, Chrome, Windows, wsl, podman, container.
+
+Order of work, from the profile: two whole-file reads, the test edits, the suite run red, the checks committed alone, the implementation edits, the suite run green, the implementation committed. 14 calls came before the first commit.
+
+F1 on this record (`node scripts/validators.mjs .claude/skills/spec-first/SKILL.md --records docs/concepts/profile-live2-2026-11-20.json`): of the 11 checkable validators, pass 5, fail 6 (all `absent`), against pass 4, fail 7 on session 1's profile. The shape `Spec: <behaviour> (<why>)` passes here: the brief asked for that form and the message has the parenthesised reason.
+
+What it taught
+
+1. With file tools the model wrote no patch script and ran no `sed`: 11 reads by line range and 9 exact edits, every one accepted (no `find occurs 0 times`). After each edit it read the same range again (3 byte-identical `file_read` calls, counted as repeats; they are re-reads of changed text, not stale repeats).
+2. The first two reads were whole files (the prompt went from 3.9k to 17.8k tokens in one step). Everything after was a range.
+3. One turn was enough at 40 rounds: 27 requests would have been four limit stops at 8.
+4. No provider failure occurred, so the retry was not exercised by a real 5xx.
+5. Carried from the session, corrected by the operator: the model gave the implementation commit a `Spec:` subject too. It was reworded to `Validators: ...` when the commit was applied, and the author was set to an address no account can hold (see the fault recorded for session 1's commits).
+6. Two of the nine `file_edit` calls had their arguments stored by handle, so the held step showed the operator only `{"ref": ...}`, and the profile's argument summary for those two calls is the handle, not the path. The operator released two edits without reading them. `wh held` needs to show what a held call will do, and the summary of a stored call needs its path.
+
+Verdict: none (no hypothesis was under test). Host file tools and tool rounds move to measured for this model on this one task.
