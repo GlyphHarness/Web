@@ -58,7 +58,7 @@ function openaiCompatible({ label, base }) {
           rec.chunks.push([dt(), text]);
           let msg = text;
           try { const j = JSON.parse(text); msg = j.error?.message || text; } catch {}
-          throw new Error(`HTTP ${r.status}: ${msg.slice(0, 500)}`);
+          throw Object.assign(new Error(`HTTP ${r.status}: ${msg.slice(0, 500)}`), { status: r.status });
         }
         yield* sse(r, text => rec.chunks.push([dt(), text]));
       } catch (e) {
@@ -69,12 +69,50 @@ function openaiCompatible({ label, base }) {
   };
 }
 
+// A chat request that fails before any chunk with a transient error (HTTP 502, 503, 504, 429, or a network error
+// before the response started) is asked again: at most 2 more tries, after retry.delays (1 s, then 3 s). Never once
+// a chunk was yielded (the caller has seen content), never another 4xx, never when the caller aborted. opt.retryDelays
+// and opt.sleep (ms -> promise) replace the waits for a test. The count is written to opt.retries for the caller's ledger
+// row; it is never part of a request body. The wrapper replaces provider.stream in place.
+export const retry = { delays: [1000, 3000] };
+const RETRY_STATUS = new Set([502, 503, 504, 429]);
+const statusOf = e => e?.status ?? (/^HTTP (\d{3})\b/.exec(e?.message || '')?.[1] | 0);
+const transient = e => RETRY_STATUS.has(statusOf(e)) || (e?.name === 'TypeError' && !statusOf(e));
+const abortError = () => new DOMException('Aborted', 'AbortError');
+const wait = (ms, signal) => new Promise((ok, no) => {
+  if (signal?.aborted) return no(abortError());
+  const t = setTimeout(() => { signal?.removeEventListener('abort', stop); ok(); }, ms);
+  const stop = () => { clearTimeout(t); no(abortError()); };
+  signal?.addEventListener('abort', stop, { once: true });
+});
+export function retrying(provider) {
+  const once = provider.stream;
+  provider.stream = async function* (body, key, signal, opt) {
+    opt ??= {};
+    const delays = (opt.retryDelays || retry.delays).slice(0, 2);
+    for (let n = 0; ; n++) {
+      let yielded = false;
+      try {
+        for await (const chunk of once.call(provider, body, key, signal, opt)) { yielded = true; yield chunk; }
+        return;
+      } catch (e) {
+        if (yielded || n >= delays.length || !transient(e)) throw e;
+        if (signal?.aborted) throw abortError();
+        await (opt.sleep ? opt.sleep(delays[n]) : wait(delays[n], signal));
+        opt.retries = n + 1;
+      }
+    }
+  };
+  return provider;
+}
+
 // Offline provider for demos and tests. It streams canned replies, calls a tool
 // when the user message contains "tool", and reports usage with a simulated
 // prefix cache (64-token units, ~4 chars per token) so the ledger can be exercised.
 const mockSeen = []; // recent flattened requests, standing in for a provider-side prefix cache
 const bpSeen = new Set(); // prefixes written at explicit breakpoints
 let mockStalled = false;
+const mockFails = new Map(); // "fail <status> x<n>" triggers: failures served so far per request
 const mock = {
   label: 'Mock (offline)', needsKey: false,
   requests: [], // the last bodies it was sent, as sent (scripted checks read what a model was given)
@@ -119,6 +157,17 @@ const mock = {
     });
     // stalls once: sends nothing for 3 s (an upstream that stopped mid-stream), then behaves
     if (/\bstall once\b/.test(last.content || '') && !mockStalled) { mockStalled = true; for (let i = 0; i < 200; i++) await tick(); }
+    // "fail <status> x<n> [late]" in a user message: that request fails n times with that HTTP status, then succeeds
+    // ("late": after its first chunk). The counter is per model, message and conversation length, so a re-ask is the same request.
+    const fail = last.role === 'user' && /\bfail (\d{3}) x(\d+)( late)?\b/.exec(last.content || '');
+    if (fail) {
+      const k = JSON.stringify([body.model, last.content, body.messages.length]), seen = mockFails.get(k) || 0;
+      if (seen < Number(fail[2])) {
+        mockFails.set(k, seen + 1);
+        if (fail[3]) yield { choices: [{ delta: { content: 'partial ' } }] };
+        throw Object.assign(new Error(`HTTP ${fail[1]}: Provider returned error`), { status: Number(fail[1]) });
+      }
+    }
     let text = '';
     if (String(body.messages[0]?.content).startsWith('You condense')) {
       const said = [...last.content.matchAll(/^#(\d+) (title|reply)$/gm)].map(m => `#${m[1]}\n${m[2] === 'title' ? 'Mock Title ' + m[1] : 'condensed item ' + m[1]}`).join('\n');
@@ -256,6 +305,6 @@ const mock = {
 };
 
 export const providers = {
-  openrouter: openaiCompatible({ label: 'OpenRouter', base: 'https://openrouter.ai/api/v1' }),
-  mock,
+  openrouter: retrying(openaiCompatible({ label: 'OpenRouter', base: 'https://openrouter.ai/api/v1' })),
+  mock: retrying(mock),
 };

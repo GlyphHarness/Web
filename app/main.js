@@ -1269,11 +1269,11 @@ async function turnsInner(s, depth, onFirst) {
     Object.assign(acc, { content: '', reasoning: '', calls: [], usage: null }); think.textContent = ''; txt.textContent = '';
     const req = new AbortController(), stop = () => req.abort();
     ctl?.signal.addEventListener('abort', stop);
-    let idle = null;
+    let idle = null; const o = opt(); // o.retries: how often the provider seam asked again (providers.js)
     const arm = () => { clearTimeout(idle); idle = setTimeout(() => { stalled = true; req.abort(); }, IDLE * 1000); };
     stalled = false; failure = null; arm();
     try {
-      for await (const ev of p.stream(wire, key, req.signal, opt())) {
+      for await (const ev of p.stream(wire, key, req.signal, o)) {
         arm();
         if (onFirst) { onFirst(); onFirst = null; }
         if (shown()) $('#events').append(JSON.stringify(ev) + '\n');
@@ -1292,7 +1292,7 @@ async function turnsInner(s, depth, onFirst) {
         }
       }
     } catch (e) { failure = e; }
-    finally { clearTimeout(idle); ctl?.signal.removeEventListener('abort', stop); }
+    finally { clearTimeout(idle); ctl?.signal.removeEventListener('abort', stop); if (o.retries) acc.retries = (acc.retries || 0) + o.retries; }
     if (!stalled) break;
     smell(s, { kind: 'stream-stall', upstream: acc.upstream || 'unknown', detail: `no data for ${IDLE} s (attempt ${attempt + 1})` });
     notice(s, `The provider stopped sending for ${IDLE} s; ${attempt ? 'stopped the turn' : 'asking again'}.`);
@@ -1321,7 +1321,7 @@ async function turnsInner(s, depth, onFirst) {
       if (acc.reasoning) m.x.reasoning = acc.reasoning;
       push(s, m);
     }
-    s.ledger.push({ ...report(entry, acc.usage), ...(acc.upstream ? { upstream: acc.upstream } : {}), ...(bps.length ? { bp: bps.map(b => b.kind) } : {}), strat: strat.id });
+    s.ledger.push({ ...report(entry, acc.usage), ...(acc.upstream ? { upstream: acc.upstream } : {}), ...(bps.length ? { bp: bps.map(b => b.kind) } : {}), ...(acc.retries ? { retries: acc.retries } : {}), strat: strat.id });
     if (bps.length && acc.usage) ck.credit(body, bps, { prompt: acc.usage.prompt_tokens || 0, cached: acc.usage.prompt_tokens_details?.cached_tokens || 0, cacheWrite: acc.usage.prompt_tokens_details?.cache_write_tokens || acc.usage.cache_creation_input_tokens || 0 }, s.id);
     saveSession(s);
     if (shown()) $('#ledger tbody').append(ledgerRow(entry, s.ledger.length - 1));
