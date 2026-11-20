@@ -1314,7 +1314,13 @@ async function turnsInner(s, depth, onFirst) {
       // the log keeps {ref, name} and the full text sits in the output store.
       const kept = {}; // call index -> argument summary (profile.js) of arguments that leave the log: places as written, content as size and hash
       for (const [j, c] of calls.entries()) {
-        if (!SWAPPABLE.has(c.function.name) || c.function.arguments.length <= ARG_MAX) continue;
+        if (!SWAPPABLE.has(c.function.name)) continue;
+        if (c.function.arguments.length <= ARG_MAX) {
+          // a call the model wrote as a handle alone (a repeat of a stored call): the arguments are stored already, so the summary is kept the same way
+          const ref = refOf(c.function.arguments), text = ref && await get(ref).catch(() => null), sum = text && argSummary(c.function.name, text);
+          if (sum && !sum.unparsed) kept[j] = sum;
+          continue;
+        }
         let a;
         try { a = JSON.parse(c.function.arguments); } catch { continue; }
         kept[j] = argSummary(c.function.name, c.function.arguments);
@@ -1361,7 +1367,7 @@ async function turnsInner(s, depth, onFirst) {
       }
       // pacing: the call waits as it will run (after any policy repair)
       if (!nameless && !scopeNo && !pol?.refused && co?.halted()) await co.gate(s.id, 'tool');
-      const go = nameless || scopeNo || pol?.refused ? 'release' : await hold(s, 'tool', `${tc.function.name} ${pol ? pol.to : await fullArgs(tc)}`);
+      const go = nameless || scopeNo || pol?.refused ? 'release' : await (async v => hold(s, 'tool', v.detail, v.brief))(await heldView(s, tc, pol?.to));
       if (nameless) { /* content set above */ }
       else if (scopeNo) { content = `Not run: ${tc.function.name} is not available in this session.`; smell(s, { kind: 'scope-refused', tool: tc.function.name, detail: eff(s).path }); }
       else if (go === 'skip') content = 'Not run: skipped by the user.';
@@ -1539,19 +1545,22 @@ function valueEdit(v, fields, why) {
 // release too (bridge directive "release").
 const held = new Map();
 const pace = s => (s ? cfg(s).pace : state.meta.settings.pace) || 'run';
-function hold(s, kind, detail) {
+function hold(s, kind, detail, brief) {
   const p = pace(s);
   if (p === 'run' || (p === 'requests' && kind !== 'request') || (p === 'tools' && kind !== 'tool')) return Promise.resolve('release');
   return new Promise(ok => {
     const id = uid('h');
     const status = h('span', { class: 'mx', text: 'waiting' }); // the card's status text: a template places it, done() writes it
-    const shown = detail.length > 3000 ? detail.slice(0, 3000) + '…' : detail;
+    const shown = detail; // the whole text: a long one is clipped by CSS (data-clip) and one action (data-hold=more) opens it
+    const clip = shown.length > 600 || shown.split('\n').length > 10;
     const card = R.part('held', { title: 'held ' + (kind === 'request' ? 'model request' : 'tool call'), kind, status: 'waiting', text: shown, slots: {
       status: [status], what: [h('pre', { text: shown })],
-      controls: [h('div', { class: 'actions' }, btn('release', { 'data-hold': 'release', class: 'primary' }), btn('release all', { 'data-hold': 'all' }), btn('skip', { 'data-hold': 'skip' }))] } }, { session: s.id });
+      controls: [h('div', { class: 'actions' }, btn('release', { 'data-hold': 'release', class: 'primary' }), btn('release all', { 'data-hold': 'all' }), btn('skip', { 'data-hold': 'skip' }), ...(clip ? [btn('show all', { 'data-hold': 'more' })] : []))] } }, { session: s.id });
     card.setAttribute('data-held', id);
-    const done = (v, by = 'you') => { if (!held.has(id)) return; held.delete(id); card.dataset.done = v === 'skip' ? 'skipped' : 'released'; slot(status, `${card.dataset.done} by ${by}`); for (const b of card.querySelectorAll('button')) b.disabled = true; link?.emit('held-done', { id, by, v }); ok(v); };
-    card.addEventListener('click', e => { const a = e.target.dataset?.hold; if (!a) return; if (a === 'all') letLoose(); else done(a); });
+    card.setAttribute('data-brief', brief ?? detail.slice(0, 200)); // the short form: wh say / wh step print it, never a bare handle
+    if (clip) card.setAttribute('data-clip', '');
+    const done = (v, by = 'you') => { if (!held.has(id)) return; held.delete(id); card.dataset.done = v === 'skip' ? 'skipped' : 'released'; slot(status, `${card.dataset.done} by ${by}`); for (const b of card.querySelectorAll('button:not([data-hold=more])')) b.disabled = true; link?.emit('held-done', { id, by, v }); ok(v); };
+    card.addEventListener('click', e => { const a = e.target.dataset?.hold; if (!a) return; if (a === 'more') slot(e.target, card.toggleAttribute('data-open') ? 'show less' : 'show all'); else if (a === 'all') letLoose(); else done(a); });
     held.set(id, { done, kind, s: s.id, detail });
     thread(s).append(card);
     scrollDown();
@@ -1567,10 +1576,24 @@ function letLoose(by = 'you') {
   state.meta.settings.pace = 'run'; saveMeta(); $('#pace').value = 'run';
   for (const x of [...held.values()]) x.done('release', by);
 }
+// the handle of a call whose arguments are stored (the harness wrote it, or the model repeated it), else null
+function refOf(a) {
+  try { const j = JSON.parse(a); if (j && typeof j.ref === 'string' && Object.keys(j).every(k => k === 'ref' || k === 'name' || k === 'want')) return j.ref; } catch {}
+  return null;
+}
 async function fullArgs(tc) {
-  const a = tc.function.arguments || '{}';
-  try { const j = JSON.parse(a); if (typeof j.ref === 'string' && Object.keys(j).every(k => k === 'ref' || k === 'name' || k === 'want')) return (await get(j.ref).catch(() => null)) || a; } catch {}
-  return a;
+  const a = tc.function.arguments || '{}', ref = refOf(a);
+  return ref ? (await get(ref).catch(() => null)) || a : a;
+}
+// What a held tool call shows: the call as it will run (stored arguments resolved), and a short form (data-brief)
+// that is the tool and the argument summary, never a bare handle. What the model is sent is not touched.
+async function heldView(s, tc, to) {
+  const name = tc.function.name, raw = tc.function.arguments || '{}', ref = to == null ? refOf(raw) : null;
+  const text = to ?? await fullArgs(tc);
+  if (!ref) return { detail: `${name} ${text}` };
+  if (text !== raw) return { detail: `${name} ${text}`, brief: `${name} ${JSON.stringify(argSummary(name, text))}` };
+  const m = s.messages.findLast(m => m.tool_calls?.some(c => c.id === tc.id)), kept = m?.x?.args?.[m.tool_calls.findIndex(c => c.id === tc.id)];
+  return { detail: `${name} ${raw}\nthe stored arguments are not in this browser's store (${ref})`, brief: kept ? `${name} ${JSON.stringify(kept)}` : `${name} (stored arguments not found: ${ref})` };
 }
 
 // ---------- questions to the person (ask.js) ----------
