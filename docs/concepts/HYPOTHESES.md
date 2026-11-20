@@ -1,6 +1,6 @@
 # WebHarness hypotheses (2026-11-19)
 
-Written by a Fable subagent (run in Claude Code, not the API) from the specs and live evidence. Unedited below this note. After it was written the first turn profile arrived (`OBSERVATIONS.md`, 2026-11-19); where that data bears on a hypothesis it says so in the "Hypotheses touched" list there, as description, and this text is left as written. UI customization (C15 to C17) is built by parallel sessions as ordinary development, not as silo experiments; H12 onward will be added when the first profile of a silo run raises a question.
+Written by a Fable subagent (run in Claude Code, not the API) from the specs and live evidence. Unedited below this note. After it was written the first turn profile arrived (`OBSERVATIONS.md`, 2026-11-19); where that data bears on a hypothesis it says so in the "Hypotheses touched" list there, as description, and this text is left as written. UI customization (C15 to C17) is built by parallel sessions as ordinary development, not as silo experiments; H12 onward will be added when the first profile of a silo run raises a question. Results of runs are appended under "Results" at the end.
 
 Read for this: `docs/STEMS.md` (§3, §5b-d, §7, §8), `origin/spec-recraft:docs/RECRAFT.md` and `recraft/voice-skill.md`, `docs/TENETS.md`, `app/strategies.js`, `app/checkpoints.js`, `app/main.js` (turn loop, `aux`, `watchCall`), `origin/issue-1-gh-allowlist:app/main.js` (`shellRunner`, `agentRun`), `app/git.js` (edits), issues 1, 5, 8, 9, 11, 12, PR 15, `docs/case-studies/side-goal-2026-11-19-live.md`, and the live evidence note (it is on commit `5fe9221`, not on the checked-out branch). Nothing was run; every number below is a threshold to test, not a result.
 
@@ -139,3 +139,38 @@ Then H8 (the checks PR 15 lacks), H5, and the code arms H6, H7, H9, H10; H11 whe
 1. **The brief is the treatment, not the mechanism.** Green arms tend to get a better-written first message, and a clear task wins under any strategy. Control: both arms get the same first message bytes; the only difference is the directive or the mechanism; add a third arm with a same-length neutral paragraph in the system prompt (this also controls for prefix length moving the cache floor, H2).
 2. **Run-to-run variance and order read as an effect.** Serial alone spans 2x in output; a later run can also hit an upstream cache the earlier one wrote, and the operator gets better at the task. Control: 5+5 alternating, fresh browser and fresh sandbox branch per run, upstream pinned from request 0, a distinct salt line at the top of each run's system prompt so no run reads another's cache, thresholds fixed here before running, and the operator's log (not memory) as the nudge count.
 3. **Cheap by not doing the work.** A green arm can cost less because it stopped early, committed a wrong edit, or shifted cost to an unmetered place (operator turns, helper rows, CI). Control: a run counts only if its product passes the same acceptance check (the diff applies, `node --check`, the smoke check where one exists, names unchanged); cost is the sum of every ledger row including helper kinds; held-step approvals and operator messages are counted per run and reported next to cost.
+
+## Results
+
+Written by the operator, one entry per run, newest last. The hypothesis text above stays as written; a result that contradicts it is recorded here.
+
+### H1 canary · 2026-11-20 · stopped: the task has no defect · verdict `retest`
+
+Model `tencent/hy4-flash` (upstream Tencent on all 21 requests), `strat-serial-1.0`, profiles `exp-h1-blue` / `exp-h1-green` with `GlyphHarness/wh-live-sandbox` as the only repo, `pace both`, watcher and helper off. Seed `5b19fda` in the sandbox: `app/main.js` and `app/vm.js` byte-identical to PR 15 head `938a02f`. Spend $0.00203 of the $0.15 cap.
+
+| Arm | Outcome | Requests / tool calls | Nudges | First-try edits | Repeat rate | Cost (ledger) | Cached tokens | Merge as is |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| blue, [`exp/h1-blue`](https://github.com/GlyphHarness/wh-live-sandbox/tree/exp/h1-blue) | not completed: no `repo_commit` call, branch still at the seed; stopped by the operator in turn 3 | 21 / 36 (21 `repo_read`, 13 `output_read`, 2 `run_js`) | 2 (`continue`, each after the harness stopped the turn at 8 tool rounds) | none attempted | 3 of 36 (8.3%) | $0.00203, every row with a reported cost | 227,072 of 246,087 prompt (92%); request 0: 0 of 3,716 | nothing to merge |
+| green, [`exp/h1-green`](https://github.com/GlyphHarness/wh-live-sandbox/tree/exp/h1-green) | not run; branch at the seed | - | - | - | - | $0 | - | - |
+
+Profile (metadata only): `docs/concepts/profile-h1-canary-2026-11-20.json`.
+
+Why it was stopped
+
+- The change H1 names is a no-op. On the seed, `shellOpt(s)` returns `{ user, quotaMB, session: s.id }` (`app/main.js` line 2367), `shellRunner` sets `o = shellOpt(s)` (2567) and the tmux path calls `agentRun(cmd, t, o)` (2568); `agentRun` ends in `vm().run(script, timeoutS + 30, { ...o, display: cmd })` (2514) and `run` sets `activeSession = opt?.session` (`app/vm.js` line 313). The session id already reaches `vm().run` on the tmux path. `shellOpt` carried `session: s.id` at PR 15's base (`f2779ea`) as well, so the gap listed on PR 15 ("the tmux path does not pass the session") is not in the code.
+- PR 15 and issue 1 were closed as not planned at 2026-11-20T07:54Z (restrictions are options, off by default), before this run started. The work is no longer on the board.
+- The operator's check before the run was a text match (`agentRun(cmd, t, o)` occurs once in the seed), not a trace of what `o` holds. The miss was seen during blue's third turn and then confirmed in the code. Green was not started.
+
+What it taught
+
+1. Check that the defect reproduces, by tracing or by a failing check, before a silo is seeded. A line that matches the hypothesis text is not a defect.
+2. Blue's counts are not a baseline. 36 reads and no write is what a fix request with nothing to fix produced; H6, H7 and H10 should not be judged against these numbers.
+3. The 8-round stop is counted as a nudge. Both `continue` messages followed `Stopped after 8 tool rounds` (`MAX_STEPS` in `app/main.js`). The nudge count as defined cannot tell a model that needed steering from a turn that ran out of rounds; count limit-forced continues on their own line.
+4. The first message names no repository or branch. Each arm got a line in its session system prompt (`Work in the repository GlyphHarness/wh-live-sandbox on the existing branch exp/h1-<arm>.`), so the arms would have differed by salt, branch name and directive, not by the directive alone. Settle where that pointer lives before the rerun.
+5. The salt is not at the front. `buildRequest` sends the core prompt before the session system prompt, and the 21 tool definitions come first in cache order, so about 3.6k of request 0's 3.7k prompt tokens are the same bytes in every run. Blue's request 0 reported 0 cached, but blue ran first; whether a second run reads the first run's prefix was not tested.
+6. Arms can read each other. Both branches are in one repo and the allowlist is per repo: blue listed the branches and read `exp/h1-green` (a diff, a log, a file range). In a pair run one after the other, the second arm can read the first arm's finished change. A repo per arm, or the first arm's branch moved away while the second runs, closes it.
+7. Long lines defeat ranged reads. A result over 1,500 chars comes back as a head-and-tail view, and a 40-line range of `app/main.js` is well over that, so blue read the tmux block in three successively narrower `repo_read` ranges before one came back whole. It also passed line numbers as `output_read` `offset` and `length` (they are characters) and called `output_read` inside `run_js` (not defined there).
+8. `wh` lacks what the shared rules assume: no command sets a session's system prompt or pastes profiles, and there is no command log to count nudges from. This run used an untracked copy of `scripts/wh.mjs` adding `system`, `paste`, `sayfile`, `held`, `dump` and a JSONL log. "Needs: no code" holds for the app, not for the operator CLI.
+9. From the code, not exercised here: the approval card previews the first 20,000 chars of each file, and `app/main.js` is about 250,000, so an edit at line 2568 would not be on the card. The held tool-call card carries the find and replace strings.
+
+Verdict: `retest`. H1 is untested: no green run and no valid blue. The rerun needs a one-file defect that reproduces, from work still open.
