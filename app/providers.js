@@ -153,7 +153,11 @@ const mock = {
       return;
     }
     const concern = last.role === 'user' && /^concern (\S+):/.exec(last.content);
-    if (/^wrap up/.test(last.content || '')) text = 'OUTCOME: done\nRESULT: slow-path numbers: line 399 is the worst case\nEVIDENCE: 3 measurements\nOPEN: none';
+    // "round after round": a tool call after every result, so the turn ends at the harness's round limit
+    const lastUser = body.messages.findLast(m => m.role === 'user');
+    if (/\bround after round\b/.test(typeof lastUser?.content === 'string' ? lastUser.content : '')) {
+      yield { choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_' + Date.now(), type: 'function', function: { name: 'run_js', arguments: JSON.stringify({ code: 'return ' + body.messages.filter(m => m.role === 'tool').length }) } }] } }] };
+    } else if (/^wrap up/.test(last.content || '')) text ='OUTCOME: done\nRESULT: slow-path numbers: line 399 is the worst case\nEVIDENCE: 3 measurements\nOPEN: none';
     else if (concern) text = `OUTCOME: done\nRESULT: mock result for ${concern[1]}\nEVIDENCE: folds received: ${(last.content.match(/^fold \S+/gm) || []).length}\nOPEN: none`;
     else if (last.role === 'tool') text = 'The tool returned:\n\n```text\n' + last.content + '\n```';
     else if (/^event \S+: /.test(last.content || '')) text = 'Got the event: ' + last.content;

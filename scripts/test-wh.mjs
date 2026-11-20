@@ -82,6 +82,17 @@ try {
   const f1 = json('forget'), f2 = json('forget');
   check('forget: the key store is emptied and the answer names what was there, not its value', f1.code === 0 && f1.data?.had?.includes('openrouter') && f2.data?.had?.length === 0, f1.out.slice(0, 200));
 
+  // ---- nudges: a continuation after a round-limit stop is told from a steering message ----
+  const id2 = json('new', 'nudge', 'count').data?.id;
+  wh('say', 'round after round');
+  wh('say', 'continue');
+  wh('say', 'now something else');
+  const says = log().filter(e => e.id === id2 && e.cmd === 'say');
+  check('log: the first message, a continuation after a round-limit stop and a steering message are told apart', says.map(e => e.kind).join() === 'first,limit-continuation,steer' && says[1]?.after === 'limit' && says[2]?.after === 'done', JSON.stringify(says));
+  check('log: each message records how its own run stopped', says.map(e => e.stop).join() === 'limit,done,done', JSON.stringify(says.map(e => e.stop)));
+  const counts = json('log', '-i', id2 || 'none').data?.counts;
+  check('log: wh log counts limit continuations and steering messages separately', counts?.first === 1 && counts?.limitContinuations === 1 && counts?.steering === 1, JSON.stringify(counts));
+
   // ---- the command log ----
   const L = log(), cmds = L.map(e => e.cmd);
   check('log: one JSON line per command, in order, with time, command and outcome', ['paste', 'new', 'system', 'dump', 'sayfile', 'pace', 'say', 'held', 'step', 'forget'].every(c => cmds.includes(c)) && cmds.indexOf('paste') < cmds.indexOf('system') && cmds.indexOf('system') < cmds.indexOf('sayfile') && L.every(e => e.t && e.cmd && typeof e.ok === 'boolean'), cmds.join(','));
