@@ -1209,6 +1209,43 @@ check('layout: the page itself does not scroll',await page.evaluate(() => docume
   const fread = await lastTool(), fx = execs.slice(nExec);
   check('host files: a read goes to the session\'s host target as one command with only cmd and timeout, and reads as numbered lines', fx.length === 1 && fx[0].target === 'dev' && Object.keys(fx[0]).sort().join() === 'cmd,target,timeout' && /\b2 lines\b/.test(fread.split('\n')[0]) && /^\s*1\thello$/m.test(fread) && /^\s*2\twelt$/m.test(fread), JSON.stringify(fread) + ' ' + fx.length);
   check('host files: what the read returned holds no identifying term', found(fread).length === 0, found(fread).join());
+  // ---- a held call shows what it will do; a stored call keeps its argument summary (concepts djmanv and rlxjyn) ----
+  // spec (red): a file_edit longer than ARG_MAX is stored by handle (mock: "stored edit <path>"); a model that repeats a stored call
+  // writes {"ref": ...} itself (mock: "repeat edit os:<handle>"). The held card, the summary kept beside the message and the turn
+  // profile show the path; what the model is sent is as it was (the literal below was taken from the harness before the change).
+  const HELD = '.msg[data-role=held]:not([data-done])';
+  const modelView = () => page.evaluate(async () => { const m = (await import('./app/providers.js')).providers.mock.requests.at(-1).messages; return JSON.stringify(m.slice(m.map(x => x.role).lastIndexOf('user'))).replace(/call_\d+/g, 'call_N'); });
+  const holdSay = async text => { await page.fill('#input', text); await page.click('#send'); await page.waitForSelector(HELD, { timeout: 20000 }); };
+  const release = async () => { await page.click(HELD + ' [data-hold=release]'); await page.waitForSelector('#app:not([data-busy])', { state: 'attached', timeout: 20000 }); };
+  const profArgs = () => page.evaluate(async () => { const id = sessionStorage.getItem('wh:tab-active'); return (await import('./app/profile.js')).profile(JSON.parse(localStorage['wh:s:' + id])).perTurn.flatMap(t => t.args); });
+  const lastCall = async () => { const m = (await sess()).messages.filter(x => x.tool_calls?.length).at(-1); return { call: m.tool_calls[0], kept: m.x?.args?.[0] }; };
+  await paste({ settings: { pace: 'run' } });
+  await say('stored edit f1.txt');
+  const viewRun = await modelView(), stored = await lastCall(), handle = JSON.parse(stored.call.function.arguments).ref;
+  await paste({ settings: { pace: 'tools' } });
+  await holdSay('stored edit f1.txt');
+  const card = page.locator(HELD).first(), shown = await card.locator('pre').textContent(), brief = await card.getAttribute('data-brief');
+  check('held call: a call whose arguments are stored by handle shows them resolved on the card: the path and the whole text', /^file_edit \{"path":"f1\.txt"/.test(shown) && shown.includes('goodbye '.repeat(200)) && !/"ref"/.test(shown), shown.slice(0, 120));
+  check('held call: its brief is the tool and the kept fields (the path; the text as size and hash), never the handle', /^file_edit \{.*"path":"f1\.txt"/.test(brief || '') && /"replace":\{"length":1600,"hash":"\w+"\}/.test(brief || '') && !/"ref"|goodbye/.test(brief || ''), String(brief));
+  const closed = await card.locator('pre').evaluate(e => e.clientHeight < e.scrollHeight), more = card.locator('[data-hold=more]');
+  if (await more.count()) await more.click();
+  const opened = await card.locator('pre').evaluate(e => e.clientHeight >= e.scrollHeight - 1);
+  check('held call: a long call is cut short on the card and one action shows it whole', closed && opened && await card.getAttribute('data-open') !== null && (await card.locator('pre').textContent()) === shown, `${closed} ${opened}`);
+  const heldStored = await lastCall();
+  check('stored call: the log keeps the handle alone, and the summary beside it names the path and the size of the text', JSON.stringify(Object.keys(JSON.parse(heldStored.call.function.arguments))) === '["ref"]' && heldStored.kept?.path === 'f1.txt' && heldStored.kept.replace?.length === 1600 && !JSON.stringify(heldStored.kept).includes('goodbye'), JSON.stringify(heldStored));
+  await release();
+  const viewHeld = await modelView(), mv = JSON.parse(viewRun);
+  check('held call: what the model is sent is as it was: the stored call as {ref} alone, with no summary and no path', JSON.stringify(mv[1]) === `{"role":"assistant","content":null,"tool_calls":[{"id":"call_N","type":"function","function":{"name":"file_edit","arguments":"{\\"ref\\":\\"${handle}\\"}"}}]}` && handle === 'os:1v2q3lq10n' && !/f1\.txt/.test(JSON.stringify(mv[1])), viewRun);
+  check('held call: the request after a held step is the one sent without a hold', viewHeld === viewRun, viewHeld);
+  check('stored call: the turn profile lists the path of each stored call', (await profArgs()).filter(a => a.name === 'file_edit').every(a => a.args?.path === 'f1.txt'), JSON.stringify(await profArgs()));
+  await holdSay('repeat edit ' + handle);
+  const shown2 = await page.locator(HELD).first().locator('pre').textContent(), brief2 = await page.locator(HELD).first().getAttribute('data-brief');
+  check('held call: a call the model repeated by its handle shows the stored arguments too', /^file_edit \{"path":"f1\.txt"/.test(shown2) && !/"ref"/.test(shown2) && /"path":"f1\.txt"/.test(brief2 || '') && !/"ref"/.test(brief2 || ''), shown2.slice(0, 100) + ' | ' + brief2);
+  await release();
+  const rep = await lastCall();
+  check('stored call: a repeat by handle keeps the summary of what it repeats', rep.kept?.path === 'f1.txt' && rep.kept.replace?.length === 1600, JSON.stringify(rep.kept));
+  check('stored call: the turn profile lists the path of the repeat as well', (await profArgs()).filter(a => a.name === 'file_edit').length === 3 && (await profArgs()).filter(a => a.name === 'file_edit').every(a => a.args?.path === 'f1.txt'), JSON.stringify(await profArgs()));
+  await paste({ settings: { pace: 'run' } });
   await paste({ settings: { hostFiles: false } });
   // the round limit: a setting; the turn stops after that many tool rounds and the stop is recorded as before
   await paste({ settings: { toolRounds: 3 } });

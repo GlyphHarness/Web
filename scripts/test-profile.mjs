@@ -74,6 +74,22 @@ const old = JSON.parse(fs.readFileSync(new URL('../docs/concepts/profile-2026-11
 const missing = Object.keys(old).filter(k => !(k in prof)), missingTurn = Object.keys(old.perTurn[0]).filter(k => !(k in (t0 || {})));
 check('profile: every field a profile had before is still there, turn fields too', missing.length === 0 && missingTurn.length === 0 && t0?.tools === 'repo_read shell' && prof.calls.total === 3 && prof.calls.byTool.repo_commit === 1, J([missing, missingTurn]));
 
+// ---- a call repeated by its handle carries the summary of the call that stored it (live stepped session 2: the path was missing) ----
+// a model that repeats a stored call writes {"ref": ...} itself; such a call is short, so it is not stored again and has no x.args
+const kept4 = { path: 'app/a.js', find: { length: 5, hash: 'aaaa1111' }, replace: { length: 640, hash: 'bbbb2222' } };
+const S4 = { id: 's4', title: 'repeat', ledger: [], messages: [
+  { role: 'user', content: 'edit it' },
+  { role: 'assistant', content: null, tool_calls: [tc('g1', 'file_edit', { ref: 'os:aaa111' })], x: { args: { 0: kept4 } } },
+  { role: 'tool', tool_call_id: 'g1', content: 'Tool error: find occurs 0 times' },
+  { role: 'assistant', content: null, tool_calls: [tc('g2', 'file_edit', '{"ref": "os:aaa111"}'), tc('g3', 'file_edit', '{"ref": "os:unknown9"}'), tc('g4', 'file_write', '{"ref": "os:aaa111"}')] },
+  { role: 'tool', tool_call_id: 'g2', content: 'ok' }, { role: 'tool', tool_call_id: 'g3', content: 'Tool error: no such output' }, { role: 'tool', tool_call_id: 'g4', content: 'ok' },
+] };
+const a4 = P.profile(S4).perTurn?.[0]?.args || [];
+check('repeat: the call that stored the arguments keeps its summary', J(a4[0]?.args) === J(kept4), J(a4[0]));
+check('repeat: a call repeated by the same handle has the same summary, its path included', J(a4[1]?.args) === J(kept4), J(a4[1]));
+check('repeat: a handle no earlier call stored stays the handle', a4[2]?.args?.ref === 'os:unknown9' && a4[2].args.path === undefined, J(a4[2]));
+check('repeat: the summary is not lent to another tool', a4[3]?.args?.path === undefined, J(a4[3]));
+
 // ---- what it is for: a step validator can resolve from a profile ----
 const asRead = V.read(prof);
 check('validators: the reader a profile had still reads it (tool names per turn)', asRead?.kind === 'profile' && asRead.calls.map(c => c.name).join() === 'repo_read,shell,repo_commit', J(asRead?.calls?.map(c => c.name)));
