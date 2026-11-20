@@ -193,8 +193,10 @@ const table = [
   [String.raw`git commit -mab`, ['ab']],
   [String.raw`git commit -am 'a b'`, ['a b']],
   [String.raw`git commit -a -m 'a'`, ['a']],
-  [String.raw`git commit -m 'a' -m 'b'`, ['a', 'b']],
-  [String.raw`git commit -m "a" --message=b`, ['a', 'b']],
+  [String.raw`git commit -m 'a' -m 'b'`, ['a\n\nb']],
+  [String.raw`git commit -m "a" --message=b`, ['a\n\nb']],
+  [String.raw`git commit -m 'a' -m 'b' -m 'c'`, ['a\n\nb\n\nc']],
+  [String.raw`git commit -m 'a' -m 'b' && git commit -m 'c'`, ['a\n\nb', 'c']],
   [String.raw`git add x && git commit -m 'Spec: a (b)' && git log -1`, ['Spec: a (b)']],
   [String.raw`cd r; git commit -m 'a' || echo no`, ['a']],
   [String.raw`git status | cat; git commit -m 'a' | tee log`, ['a']],
@@ -219,6 +221,13 @@ const table = [
 check('command line: git commit messages are extracted in every quoting and option form, in any chain', () => {
   const bad = table.filter(([line, want]) => !same(cm(line), want)).map(([line]) => line);
   return bad.length === 0 || bad;
+});
+check('command line: an anchored shape matches only the subject, not a body paragraph of the commit', () => {
+  const cmd = String.raw`git commit -m 'Fix x' -m 'Spec: y'`;
+  const rec = { id: 's_cmd_body', messages: [{ role: 'user', content: 'SECRET-USER do the work' }, { role: 'assistant', content: '', tool_calls: [call('j1', 'shell', { cmd })] }] };
+  const v = V.extract('- Start the message with `Spec:`.\n', 'skills/other/SKILL.md')[0];
+  const r = V.resolve(v, rec, { sources: { 'skills/other/SKILL.md': '- Start the message with `Spec:`.\n' } });
+  return (r.outcome === 'fail' && r.reason === 'absent') || r;
 });
 check('command line: not a git commit, or cut off inside its quote, gives no message (nothing is guessed)', () =>
   same(cm('ls'), []) && same(cm(null), []) && same(cm(42), []) && same(cm(String.raw`git commit -m 'Spec: a`), []));
