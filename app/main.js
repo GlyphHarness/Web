@@ -45,7 +45,7 @@ import { argSummary } from './profile.js';
 import { put, get, handlesIn, setFallback } from './outstore.js';
 import { buildRequest, measure, report, padAttachment, inherit, imitatesNote, keptLines, corePrompt, EDGE_MIN, markedOnly, edgeReplies, turnOf, KINDS } from './context.js';
 
-export const VERSION = '0.55.0';
+export const VERSION = '0.56.0';
 // This tab: an id kept for the tab's life (sessionStorage survives its reloads).
 const TAB = (() => { const mk = () => 't' + Math.random().toString(36).slice(2, 8); try { let t = sessionStorage.getItem('wh:tab'); if (!t) sessionStorage.setItem('wh:tab', t = mk()); return t; } catch { return mk(); } })();
 const QS = new URLSearchParams(location.search);
