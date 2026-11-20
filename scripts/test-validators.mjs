@@ -206,6 +206,8 @@ const table = [
   [String.raw`git commit -m "$(date) (x)"`, ['$(date) (x)']],
   ['git commit -m "x ' + bt + 'date' + bt + ' (y)"', ['x ' + bt + 'date' + bt + ' (y)']],
   [String.raw`git commit -m 'a' && git commit -m 'b`, ['a']],
+  [String.raw`echo git commit -m 'Spec: a (b)'`, []],
+  [String.raw`sudo git commit -m 'a'`, ['a']],
   [String.raw`git log --grep 'Spec: a'`, []],
   [String.raw`echo "git commit -m 'Spec: a (b)'"`, []],
   [String.raw`git commit`, []],
