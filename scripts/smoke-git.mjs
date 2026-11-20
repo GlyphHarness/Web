@@ -423,6 +423,43 @@ await thread().locator('.msg[data-role=approve]:not([data-done]) button', { hasT
 await idle();
 check('concerns: approved, it is filed by the model with the evidence', issuesMade.length === 2 && issuesMade[1].labels.join() === 'concern,kind:interop' && /Filed by model/.test(issuesMade[1].body) && /--paginate was not passed/.test(issuesMade[1].body));
 
+// ---- approval card: the change itself is on the card, wherever in the file it is (seam: approve(), the approval part) ----
+// A person approves what they can see. The whole-file preview stops at 20,000 characters; an edit at line 2568 of a
+// large file is far past that, so the card shows the changed lines with their line numbers.
+{
+  const big = Array.from({ length: 3000 }, (_, i) => i === 2567 ? '    return tmux ? agentRun(cmd, t, o) : plain(cmd, t, o); // line 2568' : `const filler_${i + 1} = ${i + 1}; // a line of ordinary code, long enough to matter`);
+  branches.main.files['big.js'] = big.join('\n') + '\n';
+  const cardOf = () => thread().locator('.msg[data-role=approve]:not([data-done])').last();
+  const rows = (card, path) => card.locator(`[data-change][data-path="${path}"] [data-op]`).evaluateAll(els => els.map(e => ({ op: e.dataset.op, old: e.dataset.old || null, now: e.dataset.new || null, text: e.querySelector('[data-code]')?.textContent ?? '' })));
+  const attrs = (card, path) => card.locator(`[data-change][data-path="${path}"]`).first().evaluate(e => ({ ...e.dataset })).catch(() => null);
+
+  await page.click('[data-act=new]');
+  await say('repo deep edit please');
+  await page.waitForSelector('.thread:visible .msg[data-role=approve]:not([data-done]) button');
+  const a1 = await attrs(cardOf(), 'big.js'), r1 = await rows(cardOf(), 'big.js');
+  const del = r1.find(r => r.op === 'del'), add = r1.find(r => r.op === 'add'), ctxRows = r1.filter(r => r.op === 'ctx');
+  check('approval card: an edit deep in a large file is on the card as a change, with its counts', branches.main.files['big.js'].length > 100000 && a1?.change === 'edit' && a1.added === '1' && a1.removed === '1', JSON.stringify(a1));
+  check('approval card: the removed and the added line carry their line numbers', del?.old === '2568' && /agentRun\(cmd, t, o\)/.test(del.text) && add?.now === '2568' && /session: s\.id/.test(add.text), JSON.stringify([del, add]));
+  check('approval card: a few lines of context sit around the change, numbered', ctxRows.length >= 4 && ctxRows.length <= 8 && ctxRows.some(r => r.old === '2567' && r.now === '2567') && ctxRows.some(r => r.old === '2569' && r.now === '2569') && r1.length === ctxRows.length + 2, JSON.stringify(r1.map(r => [r.op, r.old, r.now])));
+  check('approval card: the changed lines are visible without opening anything', await cardOf().locator('[data-change][data-path="big.js"] [data-op=add]').first().isVisible());
+  check('approval card: the part of a changed line that differs is marked', await cardOf().locator('[data-change][data-path="big.js"] [data-op=add] [data-chg]').first().textContent().catch(() => '') === '{ ...o, session: s.id }');
+  check('approval card: the change comes before the whole-file preview, which is still there', await cardOf().evaluate(el => { const c = el.querySelector('[data-change]'), f = el.querySelector('details:not([data-change]) pre.full'); return !!c && !!f && !!(c.compareDocumentPosition(f) & Node.DOCUMENT_POSITION_FOLLOWING); }).catch(() => false));
+  await cardOf().locator('button', { hasText: 'allow' }).click();
+  await idle();
+  check('approval card: allowing commits exactly what was shown', branches.deep?.files['big.js'].split('\n')[2567] === '    return tmux ? agentRun(cmd, t, { ...o, session: s.id }) : plain(cmd, t, o); // line 2568' && branches.deep.files['big.js'].split('\n').length === 3001 && branches.main.files['big.js'].split('\n')[2567].includes('agentRun(cmd, t, o)'));
+
+  await say('repo rewrite please');
+  await page.waitForSelector('.thread:visible .msg[data-role=approve]:not([data-done]) button');
+  const w = await attrs(cardOf(), 'a.txt'), wr = await rows(cardOf(), 'a.txt'), n = await attrs(cardOf(), 'notes/new.txt'), nr = await rows(cardOf(), 'notes/new.txt');
+  check('approval card: a whole-file write of an existing file is shown as its difference from the branch head', w?.change === 'write' && w.added === '1' && w.removed === '0' && wr.some(r => r.op === 'add' && r.now === '2' && r.text === 'second line') && wr.some(r => r.op === 'ctx' && r.old === '1' && r.text === 'hello world') && !wr.some(r => r.op === 'del'), JSON.stringify([w, wr]));
+  check('approval card: a new file is shown as new, every line added', n?.change === 'new' && n.added === '2' && nr.length === 2 && nr.every(r => r.op === 'add') && nr[1].now === '2' && nr[1].text === 'two', JSON.stringify([n, nr]));
+  check('approval card: nothing was written while the card waited', !branches.rewrite);
+  await cardOf().locator('button', { hasText: 'deny' }).click();
+  await idle();
+  check('approval card: a denied write leaves the repository as it was', !branches.rewrite && branches.main.files['a.txt'] === 'hello world\n');
+  delete branches.main.files['big.js'];
+}
+
 // ---- credential scope check: intended use vs what the token can do (no model) ----
 await page.click('[data-pane=insp]');
 await page.evaluate(() => { document.querySelector('#ghintentbox').open = true; document.querySelector('#ghintentbox').closest('details:not(#ghintentbox)').open = true; document.querySelector('[data-act=ghderive]').click(); });

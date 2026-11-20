@@ -196,6 +196,11 @@ const mock = {
       yield { choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_' + Date.now(), type: 'function', function: { name: 'run_js', arguments: JSON.stringify({ code }) } }] } }] };
     } else if (/^shell: /.test(last.content || '')) {
       yield { choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_' + Date.now(), type: 'function', function: { name: 'shell', arguments: JSON.stringify({ cmd: last.content.slice(7), timeout: 600 }) } }] } }] };
+    } else if (/repo (deep edit|rewrite)/.test(last.content || '')) {
+      // "repo deep edit": one edit far down a large file; "repo rewrite": an existing file written whole, and a new file
+      const changes = /deep edit/.test(last.content) ? [{ path: 'big.js', edits: [{ find: 'agentRun(cmd, t, o)', replace: 'agentRun(cmd, t, { ...o, session: s.id })' }] }]
+        : [{ path: 'a.txt', content: 'hello world\nsecond line\n' }, { path: 'notes/new.txt', content: 'one\ntwo' }];
+      yield { choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_' + Date.now(), type: 'function', function: { name: 'repo_commit', arguments: JSON.stringify({ repo: 'o/r', branch: /deep edit/.test(last.content) ? 'deep' : 'rewrite', message: 'Change files\n\nfrom the mock', changes }) } }] } }] };
     } else if (/repo (read|commit|pr)/.test(last.content || '')) {
       const op = /repo (read|commit|pr)/.exec(last.content)[1];
       // "repo read path <path> [lines a-b]" reads that path (a slice with lines); plain "repo read" reads a.txt whole
