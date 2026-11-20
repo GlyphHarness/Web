@@ -17,6 +17,8 @@
 //   reads        absent (a long result is a short view with a handle, whatever was asked) | 'ranged' (a range that is
 //                asked for, lines of a file or of a stored output, comes back whole up to a cap; output_read takes
 //                `lines`; a tool named inside run_js code is explained). Changes two tool descriptions (tools.js defsAs).
+//   wording      absent (the tool descriptions and helper lines as first registered) | 'neutral' (they name nothing of what
+//                runs the tools: tools.js defsAs and the local tools' answers, smells.js watchLine, term.js scratchLine).
 // register() adds more (experiments, other verticals), with the same shape.
 
 const BUILT_IN = [
@@ -31,6 +33,12 @@ const BUILT_IN = [
   // 1,500 characters came back head-and-tail, line numbers were passed where characters were expected, and
   // output_read was called from inside run_js (docs/concepts/HYPOTHESES.md).
   { id: 'strat-serial-2.0', name: 'serial', describe: 'Serial turns with ranged reads: a range that is asked for comes back whole (to a cap) and output_read takes lines; otherwise as strat-serial-1.0.', checkpoints: [], stems: false, handles: 'none', confer: false, resolver: false, reads: 'ranged' },
+  // serial 3.0 (what the model sees changes): the neutral wording. The shell, concern_file and local_* descriptions, the
+  // local tools' "nothing set up" answer, the watcher line and the scratch-helper line name nothing of what runs the
+  // tools (app/neutral.js). aa62df3 had made that change in place for every strategy; it is this strategy's data now,
+  // and the strategies above send what they were registered with. A host-shell session that must not learn where its
+  // tools are served from runs under this one (README, Host shell).
+  { id: 'strat-serial-3.0', name: 'serial', describe: 'Serial turns with ranged reads and the neutral wording: nothing the model is given names what runs its tools; otherwise as strat-serial-2.0.', checkpoints: [], stems: false, handles: 'none', confer: false, resolver: false, reads: 'ranged', wording: 'neutral' },
 ];
 export const DEFAULT = 'strat-stem-1.0';
 export const ID = /^strat-[a-z]+-\d+\.\d+$/;

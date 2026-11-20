@@ -247,7 +247,7 @@ const provider = () => providers[state.meta.settings.provider] || providers.open
 const profiles = () => (state.meta.profiles ??= []);
 const eff = s => prof.effective(profiles(), s?.profile, state.meta.settings, s?.over);
 const cfg = s => eff(s).settings;
-const toolsFor = s => { const e = eff(s), c = e.caps; return defsAs(defsFor(s), strategies.spec(e.settings.strategy).reads).filter(d => prof.allowedTool(d.function.name, c)); };
+const toolsFor = s => { const e = eff(s), c = e.caps; const sp = strategies.spec(e.settings.strategy); return defsAs(defsFor(s), sp.reads, sp.wording).filter(d => prof.allowedTool(d.function.name, c)); };
 
 // ---------- message rendering ----------
 
@@ -1214,6 +1214,7 @@ async function turnsInner(s, depth, onFirst) {
     pads: state.meta.pads, savePads: () => { saveMeta(); renderPads(); },
     depth, fanOut: args => fanOut(s, args, ctx), branchRead,
     reads: strategies.spec(set.strategy).reads, // 'ranged': a range that is asked for comes back whole (tools.js)
+    wording: strategies.spec(set.strategy).wording, // 'neutral': answers that name nothing of what runs the tools (tools.js)
     // attribution and reference checks come from the harness's view of the session
     by: () => ({ session: s.id, message: s.messages.length - 1, model: set.model, t: Date.now() }),
     knownRef: r => !!state.sessions[r] || s.messages.some(m => typeof m.content === 'string' && m.content.includes(r)),
@@ -1739,7 +1740,7 @@ async function aux(s, model, system, content, kind, maxOut) {
 // Watcher: a small (free or cheap) model checks each tool call as it completes and
 // raises a flag only when something needs attention; flags are smells too, so they
 // are tracked over time and reach whoever oversees the session (wh flags, the log repo).
-const WATCH_SYSTEM = 'WATCH. You check one tool call made by an agent. Reply exactly "ok", or "FLAG: <one short line>" when the call failed, repeated earlier work, wasted effort, broke a rule, or its result needs a person. Nothing else.';
+// its system line follows the session's strategy wording (smells.js watchLine: strat-serial-3.0 is the neutral one)
 // Each call is assessed once: s.watched[callId] = 'ok' | 'flag' (or 'pending' while it runs).
 function watchCall(s, tc, content) {
   const m = cfg(s).watchModel, key = tc.id || '';
@@ -1761,7 +1762,7 @@ function watchCall(s, tc, content) {
   if (prev >= 0) return Promise.resolve(flag(`repeated work: the same result as #${prev}`));
   s.watched[key] = 'pending';
   const text = `TOOL: ${tc.function.name}\nARGS: ${String(tc.function.arguments || '').slice(0, 600)}\nRESULT:\n${res.slice(0, 2500)}`;
-  return aux(s, m, WATCH_SYSTEM, text, 'watch', 60).then(r => {
+  return aux(s, m, smells.watchLine(strategies.spec(cfg(s).strategy).wording), text, 'watch', 60).then(r => {
     if (/^\s*FLAG:/i.test(r)) return flag(r.replace(/^\s*FLAG:\s*/i, ''));
     s.watched[key] = 'ok'; saveSession(s);
     return 'ok';
@@ -2632,7 +2633,7 @@ async function scratchDraft(ask, onStep = () => {}) {
   let text = `TASK: ${ask}\nTHE PERSON'S SESSION USER: ${s ? userOf(s) || 'root' : 'root'} (home ${s ? homeOf(s) : '/root'})`;
   const tries = [];
   for (let round = 0; round < 4; round++) {
-    const reply = await aux(s, model, termx.SCRATCH_SYSTEM, text, 'scratch', 700);
+    const reply = await aux(s, model, termx.scratchLine(s ? strategies.spec(cfg(s).strategy).wording : undefined), text, 'scratch', 700);
     const p = termx.parseScratch(reply);
     if (p.commands.length || !p.tries.length || round === 3) return { ...p, tries, reply };
     for (const t of p.tries) {

@@ -52,5 +52,10 @@ const PKEY = 'wh:proposals';
 export const proposals = () => { try { return JSON.parse(localStorage.getItem(PKEY) || '[]'); } catch { return []; } };
 export function saveProposals(list) { try { localStorage.setItem(PKEY, JSON.stringify(list.slice(-100))); } catch {} }
 
-export const REVIEW_SYSTEM = 'You review how a coding assistant is being steered. You get counts of problems (policy rewrites and refusals, imitated call notes, tool errors, timeouts) grouped by steering version, with per-request rates, and the current steering texts. Propose at most 5 changes to the steering: a line to add to or remove from the conventions or the system prompt, a policy to add, change or drop, or a tool description to reword. One per line: TARGET: change -- evidence (the counts it rests on). Propose nothing the counts do not support.';
+// The watcher's system line (main.js watchCall), by the session's strategy wording: 'neutral' (strat-serial-3.0) names
+// nothing of what runs the tools; every strategy registered before it is sent the line it was registered with.
+const WATCH_SYSTEM = 'WATCH. You check one tool call made by an agent. Reply exactly "ok", or "FLAG: <one short line>" when the call failed, repeated earlier work, wasted effort, broke a rule, or its result needs a person. Nothing else.';
+const WATCH_SYSTEM_1 = 'WATCH. You check one tool call made by an agent, for the harness that runs it. Reply exactly "ok", or "FLAG: <one short line>" when the call failed, repeated earlier work, wasted effort, broke a rule, or its result needs a person. Nothing else.';
+export const watchLine = wording => wording === 'neutral' ? WATCH_SYSTEM : WATCH_SYSTEM_1;
+export const REVIEW_SYSTEM ='You review how a coding assistant is being steered. You get counts of problems (policy rewrites and refusals, imitated call notes, tool errors, timeouts) grouped by steering version, with per-request rates, and the current steering texts. Propose at most 5 changes to the steering: a line to add to or remove from the conventions or the system prompt, a policy to add, change or drop, or a tool description to reword. One per line: TARGET: change -- evidence (the counts it rests on). Propose nothing the counts do not support.';
 

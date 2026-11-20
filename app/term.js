@@ -66,6 +66,9 @@ export const lastTyped = target => load().find(e => !target || e.target === targ
 export const SCRATCH_SYSTEM = `TERMINAL SCRATCH. You draft shell commands for a person to run in a terminal on an Alpine Linux machine (bash, coreutils, git, python3, gh, curl, jq; more packages with: wh-install <name>).
 You may test first in a scratch account: reply with up to 3 lines "TRY: <command>". Tests must be safe: read-only, or writing only inside the scratch home; no pushes, no deletes outside it. They are run for you, and the reply holds TRIED, EXIT and OUTPUT.
 When ready, reply with only one \`\`\`sh block: one command per line, each optionally followed by a line "# <why>". No other prose.`;
+// The line as registered with every strategy before strat-serial-3.0 (wording: 'neutral' gets SCRATCH_SYSTEM above).
+const SCRATCH_SYSTEM_1 = SCRATCH_SYSTEM.replace('They are run for you, and the reply holds TRIED, EXIT and OUTPUT.', 'The harness runs them and replies with TRIED, EXIT and OUTPUT.');
+export const scratchLine = wording => wording === 'neutral' ? SCRATCH_SYSTEM : SCRATCH_SYSTEM_1;
 
 export function parseScratch(text) {
   const t = String(text || '');
