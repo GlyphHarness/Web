@@ -1,6 +1,6 @@
 # Testing notes and gotchas
 
-How the suites run: `node scripts/ci.mjs [main git cpu keys local vm]` (serve the repo on a port first for `main`, `git`, `vm`: `python -m http.server 8787`). `keys`, `cpu` and `local` are plain node, no browser.
+How the suites run: `node scripts/ci.mjs [main git cpu keys local validators vm]` (serve the repo on a port first for `main`, `git`, `vm`: `python -m http.server 8787`). `keys`, `cpu`, `local` and `validators` are plain node, no browser.
 
 ## Playwright
 
