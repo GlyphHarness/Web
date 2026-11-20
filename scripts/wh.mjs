@@ -104,6 +104,13 @@ const money = n => '$' + (Number(n) || 0).toFixed(5);
 const line = (m, i) => `#${i} ${m.role}${m.tool_calls?.length ? ' [' + m.tool_calls.map(t => t.function.name).join(',') + ']' : ''}: ${String(m.content ?? '').replace(/\s+/g, ' ').slice(0, 110)}`;
 const costOf = s => s.ledger.reduce((n, e) => n + (Number(e.cost) || 0), 0);
 const openFlags = s => (s.flags || []).filter(f => !f.handled);
+// The harness records why each run stopped (session.stops: {t, at, why}); `at` is the log length at the stop.
+const lastStop = s => (s?.stops || []).at(-1) || null;
+// A message's kind for the nudge count: the first one, a continuation right after a round-limit stop, or steering.
+function sayKind(s) {
+  const end = lastStop(s), after = end && end.at === s.messages.length ? end.why : null;
+  return { after, kind: !s.messages.some(m => m.role === 'user') ? 'first' : after === 'limit' ? 'limit-continuation' : 'steer' };
+}
 // What is kept of a text in the log and in answers: its size and a short hash, never the text.
 const sha = s => createHash('sha256').update(String(s)).digest('hex').slice(0, 12);
 const readText = f => fs.readFileSync(f, 'utf8').replace(/\r\n/g, '\n');
@@ -131,9 +138,11 @@ async function turnReport(p, id, before) {
   const calls = msgs.flatMap(m => m.tool_calls || []).map(t => t.function.name);
   const reply = [...msgs].reverse().find(m => m.role === 'assistant' && m.content)?.content || '';
   const tok = ledger.reduce((o, e) => ({ p: o.p + (e.prompt || 0), c: o.c + (e.cached || 0), o: o.o + (e.completion || 0), $: o.$ + (Number(e.cost) || 0) }), { p: 0, c: 0, o: 0, $: 0 });
-  return { id, requests: ledger.filter(e => !e.helper).length, tools: calls, tokens: { prompt: tok.p, cached: tok.c, out: tok.o }, cost: tok.$, reply: reply.slice(0, 600), flags: openFlags(s).filter(f => f.at > before.n).map(f => `${f.tool}: ${f.why}`) };
+  // stop: why the run ended, from the harness's own record (null while it still waits at a hold or a card)
+  const end = lastStop(s);
+  return { id, requests: ledger.filter(e => !e.helper).length, tools: calls, tokens: { prompt: tok.p, cached: tok.c, out: tok.o }, cost: tok.$, stop: end && end.at > before.n ? end.why : null, reply: reply.slice(0, 600), flags: openFlags(s).filter(f => f.at > before.n).map(f => `${f.tool}: ${f.why}`) };
 }
-const fmtTurn = (r, st) => [`${r.id} · ${r.requests} req · ${k(r.tokens.prompt)} in (${k(r.tokens.cached)} cached) · ${k(r.tokens.out)} out · ${money(r.cost)}${r.tools.length ? ' · tools ' + r.tools.join(',') : ''}`,
+const fmtTurn = (r, st) => [`${r.id} · ${r.requests} req · ${k(r.tokens.prompt)} in (${k(r.tokens.cached)} cached) · ${k(r.tokens.out)} out · ${money(r.cost)}${r.tools.length ? ' · tools ' + r.tools.join(',') : ''}${r.stop && r.stop !== 'done' ? ' · stop ' + r.stop : ''}`,
   ...(st.approve ? st.approve.map(a => 'APPROVE? ' + a + '  (wh allow | wh deny)') : []),
   ...(st.held ? st.held.map(h => 'HELD ' + h + '  (wh step | wh skip)') : st.ask ? ['ASKS a question (answer it in the page)'] : st.timeout ? ['still running (wh show / wh say later)'] : []),
   ...(r.flags.length ? r.flags.map(f => 'FLAG ' + f) : []), r.reply ? '> ' + r.reply.replace(/\n+/g, ' ⏎ ').slice(0, 400) : ''].filter(Boolean).join('\n');
@@ -144,8 +153,8 @@ async function decide(a, verb) {
   if (!await card.count()) return { ok: false, text: 'nothing is waiting for approval' };
   const what = (await card.textContent()).replace(/\s+/g, ' ').slice(0, 300);
   await card.locator('button', { hasText: verb }).click();
-  const st = await settle(p);
-  return { text: `${verb}ed: ${what}\n` + fmtTurn(await turnReport(p, id, before), st) };
+  const st = await settle(p), r = await turnReport(p, id, before);
+  return { text: `${verb}ed: ${what}\n` + fmtTurn(r, st), log: { id, stop: r.stop } };
 }
 const CMDS = {
   async init(a) {
@@ -183,7 +192,7 @@ const CMDS = {
     await p.fill('#input', text); await p.click('#send');
     const st = await settle(p);
     const r = await turnReport(p, id, before);
-    return { text: fmtTurn(r, st), data: { ...r, state: st }, log: { id, chars: text.length, hash: sha(text) } };
+    return { text: fmtTurn(r, st), data: { ...r, state: st }, log: { id, chars: text.length, hash: sha(text), ...sayKind(s0), stop: r.stop } };
   },
   // The text of a file as the message: the same bytes every run (line ends as LF), nothing lost to a shell.
   async sayfile(a) {
@@ -243,8 +252,10 @@ const CMDS = {
   // The command log: one line per command sent, oldest first. Sizes and hashes stand for text.
   async log(a) {
     const id = flagOf(a, 'i'), n = Number(flagOf(a, 'n') || 20);
-    const rows = readLog().filter(e => !id || e.id === id);
-    return { text: rows.slice(-n).map(e => `${e.t} ${e.ok ? 'ok ' : 'no '} ${e.cmd}${e.id ? ' ' + e.id : ''}${e.chars != null ? ` ${e.chars}ch` : ''}${e.hash ? ' ' + e.hash : ''}`).join('\n') || 'no commands logged', data: { rows: rows.slice(-n), total: rows.length } };
+    const rows = readLog().filter(e => !id || e.id === id), said = rows.filter(e => e.cmd === 'say' || e.cmd === 'sayfile');
+    // the nudge count (docs/concepts/HYPOTHESES.md, shared rules): steering messages, and apart from them continuations after a round-limit stop
+    const counts = { first: said.filter(e => e.kind === 'first').length, limitContinuations: said.filter(e => e.kind === 'limit-continuation').length, steering: said.filter(e => e.kind === 'steer').length };
+    return { text: [...rows.slice(-n).map(e => `${e.t} ${e.ok ? 'ok ' : 'no '} ${e.cmd}${e.id ? ' ' + e.id : ''}${e.chars != null ? ` ${e.chars}ch` : ''}${e.hash ? ' ' + e.hash : ''}${e.kind ? ' ' + e.kind : ''}${e.stop ? ' -> ' + e.stop : ''}`), `messages: ${counts.first} first · ${counts.steering} steering · ${counts.limitContinuations} after a round-limit stop`].join('\n'), data: { rows: rows.slice(-n), total: rows.length, counts } };
   },
   async step(a) {
     const id = flagOf(a, 'i') || readState().current, all = has(a, '--all');
@@ -252,8 +263,8 @@ const CMDS = {
     const n = await p.locator('.msg[data-role=held]:not([data-done])').count();
     if (!n) return { ok: false, text: 'nothing is held' };
     await p.locator(`.msg[data-role=held]:not([data-done]) [data-hold=${all ? 'all' : 'release'}]`).first().click();
-    const st = await settle(p);
-    return { text: fmtTurn(await turnReport(p, id, before), st) };
+    const st = await settle(p), r = await turnReport(p, id, before);
+    return { text: fmtTurn(r, st), log: { id, stop: r.stop } };
   },
   async skip(a) {
     const id = flagOf(a, 'i') || readState().current, p = await tab(id);

@@ -1082,6 +1082,11 @@ function retitle(s, title) {
   $(`#sessions [data-id="${s.id}"] span`).textContent = title;
 }
 
+// Why a run ended, kept beside the turns and never sent: done, limit (MAX_STEPS tool rounds), failed,
+// stopped (by the person), held (a skipped request) or budget. `at` is the log length at the stop, so a
+// message that follows a limit stop can be told from one that steers (profile.js followUps, wh log).
+const noteStop = (s, why) => { (s.stops ??= []).push({ t: Date.now(), at: s.messages.length, why: why || 'done' }); saveSession(s); };
+
 // One user-initiated run. Branches started inside it go through turns() directly.
 async function run(s) {
   try { return await runInner(s); } finally { transcriptSoon(); }
@@ -1092,7 +1097,7 @@ async function runInner(s) {
   if (!set.model) return notice(s, 'Choose a model first.');
   if (p.needsKey && !state.keys[set.provider]) return notice(s, 'Add an API key in Settings first.');
   busy = true; runningId = s.id; app.setAttribute('data-busy', ''); ctl = new AbortController();
-  try { return await turns(s, 0); }
+  try { const why = await turns(s, 0); noteStop(s, ctl.signal.aborted ? 'stopped' : why); return why; }
   finally { await stemProgress(s).catch(() => {}); busy = false; runningId = null; app.removeAttribute('data-busy'); ctl = null; queueSteward(); if (lookStale) redrawLook(); }
 }
 
