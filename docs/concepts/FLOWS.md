@@ -1,4 +1,4 @@
-# Flows, tags and turn allocation (hypothesis, rev 2, 2026-11-20)
+# Flows, tags and turn allocation (hypothesis, rev 3, 2026-11-20)
 
 Status: hypothesis. Rigid order steps 1 (name) and 2 (concept records) only; nothing is built.
 1. A flow is a pre-made sequence of turns held in a catalog; a cheap helper (the flow router) picks which flow starts or joins a conversation, before any provider API is called.
@@ -6,6 +6,14 @@ Status: hypothesis. Rigid order steps 1 (name) and 2 (concept records) only; not
 3. Turn stacks and turn dithering allocate turns from parameterized templates; flow lint joins the captured data to find successes, issues and further strategies.
 
 Stance. No comparison with what a person would do, and no rigid baselines: a baseline is just a measure, and nebulous. The aim is quality working; token efficiency is the degree to which expense comes down; both is ideal. Ruled out by name: flows that carry heavy token contexts and then spend API output turns on content that could have been dialed back.
+
+## State first (outside in)
+Everything below reads from this; where a later line contradicts it, this wins.
+- Everything is a state-based measurement. State = the policy tags in force plus where each flow's turns stand, with session/flow attribution.
+- From a state, a condition or projection selects what occurs next: the next transition gate, like a state machine. Every hypothesis and every lint query is phrased: given this state, which transition is projected, and which one occurred.
+- "Gate" already means a halt/step point in app/coord.js (a session held before a model request or tool call; catalog term ydbdbn). It is a different thing; this one is the "transition gate".
+- When the state holds several items to address (concerns to enumerate), that is an accumulated collection, a concern queue, worked like a for-loop or queue. Two ways through it, both recorded: strapped (by policy, a dithered stack of turns is strapped on to steer) or natural (the agent goes that way unaided while policies attach along the way, with less influence; see natural steering, rhaenk). The amount of influence is itself a recorded choice (influence mode).
+- Outside in: the flow is stitched together both imperatively and declaratively. The model that adds onto the turns is a handler of its own, chosen by policy: close to a routed micro-prompt turn-context agent that settles which turns to add, given a propagated set of details, or a stack of turns added to the context to progress it. It does not see the turns: it picks high-level semantic entries (semantics plus contextual information and data), and those entries are associated with which turns get stacked next.
 
 ## Terms (index of record: catalog/nomenclature.jsonl)
 - flow: a stored, ordered sequence of turns (a conversation track); applies at bootstrap or mid-session. flow catalog: flows plus the approaches that allocate their turns and what each policy aimed for.
@@ -19,6 +27,8 @@ Stance. No comparison with what a person would do, and no rigid baselines: a bas
 - context pin: a terse cached context a hot agent works from. hot agent (aka delegator): an active agent producing or guiding turns from baked templates off a pin. micro-request: a small API call tapped against that state.
 - step validator: a check from one step bullet or directive of a skill or agent md file. flow lint: joined, timestamped data that assesses the approach itself.
 - seam contract: a policy seam's parameters and its return payload shape.
+- state snapshot: tags in force, flow states, open concerns at a turn. projection: from a state, the transition expected next. transition gate: the point where a state moves to the next.
+- concern queue: accumulated open concerns worked like a queue. influence mode: strapped or natural. handler: the policy-chosen model that picks semantic entries and so which turns stack. semantic entry: a high-level item (semantics plus context and data) tied to turns to stack.
 
 ## Data model (records; fields only; all harness data, stored beside turns)
 - flow: id, title, version, role (overarching|implicit|triggered), turns[] (template ids or handles), origin (hand|extracted|materialized), tags[], validators[], strategy_ids[], since.
@@ -33,6 +43,11 @@ Stance. No comparison with what a person would do, and no rigid baselines: a bas
 - context pin: id, handle, size, epoch. hot agent: id, pin_id, templates[], taps (micro-request count).
 - step validator: id, source_path, source_line_range, step_text_hash, check (shape|presence|order|cost), purpose (inject basis|drive policy|passive structure), applies_to.
 - validation result: id, validator_id, flow_id, session, at_turn, outcome (pass|fail|unresolved), carried_to (flow ids|tags), evidence_handle, tokens, cost.
+- state snapshot: id, session, flow_states[{flow_id, turn_pos}], tags_in_force[], concern_queue[], at_turn, t.
+- concern queue entry: id, state_ref, concern (semantic entry ref), status (open|addressed|dropped), mode (strapped|natural).
+- projection: id, state_ref, condition, projected_transition, by (policy|handler|heuristic), confidence.
+- transition (at a transition gate): id, from_state, to_state, trigger, projected_ref (or null), occurred_at.
+- handler: id, policy_ids[], sees (semantic entries only), params, return (entries chosen -> turns to stack). influence mode: strapped | natural, recorded per queue run.
 - flow event (lint): ts, session, flow_id, state, tags[], and a ref to any record above; captured as it happens, never rewritten.
 
 ## Invariants
@@ -47,7 +62,7 @@ Stance. No comparison with what a person would do, and no rigid baselines: a bas
 ## Seam contracts
 Policies (the data we procure) indicate what a model should do, and so where the seams are. Catalog the seams by breaking policies into principles, in the manner of hexagonal architecture and SOLID, applied to policies and flows, not OOP.
 - Record: seam id, policy ids, principle (my reading, open: one aim per policy; policy in, filler out; new flows without changing policies; fillers interchangeable; policies depend on tags not turn text), params, return payload shape.
-- Candidate seams: route (rubric, case -> flow id, confidence), snap (tags, state -> flow ids), fill (template, context -> turn payload), validate (turn, step -> result, carried_to), guard (scope exit -> resolution, rejoin).
+- Candidate seams: route (rubric, case -> flow id, confidence), snap (tags, state -> flow ids), fill (template, context -> turn payload), validate (turn, step -> result, carried_to), guard (scope exit -> resolution, rejoin), handler (state, semantic entries -> entries chosen, turns to stack), projection (state -> projected transition, confidence).
 
 ## Relation to what exists
 - C1 policy directives (STEMS.md 5c): snap policies are the tag-driven form; directives remain the wording side.
@@ -64,6 +79,8 @@ Policies (the data we procure) indicate what a model should do, and so where the
 - QF4 Baseline. Nebulous by intent; see the stance. Open: which measures lint reports, without a fixed comparison.
 - QF5 Step validation purposes: (a) validating a turn that injected turns are based on; (b) policies driven by the validation result; (c) passive structuring, where serial or dithered automated flow stacks are added to the context so the flow becomes validated and its tags transition. Never blocking: the question is which flows carry the issue and its tags onward (quilt, strands, guard). Tags and policies indicate which flows qualify downstream. Open: guard shape.
 - QF6 Catalog. Not versioned per model; append-only. Open: location (repo file, handle store, both).
+- QF7 Granularity. Open: what counts as one state change (a tag, a flow turn, a queue entry, any of them).
+- QF8 Ownership. Open: who owns the projection when policy and handler disagree; both are recorded either way.
 
 ## First order of work (hypotheses; smallest first; none built)
 - F1 Validator extraction: step bullets of one skill (e.g. .claude/skills/spec-first/SKILL.md) extract into validators with a checkable shape (step, expected evidence, result) that resolve against recorded sessions. Falsified if most bullets yield no checkable shape, or the validators cannot be resolved from session records alone. Needs: one skill, recorded sessions.
@@ -72,4 +89,6 @@ Policies (the data we procure) indicate what a model should do, and so where the
 - F4 Template fill: a helper fill and a heuristic fill pass the same validation shape; the heuristic draws on the flow's role (overarching, implicit, by trigger). Falsified if either fails the shape over 10 fills. Needs: one template, C8 voice, role on the flow.
 - F5 Stacks and hot agent: a turn stack spun up to meet the provider cache floor before the flow is sent (C2, H2), and/or a hot agent producing turns from baked templates off a terse cached pin, tapped for micro-requests. Falsified if cached_tokens do not appear at the floor, or if micro-requests do not carry the work at lower expense with quality held. Needs: F4, a strategy id, silo canary (PROGRAMME.md).
 - F6 Dithering and saturated dithering: policy-guaranteed dispersed turns keep min and max in 95 percent of sessions, including at saturation where they read as serial. Falsified below that. Needs: F4, checkpoint hooks, a ledger row per allocation.
-- F7 Flow lint: events captured in tandem, with timestamp and session/flow state, consolidate by query into successes (tracked, not celebrated), issues, and enhancements or further strategies. Falsified if the join needs rewritten data. Needs: F1, ledger rows, C14 profile code.
+- F7 Flow lint: events captured in tandem, with timestamp and session/flow state, consolidate by query into successes (tracked, not celebrated), issues, and enhancements or further strategies. Falsified if the join needs rewritten data. Needs: F1, ledger rows, C14 profile code. Each query reads: given this state, the projected transition and the one that occurred.
+- F8 Projection: from recorded states, the projected transition matches the one that occurred often enough to steer by. Falsified if projections are no better than the most common transition. Needs: F7 records, snapshots, a few hundred recorded transitions.
+- F9 Queue handling: strapped and natural modes both drain a concern queue; record which leaves fewer concerns unaddressed and at what token weight; no winner assumed. Falsified if either mode leaves the queue undrained in most runs. Needs: F6, a handler, snapshots, silo canary (PROGRAMME.md).
