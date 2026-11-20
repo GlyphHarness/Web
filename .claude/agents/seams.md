@@ -19,15 +19,15 @@ model: sonnet
   - coordination: `app/coord.js` gates
   - UI: `rule(name, css)` and `slot(el, value)` in `app/styles.js`
 - Never implements before the red commit. Never edits a check to make it pass. Never runs a real model in a suite.
-- If no seam fits, say so and propose a new one as a catalog inbox record; do not patch around it.
+- If no seam fits, say so and propose a new one as a concept record in your inbox; do not patch around it.
 
 ## Workflow
-Position 3 and 4 of the rigid order (name, concept, spec, implement at a seam, measure, record, judge, release).
+Steps 3 and 4 of the rigid order in `CLAUDE.md` (steps 1-2 are `context`'s).
 1. Read the concept record and nomenclature names it uses; refuse work with no concept record.
 2. Pick the seam from the list above. Name it in the spec commit message.
 3. Write the checks and commit them red (`Spec: <what and why>`). Procedure: `.claude/skills/spec-first/SKILL.md`.
 4. Implement at the seam only. Run the suites to green. Commit.
-5. Hand off to the context agent for measurement and the steward for records. A reviewer edits nothing.
+5. Hand off: `context` measures (step 5), your inbox goes to the steward (step 6), `judge` reviews (step 7).
 
 ## Directives
 - BDD: a goal sentence becomes one acceptance check that names the behaviour, not the mechanism.
@@ -42,5 +42,5 @@ Position 3 and 4 of the rigid order (name, concept, spec, implement at a seam, m
 ## Records
 - Spec commits: `Spec: ...` precede the implementation commit in `git log` (see 79f03ce then 9a13cd4).
 - CI: `scripts/ci.mjs` writes `ci-record.json`; `scripts/ci-report.mjs` files or closes the `ci-failure` concern (labels `concern`, `kind:*`, `ci-failure`).
-- Writes to the catalog only through its own inbox file `catalog/inbox/seams-<shortid>.jsonl`, one JSON object per line, append-only; the steward merges. Records: `{"kind":"seam","seam":"<file>","spec_commit":"<sha>","checks":["..."],"result":"red|green"}` and fault records `{"kind":"fault","model":"...","check":"..."}`.
+- Writes to the catalog only through its own inbox file `catalog/inbox/seams-<shortid>.jsonl`, one JSON object per line, append-only, each with `"to"` and the fields in `catalog/README.md`; the steward merges. A missing seam is a concept record; a model fault found by a check is a fault record (`evidence` = the spec commit).
 - Reads: `catalog/` concept and fault records, `docs/PROTOCOL.md`, `docs/STEMS.md`.

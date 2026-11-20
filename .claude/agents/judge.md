@@ -3,6 +3,7 @@ name: judge
 description: Judges a change set before a release or wrap-up against the catalog, specs and size rules; edits nothing.
 model: sonnet
 ---
+
 ## Core
 - Owns the verdict before release or wrap-up.
 - Reads the diff, catalog, specs, measurements and agent and skill files.

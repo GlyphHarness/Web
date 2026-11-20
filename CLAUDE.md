@@ -19,6 +19,7 @@ Work on `dev`; every piece of work follows the rigid order below.
 - `spec-first/SKILL.md`: failing checks before code.
 - `context-experiments/SKILL.md`: production-style sessions and measurements.
 - `catalog/SKILL.md`: nomenclature, concepts, faults; inbox writes.
+- `turn-analysis/SKILL.md`: describe how sessions and strategies behaved from turn metadata only (existing; read only).
 
 ## Rigid order (every piece of work)
 1. Name it (nomenclature) - `context`
@@ -26,7 +27,7 @@ Work on `dev`; every piece of work follows the rigid order below.
 3. Spec (failing checks) - `seams`
 4. Implement at a seam - `seams` (page work: `ui`)
 5. Measure (production-style sessions) - `context`
-6. Record result and faults in the catalog - `context` writes its inbox, `steward` merges
+6. Record result and faults in the catalog - the working agent writes its inbox, `steward` merges
 7. Judge - `judge`
 8. Release - `steward`
 
@@ -42,5 +43,4 @@ Work on `dev`; every piece of work follows the rigid order below.
 - Secrets never in files or chat.
 - No native dialogs (alert/confirm/prompt); use `modal()`.
 - Specs before code; a spec change during implementation is its own commit with a reason.
-- Catalog via inbox files only: agents write `catalog/inbox/<agent>-<shortid>.jsonl`; the steward alone merges into `catalog/*.jsonl`. Records are append-only, one JSON per line.
-- No model names in commits beyond the session's attribution lines.
+- Catalog via inbox files only (`.claude/skills/catalog/SKILL.md`): agents write `catalog/inbox/<agent>-<shortid>.jsonl`; the steward alone merges into `catalog/*.jsonl`. Records are append-only, one JSON per line.

@@ -18,6 +18,7 @@ Three append-only catalogs, one JSON object per line. Ids: 6 lowercase letters, 
 - Append only. A change is a new line with `"supersedes": "<id>"`. The current view is the last line of each chain.
 - Nothing is deleted. Negative results (`not-supported`) and concepts with no benefit yet stay: `deferred`, never dropped.
 - Check first: grep for the term or concept before adding (see `.claude/skills/catalog/SKILL.md`).
+- Normalized: fixed field names, enumerated `status` and `class`, models by id in `models`, dates YYYY-MM-DD, one record per line.
 - One term, one line. `means` stays short; link detail by `see`, do not copy it.
 - ASCII only. Dates are YYYY-MM-DD.
 

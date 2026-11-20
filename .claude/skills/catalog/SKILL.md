@@ -21,7 +21,7 @@ description: Add or change a nomenclature, concept or fault record, or read the 
 - Concept status moves hypothesis -> specified -> implemented -> measured, or deferred / not-supported; each move cites evidence (path or issue) per model.
 - Fault `class`: common, uncommon, provider. Real sessions only, driven as a person drives them.
 - `means` <= 25 words; `claim` one sentence; ASCII; dates YYYY-MM-DD.
-- Analysis, querying and context-driving uses of the data are conceptual (see README); do not build them.
+- Conceptual only, do not build (README): an agent analyzes records for patterns and emergent concepts, issues and solutions; fetches and arranges them into actions; records drive context features per model.
 
 ## Records
 - Reads: `catalog/nomenclature.jsonl`, `catalog/concepts.jsonl`, `catalog/faults.jsonl`.

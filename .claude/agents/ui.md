@@ -14,12 +14,13 @@ model: sonnet
 - Never edits `catalog/*.jsonl`; findings go to `catalog/inbox/ui-<shortid>.jsonl`.
 
 ## Workflow
-1. Name it (nomenclature), then write the concept record (hypothesis) in your inbox file.
-2. Spec: add the failing state-based check to `scripts/smoke.mjs` (see `.claude/skills/ui-style/SKILL.md`).
-3. Implement at the seam: append once, bind slots, write rules.
-4. Measure: run `python3 -m http.server 8787`, then `node scripts/smoke.mjs`.
-5. Record the result and any faults in the inbox file.
-6. Hand to judge; judge edits nothing. Release is the steward's.
+Steps 3 to 5 of the rigid order in `CLAUDE.md`; steps 1-2 (name, concept) are `context`'s and must exist first.
+1. Read the nomenclature term and concept record for the change; none: stop and ask the steward.
+2. Spec (step 3): add the failing state-based check to `scripts/smoke.mjs`, commit red (see `.claude/skills/ui-style/SKILL.md`).
+3. Implement at the seam (step 4): append once, bind slots, write rules; commit green.
+4. Check: `python3 -m http.server 8787`, then `node scripts/smoke.mjs`. Measuring an effect with models is `context`'s step 5.
+5. Record faults and results in `catalog/inbox/ui-<shortid>.jsonl` (step 6); the steward merges.
+6. Judge reviews and edits nothing; release is the steward's.
 
 ## Directives
 - Decision rule, ask in this order: does this change text a person reads (slot), which things show (rule), or structure (append once)?
@@ -28,7 +29,7 @@ model: sonnet
 - Slots: a live value (count, status, sum) is `slot(el, value)`. It sets `data-v`; CSS `.slot::after{content:attr(data-v)}` draws it. One attribute write, so focus, selection, scroll and listeners survive. Use slots for values nobody needs to copy.
 - Read values in tests with `slotText(el)`, which includes slot values. A slot is invisible to `textContent`.
 - Hooks: select by `data-act`, `data-role`, `data-id`, `data-pane`, `data-session` and the like. Never by label text or wording.
-- Dialogs: `modal({title, body, actions})` resolves with the pressed button's value; Escape or the backdrop gives the first action marked `cancel`.
+- Dialogs: `modal({title, body, actions})` resolves with the pressed button's value; Escape or the backdrop gives the value of the action marked `cancel` (else false).
 - Cards are segmented: `item({kind, name, meta, body, actions})` builds a `details` with summary, body and actions segments; message cards use `R.part(kind, {slots})` with named segments. Fill a segment, do not rebuild the card.
 - Inline edit: `inlineEdit(head, edit, input, {label, show, save})`. Click toggles the edit panel; closing with a change asks discard, keep editing, or save, showing from and to.
 - Uptext: text that is cut short shows whole on hover or press-and-hold (`data-full`, or the slot's `data-v`). Truncate in CSS; do not shorten the data.
@@ -37,4 +38,4 @@ model: sonnet
 - Reads: session (title, profile, `ledger`, `core`, `frozen`), ledger rows (prompt, cached, cost and so on), smells (`wh:smells` in localStorage, via `app/smells.js`), flags (`s.flags`) and check-offs (`s.watched`).
 - Writes none of these from render code. Records change through their owners (session save, smells module, watcher); the UI then re-reads and updates slots or rules.
 - UI-owned state only: `state.meta.settings` display choices (such as `inspector`) via `saveMeta()`.
-- Own findings: `catalog/inbox/ui-<shortid>.jsonl`, one JSON object per line, append-only. The steward merges.
+- Own findings: `catalog/inbox/ui-<shortid>.jsonl`, one JSON object per line, append-only, each with `"to"` and the fields in `catalog/README.md`. The steward merges.

@@ -8,7 +8,7 @@ Any change in behaviour, any production fault, any new strategy, tool, hook or p
 
 ## Steps
 1. Write the goal as sentences, one behaviour each. Name what happens, not how.
-2. Pick the seam (`.claude/agents/seams.md` list). No seam fits: stop and write an inbox record.
+2. Pick the seam (`.claude/agents/seams.md` list). No seam fits: stop and write a concept record in your inbox.
 3. Write one acceptance check per sentence in the matching suite: `scripts/smoke.mjs` (main), `scripts/smoke-git.mjs`, `scripts/smoke-vm.mjs`. Assert on state (`whDebug`, localStorage, `data-*`), never on text. Add mock triggers in `app/providers.js` if needed.
 4. Serve and run the suite; the new checks must fail, the old ones pass:
    `python3 -m http.server 8787` (repo root, background), then `node scripts/smoke.mjs`.
@@ -27,4 +27,4 @@ Any change in behaviour, any production fault, any new strategy, tool, hook or p
 ## Records
 - Red `Spec:` commit, then the implementation commit, in order in `git log`.
 - `ci-record.json` from `scripts/ci.mjs`; a failure opens one `ci-failure` concern.
-- Result lines go to `catalog/inbox/seams-<shortid>.jsonl`, never to `catalog/*.jsonl`.
+- Concept and fault records go to `catalog/inbox/seams-<shortid>.jsonl` (shapes in `catalog/README.md`), never to `catalog/*.jsonl`.

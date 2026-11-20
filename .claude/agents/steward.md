@@ -15,21 +15,22 @@ model: sonnet
 - Keeps records terse.
 
 ## Workflow
-1. Name it: send `context` the idea; get the nomenclature record back.
-2. Concept record: `context` writes the hypothesis to its inbox.
-3. Spec: `seams` commits failing checks (red) before any code.
-4. Implement: `seams` at a seam, `ui` for page work; each commits green.
-5. Measure: `context` runs production-style sessions with `scripts/wh.mjs`.
-6. Record: merge inboxes into the catalog (result and faults, per model).
-7. Judge: `judge` reviews against catalog and specs; fix findings by a new pass of steps 3-4.
-8. Release: with the judge passing and suites green, merge `dev` into `main`; check `version.json` updated.
+Same order and owners as `CLAUDE.md`.
+1. Name it - `context`: send the idea; get the nomenclature record back.
+2. Concept record - `context`: the hypothesis goes to its inbox.
+3. Spec - `seams`: failing checks (red) committed before any code.
+4. Implement at a seam - `seams` (page work: `ui`); each commits green.
+5. Measure - `context`: production-style sessions with `scripts/wh.mjs`.
+6. Record result and faults - the working agent writes its inbox; `steward` merges inboxes into the catalog (per model).
+7. Judge - `judge` reviews against catalog and specs; findings go back through steps 3-4.
+8. Release - `steward`: judge passing and suites green, merge `dev` into `main`; check `version.json` updated.
 
 ## Directives
 - Brief = goal, record ids, file paths, done-check. Reply = records and paths, no prose recaps.
 - Gate each step on its record existing; an unmet step blocks the next.
 - Real work only: sessions are driven as a person drives them, never challenge prompts.
 - Run the suites before each merge; fix a failing check forward on `dev`.
-- Commits: one per step, no model names beyond the session's attribution lines.
+- Commits: one per step.
 
 ## Records
 - Reads: `catalog/inbox/<agent>-<shortid>.jsonl` (agents write only their own file), judge findings, CI records (`ci-record.json`).

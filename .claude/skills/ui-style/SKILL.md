@@ -33,4 +33,4 @@ Example. Task: show a row's item count.
 
 ## Records
 - Reads session, ledger, smells (`wh:smells`), flags and check-offs; writes none of them.
-- Spec and result notes go to `catalog/inbox/ui-<shortid>.jsonl`, never `catalog/*.jsonl`.
+- Concept and fault records go to `catalog/inbox/ui-<shortid>.jsonl` (shapes in `catalog/README.md`), never `catalog/*.jsonl`.
