@@ -341,6 +341,12 @@ await attempt('config: shellOn takes machine or host:NAME and nothing else', () 
   const variants = ['calls', 'notes'].flatMap(wire => [0, 1, 2, 3].flatMap(core => ['off', 'marks'].map(edge => ({ wire, core, edge, keep: true, system: '', tools: ['ask', 'values', 'repo', 'vm', 'local'], messages: [] }))));
   const hits = variants.flatMap(s => found(JSON.stringify(buildRequest(s, 'm', defsFor(s)))));
   check('neutral: no request the harness builds (core prompt, every tool definition) holds an identifying term', hits.length === 0, [...new Set(hits)].join(', '));
+  // the helper prompts and fixed lines kept as module data (the watcher's and the filter's prompts are checked on the page, suite main)
+  const fixed = [];
+  for (const [file, key] of [['../app/policy.js', 'FIX_SYSTEM'], ['../app/smells.js', 'REVIEW_SYSTEM'], ['../app/term.js', 'SCRATCH_SYSTEM'], ['../app/context.js', 'KEEP_NOTE'], ['../app/context.js', 'HANDOFF_LINE'], ['../app/values.js', 'INDEX_HEAD']])
+    fixed.push(key + ': ' + String((await import(file).catch(e => ({ [key]: 'import failed: ' + e.message })))[key] ?? ''));
+  const badFixed = fixed.filter(p => p.length < 40 || /import failed/.test(p) || found(p).length);
+  check('neutral: helper prompts and fixed lines kept as module data hold no identifying term', badFixed.length === 0, badFixed.map(p => p.slice(0, 120) + ' [' + found(p).join(',') + ']').join(' | '));
   // what each tool answers when what it needs is not there
   const bare = { pads: [], savePads() {}, by: () => ({}), depth: 1 };
   const answers = [];

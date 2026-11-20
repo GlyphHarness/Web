@@ -885,6 +885,10 @@ await say('hello reasoning');
     const ex = /^exit (\d+)/.exec(b.cmd);
     return json(200, { code: ex ? Number(ex[1]) : 0, output: ex ? '' : 'ran: ' + b.cmd + '\n', timed_out: false, truncated: false, ms: 5 });
   });
+  // spec correction (own commit): the credential label is the person's own words and goes into the first message as they wrote it
+  // (this suite's earlier label names an organisation), so the session here gets a plain one; and the helper prompts are
+  // counted from requests made in this block (an earlier reload empties what the mock provider keeps): a watcher and a filter.
+  await paste({ settings: { ghlabel: 'test repos', watchModel: 'mock-1', helper: 'mock-1' } });
   await page.click('[data-act=new]');
   // this session gets the shell tool and the local tools by its own switches (the in-browser machine is off in this suite)
   await page.evaluate(() => { for (const id of ['vmtools', 'localtools']) { const e = document.querySelector('#' + id); e.checked = true; e.dispatchEvent(new Event('change', { bubbles: true })); } });
@@ -920,17 +924,21 @@ await say('hello reasoning');
   const downText = await lastTool();
   check('host shell: when the host cannot be reached the model reads a plain failure and the person is told why', /^Tool error: /.test(downText) && found(downText).length === 0 && await visible().locator('.msg[data-role=error]').count() > errsBefore, downText);
 
+  // a long result with a stated want goes through the filter helper; the watcher sees every call
+  await say('long script');
+  await page.waitForTimeout(600);
   // everything this session's model was given: the prompt, the tool definitions, every result and injected turn
   const reqEnd = await lastReq(), names = (reqEnd.tools || []).map(t => t.function.name), hits = found(JSON.stringify(reqEnd));
-  check('neutral: nothing in the session\'s request (core prompt, tool definitions with shell and local_*, results) holds an identifying term', names.includes('shell') && names.includes('local_info') && reqEnd.messages.length > 8 && hits.length === 0, [...new Set(hits)].join(', '));
-  // the helper prompts the mock provider was sent during this whole run (watcher, steward, filter, repair, review, scratch)
+  const where = hits.length ? JSON.stringify(reqEnd).split(/(?<=[.!?\n])\s|\\n/).filter(x => found(x).length).map(x => x.slice(0, 160)).slice(0, 4).join(' ~ ') : '';
+  check('neutral: nothing in the session\'s request (core prompt, tool definitions with shell and local_*, results) holds an identifying term', names.includes('shell') && names.includes('local_info') && reqEnd.messages.length > 8 && hits.length === 0, [...new Set(hits)].join(', ') + ' ' + where);
+  // the helper prompts the mock provider was sent here (the watcher's and the filter's; the other helper prompts are checked in node)
   const sys = await page.evaluate(async () => { const m = (await import('./app/providers.js')).providers.mock; return m.requests ? [...new Set(m.requests.map(b => b.messages?.[0]?.role === 'system' ? String(b.messages[0].content) : '').filter(t => /^(WATCH\.|You condense|You filter|You repair|You review|TERMINAL SCRATCH)/.test(t)))] : null; });
   const sysHits = sys ? sys.flatMap(found) : ['(the mock provider keeps no requests)'];
-  check('neutral: no helper prompt sent in this run (watcher, steward, filter, repair, review) holds an identifying term', !!sys && sys.length >= 3 && sysHits.length === 0, [...new Set(sysHits)].join(', ') + ' in ' + (sys || []).length + ' prompts');
+  check('neutral: no helper prompt sent here (the watcher\'s, the filter\'s) holds an identifying term', !!sys && sys.some(t => t.startsWith('WATCH.')) && sys.some(t => t.startsWith('You filter')) && sysHits.length === 0, [...new Set(sysHits)].join(', ') + ' in ' + (sys || []).length + ' prompts');
 
   await page.click('[data-act=new]');
   check('host shell: new sessions get the shell tool while the defaults name a host', await page.isChecked('#vmtools'));
-  await paste({ settings: { localBridge: '', shellOn: 'machine' }, keys: { localbridge: '' } });
+  await paste({ settings: { localBridge: '', shellOn: 'machine', watchModel: '' }, keys: { localbridge: '' } });
   await bctx.unroute(BR + '/**');
 }
 
