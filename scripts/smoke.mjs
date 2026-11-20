@@ -1109,6 +1109,9 @@ check('layout: the page itself does not scroll',await page.evaluate(() => docume
     if (m[1] !== 'dev') return json(404, { error: 'no such target', targets: ['dev'] });
     const b = q.postDataJSON(); execs.push({ target: m[1], ...b });
     if (/^slow/.test(b.cmd)) return json(200, { code: 143, output: 'partial\n', timed_out: true, truncated: false, ms: 5 });
+    // host files (labelled): a file script's first line names its status marker; the mock serves one file of two lines
+    const fm = /^M=(\w+)\n/.exec(b.cmd);
+    if (fm) return json(200, { code: 0, output: /base64 -w0/.test(b.cmd) ? `${fm[1]} ok 11\n` + Buffer.from('hello\nwelt\n').toString('base64') + '\n' : `${fm[1]} ok 0\n`, timed_out: false, truncated: false, ms: 5 });
     const ex = /^exit (\d+)/.exec(b.cmd);
     return json(200, { code: ex ? Number(ex[1]) : 0, output: ex ? '' : 'ran: ' + b.cmd + '\n', timed_out: false, truncated: false, ms: 5 });
   });
@@ -1182,6 +1185,48 @@ check('layout: the page itself does not scroll',await page.evaluate(() => docume
   const sys = await page.evaluate(async () => { const m = (await import('./app/providers.js')).providers.mock; return m.requests ? [...new Set(m.requests.map(b => b.messages?.[0]?.role === 'system' ? String(b.messages[0].content) : '').filter(t => /^(WATCH\.|You condense|You filter|You repair|You review|TERMINAL SCRATCH)/.test(t)))] : null; });
   const sysHits = sys ? sys.flatMap(found) : ['(the mock provider keeps no requests)'];
   check('neutral: no helper prompt sent here (the watcher\'s, the filter\'s) holds an identifying term', !!sys && sys.some(t => t.startsWith('WATCH.')) && sys.some(t => t.startsWith('You filter')) && sysHits.length === 0, [...new Set(sysHits)].join(', ') + ' in ' + (sys || []).length + ' prompts');
+
+  // ---- host files (setting hostFiles), the round limit (toolRounds) and the run code capability on a host session ----
+  // seams: tools.js tool group 'files' chosen in toolsFor, the host runner (localbridge.js hostFiles through the exec route),
+  // the turn loop's round limit. Off by default: the host session above was sent no file tool.
+  check('host files: off by default: a host session is sent the tool list it had before', !(reqHost.tools || []).some(t => /^file_/.test(t.function.name)) && (reqHost.tools || []).some(t => t.function.name === 'shell'));
+  await paste({ settings: { hostFiles: true } });
+  await page.click('[data-act=new]');
+  await page.evaluate(() => { for (const id of ['vmtools', 'localtools']) { const e = document.querySelector('#' + id); e.checked = true; e.dispatchEvent(new Event('change', { bubbles: true })); } });
+  await say('shell: echo nf-one');
+  const reqFiles = await lastReq(), fnames = (reqFiles.tools || []).map(t => t.function.name), fi = fnames.indexOf('shell');
+  check('host files: with the option on, a host session is offered file_read, file_edit and file_write right after shell, and nothing else changes', fi >= 0 && fnames.slice(fi, fi + 4).join() === 'shell,file_read,file_edit,file_write' && JSON.stringify((reqFiles.tools || []).filter(t => !/^file_/.test(t.function.name))) === JSON.stringify(reqHost.tools), fnames.join());
+  check('host files: the request with them (under strat-serial-3.0) holds no identifying term', found(JSON.stringify(reqFiles)).length === 0, found(JSON.stringify(reqFiles)).join());
+  // a file read through this session's own runner: a stored recipe run by pattern_run (the mock provider has no file trigger)
+  const pid = await page.evaluate(async () => (await import('./app/patterns.js')).put({ kind: 'recipe', title: 'read a numbered file', slots: ['a', 'b'], recipe: { tool: 'file_read', args: { path: 'f{{a}}.txt' } } }, {}).id);
+  const nExec = execs.length;
+  await say('run pattern ' + pid);
+  const fread = await lastTool(), fx = execs.slice(nExec);
+  check('host files: a read goes to the session\'s host target as one command with only cmd and timeout, and reads as numbered lines', fx.length === 1 && fx[0].target === 'dev' && Object.keys(fx[0]).sort().join() === 'cmd,target,timeout' && /\b2 lines\b/.test(fread.split('\n')[0]) && /^\s*1\thello$/m.test(fread) && /^\s*2\twelt$/m.test(fread), JSON.stringify(fread) + ' ' + fx.length);
+  check('host files: what the read returned holds no identifying term', found(fread).length === 0, found(fread).join());
+  await paste({ settings: { hostFiles: false } });
+  // the round limit: a setting; the turn stops after that many tool rounds and the stop is recorded as before
+  await paste({ settings: { toolRounds: 3 } });
+  await page.click('[data-act=new]');
+  await page.evaluate(() => { for (const id of ['vmtools', 'localtools']) { const e = document.querySelector('#' + id); e.checked = true; e.dispatchEvent(new Event('change', { bubbles: true })); } });
+  await say('round after round');
+  const sr = await sess();
+  check('round limit: with toolRounds 3 a turn stops after 3 tool rounds, recorded as limit', sr.stops?.at(-1)?.why === 'limit' && sr.messages.filter(m => m.role === 'tool').length === 3, JSON.stringify(sr.stops) + ' ' + sr.messages.filter(m => m.role === 'tool').length);
+  check('round limit: the stop notice names the limit that applied', /\b3\b/.test(await visible().locator('.msg[data-role=error]').last().textContent()), await visible().locator('.msg[data-role=error]').last().textContent());
+  check('settings: hostFiles and toolRounds are rows of the session\'s scope', await page.evaluate(() => !!document.querySelector('#scope .srow[data-attr="hostFiles"]') && !!document.querySelector('#scope .srow[data-attr="toolRounds"]')));
+  await page.evaluate(() => { const tr = document.querySelector('#scope .scope-edit[data-row="toolRounds"]'); tr.querySelector('[data-sv]').value = '5'; tr.querySelector('[data-act="scope-set"]').click(); });
+  check('settings: toolRounds set for one session is a number', (await sess()).over?.toolRounds === 5, JSON.stringify((await sess()).over));
+  await paste({ settings: { toolRounds: 8 } });
+  // run code where the shell runs: a host session can leave run_js out with the existing run code capability (narrowed for this session)
+  await page.click('[data-act=new]');
+  await page.evaluate(() => { for (const id of ['vmtools', 'localtools']) { const e = document.querySelector('#' + id); e.checked = true; e.dispatchEvent(new Event('change', { bubbles: true })); } });
+  await page.evaluate(() => { const tr = document.querySelector('#scope .scope-edit[data-row="run_js"]'); tr.querySelector('[data-sv]').value = '0'; tr.querySelector('[data-act="scope-set"]').click(); });
+  await say('shell: echo nj-one');
+  const reqNoJs = await lastReq();
+  check('run code: a host session with run code denied is sent no run_js and the rest of its tools unchanged', !(reqNoJs.tools || []).some(t => t.function.name === 'run_js') && JSON.stringify(reqNoJs.tools) === JSON.stringify((reqHost.tools || []).filter(t => t.function.name !== 'run_js')), (reqNoJs.tools || []).map(t => t.function.name).join());
+  await say('fn tool');
+  const noJs = await lastTool();
+  check('run code: its run_js call is not run, and the answer holds no identifying term', /^Not run/.test(noJs) && found(noJs).length === 0, noJs);
 
   await page.click('[data-act=new]');
   check('host shell: new sessions get the shell tool while the defaults name a host', await page.isChecked('#vmtools'));

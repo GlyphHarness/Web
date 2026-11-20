@@ -333,6 +333,100 @@ else {
   await x.close();
 }
 
+// ---- host files: file_read, file_edit, file_write on the host the shell runs on (setting hostFiles; README "Host shell")
+// Seam: tools.js (a tool group 'files', offered with 'vm'), localbridge.js hostFiles(b, name) over the exec route.
+// The run checks use a scratch folder made for them on the target (under /tmp there, or in this suite's own temp folder
+// for local:), never the target's own folder, and remove it at the end. Bytes are compared by sha256 on the target.
+{
+  const found = t => neutralMod ? neutralMod.found(String(t)) : ['(app/neutral.js is missing)'];
+  const { resultClass } = await import('../app/profile.js');
+  const { createHash } = await import('node:crypto');
+  const sha = b => createHash('sha256').update(b).digest('hex');
+  const groups = t => defsFor({ tools: t }).map(d => d.function.name);
+  await attempt('host files: a tool group of its own, offered only with the shell, right after it; without it the list is as before', () => {
+    const base = groups(['ask', 'values', 'repo', 'vm', 'local']), withF = groups(['ask', 'values', 'repo', 'vm', 'local', 'files']), i = withF.indexOf('shell');
+    return [JSON.stringify(withF.slice(i, i + 4)) === '["shell","file_read","file_edit","file_write"]' && JSON.stringify(withF.filter(n => !/^file_/.test(n))) === JSON.stringify(base) && !groups(['files']).some(n => /^file_/.test(n)) && !base.some(n => /^file_/.test(n)), withF.join()];
+  });
+  await attempt('host files: the machine capability narrows them away with the shell', () => ['file_read', 'file_edit', 'file_write'].every(n => prof.allowedTool(n, { vm: true }) && !prof.allowedTool(n, { vm: false })));
+  await attempt('host files: definitions and the answer when nothing is set up hold no identifying term', async () => {
+    const defs = defsFor({ tools: ['vm', 'files'] }).filter(d => /^file_/.test(d.function.name)), outs = [];
+    for (const d of defs) outs.push(await execTool({ function: { name: d.function.name, arguments: JSON.stringify({ path: 'a.txt', find: 'a', replace: 'b', content: 'c' }) } }, { pads: [], by: () => ({}) }));
+    return [defs.length === 3 && outs.every(o => /^No /.test(o)) && found(JSON.stringify(defs) + outs.join()).length === 0, outs.join(' | ') + ' ' + found(JSON.stringify(defs))];
+  });
+  await attempt('config: hostFiles is true or false; toolRounds is a whole number from 1 to 100', () => {
+    const p = (k, v) => config.plan(JSON.stringify({ settings: { [k]: v } }), cur).refused.length === 0;
+    return [p('hostFiles', true) && p('hostFiles', false) && !p('hostFiles', 'yes') && p('toolRounds', 1) && p('toolRounds', 40) && p('toolRounds', 100) && !p('toolRounds', 0) && !p('toolRounds', 101) && !p('toolRounds', 2.5) && !p('toolRounds', '8'), ''];
+  });
+  await attempt('settings: hostFiles and toolRounds resolve from the defaults, a profile and the session; hostFiles shapes the tools, toolRounds is harness data', () => {
+    const ps = [{ id: 'p', name: 'p', settings: { hostFiles: true, toolRounds: 30 } }], e = prof.effective(ps, 'p', { toolRounds: 8 }, { toolRounds: 12 });
+    return [prof.SETTING_KEYS.includes('hostFiles') && prof.SETTING_KEYS.includes('toolRounds') && prof.AUDIENCE.hostFiles === 'tools' && prof.AUDIENCE.toolRounds === 'harness' && e.settings.hostFiles === true && e.settings.toolRounds === 12, JSON.stringify(e.settings)];
+  });
+
+  if (!EXEC_SPEC) console.log('SKIP host files run checks (no bash target on this computer; set WH_TEST_EXEC)');
+  else {
+    const boot = await start({ port: 0, token: TOKEN, exec: { t: EXEC_SPEC } }), bc = client({ url: boot.url, token: TOKEN });
+    const local = !process.env.WH_TEST_EXEC;
+    let sd = '';
+    if (local) { sd = fs.realpathSync(fs.mkdtempSync(path.join(work, 'files-'))); }
+    else sd = (await bc.exec('t', { cmd: 'mktemp -d /tmp/wh-files-XXXXXX' })).out.trim();
+    const spec = local ? 'local:' + sd : EXEC_SPEC.split(':').slice(0, -1).join(':') + ':' + sd;
+    const fb = await start({ port: 0, token: TOKEN, exec: { f: spec } }), fc = client({ url: fb.url, token: TOKEN });
+    const sh = async cmd => (await fc.exec('f', { cmd, timeout: 60 })).out;
+    const seed = (name, buf) => sh(`base64 -d > '${name}' <<'B64'\n${buf.toString('base64').replace(/.{76}/g, '$&\n')}\nB64\n`);
+    const shaOn = async name => (await sh(`sha256sum '${name}' | cut -c1-64`)).trim();
+    const tool = (name, args) => execTool({ function: { name, arguments: JSON.stringify(args) } }, { files: lbMod.hostFiles?.(fc, 'f'), pads: [], by: () => ({}) });
+    const outs = [];
+    const T = async (name, args) => { const o = await tool(name, args); outs.push(o); return o; };
+    try {
+      await attempt('host files: the scratch folder is a fresh one on the target', async () => [/^\/.+/.test(sd) && (await sh('ls -A | wc -l')).trim() === '0', sd]);
+      const samples = { 'lf.txt': 'one\ntwo\nthree\n', 'crlf.txt': 'one\r\ntwo\r\nthree\r\n', 'utf8.txt': '﻿grüße — 日本 🎉\nzwei\n', 'nofinal.txt': 'a\nb', 'empty.txt': '' };
+      for (const [name, text] of Object.entries(samples))
+        await attempt(`host files: a file written whole comes back byte for byte (${name})`, async () => { const o = await T('file_write', { path: name, content: text }); const got = await shaOn(name); return [got === sha(Buffer.from(text, 'utf8')) && !/^(Tool error|Error)/.test(o), o + ' ' + got]; });
+      await seed('c2.txt', Buffer.from('one\r\ntwo\r\nthree\r\n'));
+      await attempt('host files: an edit in a CRLF file changes only what it replaces; the file stays CRLF', async () => {
+        const o = await T('file_edit', { path: 'c2.txt', find: 'two', replace: 'zwei' }), a = await shaOn('c2.txt');
+        const o2 = await T('file_edit', { path: 'c2.txt', find: 'zwei\nthree', replace: 'deux\ntrois' }), b2 = await shaOn('c2.txt');
+        return [a === sha(Buffer.from('one\r\nzwei\r\nthree\r\n')) && b2 === sha(Buffer.from('one\r\ndeux\r\ntrois\r\n')), [o, o2, a, b2].join(' | ')];
+      });
+      const nonAscii = Buffer.from('﻿grüße — 日本 🎉\r\nzwei\nend', 'utf8');
+      await seed('u2.txt', nonAscii);
+      await attempt('host files: an edit keeps a byte-order mark, non-ASCII text and mixed line endings as they were', async () => { const o = await T('file_edit', { path: 'u2.txt', find: 'zwei', replace: 'drei é' }); return [await shaOn('u2.txt') === sha(Buffer.from(nonAscii.toString('utf8').replace('zwei', 'drei é'), 'utf8')), o]; });
+      const big = Buffer.from(Array.from({ length: 6000 }, (_, i) => `line ${i + 1} ` + (i % 7 ? 'x'.repeat(40) : 'äöü '.repeat(10)) + (i % 2 ? '\r\n' : '\n')).join(''), 'utf8');
+      await seed('big.txt', big);
+      await attempt('host files: a 300 KB file is edited near its end with every other byte kept', async () => {
+        const o = await T('file_edit', { path: 'big.txt', find: 'line 5990 ', replace: 'LINE 5990 ' }); const want = Buffer.from(big.toString('utf8').replace('line 5990 ', 'LINE 5990 '), 'utf8');
+        return [big.length > 300000 && await shaOn('big.txt') === sha(want), big.length + ' ' + o];
+      });
+      await attempt('host files: a read states the total lines and returns a range of numbered lines whole, far above 1,500 characters', async () => {
+        const o = await T('file_read', { path: 'big.txt', lines: '5901-5960' }), ls = o.split('\n');
+        return [/\b6000 lines\b/.test(ls[0]) && o.length > 3000 && !/\[os:/.test(o) && /^\s*5901\tline 5901 /.test(ls[1]) && /^\s*5960\tline 5960 /.test(ls.at(-1)) && !o.includes('\r'), ls[0] + ' ' + o.length + ' ' + JSON.stringify(ls.at(-1)).slice(0, 80)];
+      });
+      await attempt('host files: a whole read over the cap is cut at a line end and says which lines to ask for', async () => { const o = await T('file_read', { path: 'big.txt' }), last = o.split('\n').at(-1); return [o.length >= 20000 && o.length < 60000 && /lines? \d+-6000/.test(last) && /lines "\d+-6000"/.test(last), o.length + ' ' + last]; });
+      await attempt('host files: a read of a small file is the whole file, numbered from 1', async () => { const o = await T('file_read', { path: 'lf.txt' }); return [/\b3 lines\b/.test(o.split('\n')[0]) && o.split('\n').slice(1).join('\n').replace(/^\s*\d+\t/gm, '') === 'one\ntwo\nthree', JSON.stringify(o)]; });
+      await attempt('host files: an absolute path inside the folder is the same file', async () => { const o = await T('file_read', { path: sd + '/lf.txt' }); return [/\b3 lines\b/.test(o), o]; });
+      await seed('twice.txt', Buffer.from('same\nsame\n'));
+      await attempt('host files: find that is absent or not unique is refused in the words the profile classes, and the file is unchanged', async () => {
+        const before = await shaOn('twice.txt'), a = await T('file_edit', { path: 'twice.txt', find: 'nothere', replace: 'x' }), b2 = await T('file_edit', { path: 'twice.txt', find: 'same', replace: 'x' });
+        return [resultClass(a) === 'find-absent' && resultClass(b2) === 'find-ambiguous' && /find occurs 0 times/.test(a) && /find occurs 2 times/.test(b2) && await shaOn('twice.txt') === before, a + ' | ' + b2];
+      });
+      await sh('ln -s /etc etc-link; mkdir -p sub');
+      await attempt('host files: a path outside the folder (.., absolute elsewhere, a link that leaves it) is refused and nothing is written there', async () => {
+        const r = [await T('file_read', { path: '../x.txt' }), await T('file_read', { path: '/etc/hostname' }), await T('file_read', { path: 'etc-link/hostname' }), await T('file_write', { path: '../escape-wh.txt', content: 'x' }), await T('file_write', { path: 'etc-link/escape-wh.txt', content: 'x' })];
+        const there = (await sh('ls ../escape-wh.txt /etc/escape-wh.txt 2>/dev/null | wc -l')).trim();
+        return [r.every(o => /^Tool error: /.test(o)) && there === '0', r.join(' | ') + ' there=' + there];
+      });
+      await attempt('host files: a missing file and a folder are plain failures', async () => { const a = await T('file_read', { path: 'nothere.txt' }), b2 = await T('file_edit', { path: 'sub', find: 'a', replace: 'b' }); return [/^Tool error: /.test(a) && /^Tool error: /.test(b2), a + ' | ' + b2]; });
+      await attempt('host files: a write makes missing folders', async () => { await T('file_write', { path: 'new/deep/n.txt', content: 'n\n' }); return [await shaOn('new/deep/n.txt') === sha(Buffer.from('n\n')), '']; });
+      await attempt('host files: nothing these calls returned holds an identifying term', () => [outs.length > 15 && found(outs.join('\n')).length === 0, found(outs.join('\n')).join()]);
+    } finally {
+      await fb.close();
+      if (local) fs.rmSync(sd, { recursive: true, force: true });
+      else if (/^\/tmp\/wh-files-\w+$/.test(sd)) await bc.exec('t', { cmd: `rm -rf '${sd}'` });
+      await boot.close();
+    }
+  }
+}
+
 // ---- where the shell runs is harness data: a setting (defaults, a profile, a session), never part of what the model is sent
 await attempt('shell runs on: a setting resolved from the defaults, then a profile, then the session', () => {
   const ps = [{ id: 'p', name: 'p', settings: { shellOn: 'host:dev' } }];
