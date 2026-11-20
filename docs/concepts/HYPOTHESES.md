@@ -306,3 +306,5 @@ What it taught
 6. Operator note: the first page load of a fresh browser profile timed out once in `wh init` for green; the commands were repeated and the session started clean (the failed commands are in the command log as `no`).
 
 Verdict: `retest`. One pair on one small task. By the programme a full run may follow (three tasks of different shape per arm); the question worth carrying into it is cost and scripted writes, since requests did not move.
+
+Note, 2026-11-20, after the release judge: of blue's four scripted writes, the committed profile shows three (the python3 here-documents). The fourth is a shell call stored by handle, which the profile holds only as its handle; it was counted from the held step the operator read. On the profile alone the count is 3 and 0.
