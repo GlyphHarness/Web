@@ -1,6 +1,6 @@
 # Driving WebHarness sessions
 
-Three ways in, one record. Whatever drives a session, the evidence is the harness's own: the session log, the ledger, the trace, smells, the trail, and (for scripted runs) screenshots and a step record. Nothing relies on a model saying what it did.
+Four ways in, one record. Whatever drives a session, the evidence is the harness's own: the session log, the ledger, the trace, smells, the trail, and (for scripted runs) screenshots and a step record. Nothing relies on a model saying what it did.
 
 ## 1. A person in the browser
 
@@ -43,6 +43,23 @@ Up-events arrive without being asked: `hello`, `trace`, `error`, `console`, `not
 Steps: `new`, `say` (waits for the turn unless `"wait": "none"`), `click`, `fill`/`value`, `press`/`key`, `pane`, `wait` (a selector or `idle`), `read` (slot values included), `eval`, `screenshot`. `setup` is merged with paste config (non-secret settings only), so a scenario never carries a key; use the mock provider, or a page where the person has entered one.
 
 The smoke suites (`scripts/smoke*.mjs`) are the same idea with assertions; a new feature gets checks there.
+
+## 4. A command line (held, stepped runs)
+
+`node scripts/wh.mjs` (wh) is a terse CLI for operators (agents or people) driving WebHarness one short command at a time. A daemon keeps one browser running, one tab per session, so held turns survive between commands; output is terse text, or JSON with `--json`.
+
+| Step | Command | Effect |
+|---|---|---|
+| Start | `wh init [-m model] [-s strategy] [-w watchModel] [-p pace]` | OpenRouter provider (key added by the network proxy) |
+| | `wh new [title]`, `wh use <id>` | a new session, becomes current; make a session current |
+| Set what runs | `wh paste <file>` | paste a config block (settings, profiles, keys) through the page's Paste config |
+| | `wh pace run\|requests\|tools\|both` | hold model requests and/or tool calls |
+| Send | `wh say [-i id] <text...>`, `wh sayfile [-i id] <file>` | send; returns at the end of the turn or at a hold; a file's text uses LF line ends |
+| See held | `wh held [-i id]` | what is held or waiting for approval, in full |
+| Release | `wh step [-i id] [--all]`, `wh skip` | release (or skip) the held step(s) |
+| Read | `wh show [-i id] [-n 6]`, `wh dump [-i id] [-o file]` | the last turns, one line each; the session's record (messages, ledger; holds message text, keys masked) |
+
+Every command is appended to `<dir>/log.jsonl` (default `.wh`): time, command, session id, outcome, sizes and hashes. Arguments are never copied: no message text, no key. `wh log [-i id] [-n 20]` reads that command log back in order.
 
 ## Adding a tool
 
