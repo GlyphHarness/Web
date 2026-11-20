@@ -82,6 +82,23 @@ check('retry: a failure after a chunk was yielded is not retried (the caller has
   check('retry: a network error after a chunk is not retried', !!cut && r2.err?.name === 'TypeError' && calls2.length === 1, J([r2.err?.message, calls2.length]));
 }
 
+// ---- only the messages a failed fetch produces are network errors ----
+{
+  const calls = [];
+  const bug = P.retrying({ label: 'bug', async *stream() { calls.push(1); throw new TypeError("Cannot read properties of undefined (reading 'x')"); } });
+  const opt = { retryDelays: [0, 0] };
+  const r = await drain(bug.stream({}, '', undefined, opt));
+  check('retry: a coding-mistake TypeError is not asked again, and reaches the caller', r.err?.name === 'TypeError' && r.err?.message === "Cannot read properties of undefined (reading 'x')" && calls.length === 1 && !opt.retries, J([r.err?.name, r.err?.message, calls.length, opt.retries]));
+  const netMsgs = ['Failed to fetch', 'NetworkError when attempting to fetch resource.', 'Load failed', 'fetch failed', 'network error'];
+  for (const msg of [...netMsgs, ...netMsgs.map(m => m.toUpperCase())]) {
+    const n = [];
+    const flaky = P.retrying({ label: 'flaky', async *stream() { n.push(1); if (n.length === 1) throw new TypeError(msg); yield { choices: [{ delta: { content: 'ok' } }] }; } });
+    const o = { retryDelays: [0, 0] };
+    const got = await drain(flaky.stream({}, '', undefined, o));
+    check(`retry: network message ${msg} is asked again`, !got.err && text(got.out) === 'ok' && n.length === 2 && o.retries === 1, J([got.err?.message, n.length, o.retries]));
+  }
+}
+
 // ---- the real provider's code path, with a stand-in for fetch (no network) ----
 {
   const realFetch = globalThis.fetch;
