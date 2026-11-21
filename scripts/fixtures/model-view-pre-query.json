@@ -1,0 +1,86 @@
+{
+ "from": "135f592 (dev tip, 0.57.0)",
+ "note": "Hashes (sha256, 16 hex) of what each strategy registered before strat-query-1.0 sent: its spec, its tool definitions for two tool groups, one fixed request. A strategy registered on 135f592 sends the same bytes after the query strategy lands (a query strategy is a new id, never an edit). Generated once; do not edit.",
+ "spec": {
+  "strat-serial-1.0": "886f1e5c9a4694d9",
+  "strat-checkpoint-1.0": "84001e70b6194ac5",
+  "strat-stem-1.0": "384cfe9ae5f22870",
+  "strat-stem-2.0": "51f7d6e8282d64b8",
+  "strat-serial-2.0": "301c17d998b65070",
+  "strat-serial-3.0": "4608b9a64e45e833"
+ },
+ "view": {
+  "strat-serial-1.0": {
+   "base": {
+    "defs": "a96c197c2f5bec37",
+    "body": "3a5a528e87a24328",
+    "n": 12
+   },
+   "all": {
+    "defs": "44360269ea35cd13",
+    "body": "8217522d0f7b3a7d",
+    "n": 28
+   }
+  },
+  "strat-checkpoint-1.0": {
+   "base": {
+    "defs": "a96c197c2f5bec37",
+    "body": "3a5a528e87a24328",
+    "n": 12
+   },
+   "all": {
+    "defs": "44360269ea35cd13",
+    "body": "8217522d0f7b3a7d",
+    "n": 28
+   }
+  },
+  "strat-stem-1.0": {
+   "base": {
+    "defs": "a96c197c2f5bec37",
+    "body": "3a5a528e87a24328",
+    "n": 12
+   },
+   "all": {
+    "defs": "44360269ea35cd13",
+    "body": "8217522d0f7b3a7d",
+    "n": 28
+   }
+  },
+  "strat-stem-2.0": {
+   "base": {
+    "defs": "a96c197c2f5bec37",
+    "body": "3a5a528e87a24328",
+    "n": 12
+   },
+   "all": {
+    "defs": "44360269ea35cd13",
+    "body": "8217522d0f7b3a7d",
+    "n": 28
+   }
+  },
+  "strat-serial-2.0": {
+   "base": {
+    "defs": "4ecc24daa26a1382",
+    "body": "c0d9112dc7fa4acf",
+    "n": 12
+   },
+   "all": {
+    "defs": "b06514992109fda6",
+    "body": "6d951d36811c35a6",
+    "n": 28
+   }
+  },
+  "strat-serial-3.0": {
+   "base": {
+    "defs": "4ecc24daa26a1382",
+    "body": "c0d9112dc7fa4acf",
+    "n": 12
+   },
+   "all": {
+    "defs": "af9dc1f40d4dd4c2",
+    "body": "9a1fd06b4d4c1f61",
+    "n": 28
+   }
+  }
+ }
+}
