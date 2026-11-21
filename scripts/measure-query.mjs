@@ -1,14 +1,18 @@
 // Query surface, deterministic measurement (rigid order step 5, no model). docs/QUERY.md OQ1, OQ5, OQ7, OQ9, OQ14, Q15-Q17, Q20.
 // Builds a surface over the harness adapter fed with repo fixtures (scripts/fixtures sessions, the live catalog/*.jsonl read at run
 // time, in-script synthetic handles, trail and a long session), runs a fixed battery and writes docs/concepts/results/query-det-<date>.json
-// and .md. Plain node, no browser, no network, no model. Run: node scripts/measure-query.mjs [--date YYYY-MM-DD]
+// and .md. Plain node, no browser, no network, no model. Run: node scripts/measure-query.mjs [--date YYYY-MM-DD] [--tag <short sha>] (headSha = git rev-parse HEAD or env GIT_SHA)
 // Token estimate everywhere: ceil(chars / 4). Timings are wall clock (median of 5) and are not part of the determinism hash.
 import fs from 'node:fs';
 import path from 'node:path';
+import { execSync } from 'node:child_process';
 import { createSurface } from '../app/query.js';
 import { slice, range } from '../app/outstore.js'; // the real pure read helpers of output_read (the db part is not touched)
 import { ROOT, J, tok, hash, median, MET, RND, CAT, RAW, slong, SESSIONS, TRAIL, DESC, mk } from './measure-query-fixtures.mjs';
 
+const arg = n => (process.argv.includes(n) ? process.argv[process.argv.indexOf(n) + 1] : null);
+let SHA = process.env.GIT_SHA || null; try { SHA = SHA || execSync('git rev-parse HEAD', { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim(); } catch {}
+const TAG = arg('--tag') ? '-' + arg('--tag') : ''; // output name suffix, so a later run does not overwrite an earlier result (--tag <short sha>)
 const DATE = (process.argv.includes('--date') ? process.argv[process.argv.indexOf('--date') + 1] : new Date().toISOString().slice(0, 10));
 
 // ------------------------------------------------------------------ the battery
@@ -308,12 +312,12 @@ for (const b of B.filter(x => x.group === 'error')) { const { S } = mk(); const 
 
 // ------------------------------------------------------------------ write
 const out = {
-  date: DATE, script: 'scripts/measure-query.mjs', node: process.version, tokenEstimate: 'ceil(chars/4)', headSha: process.env.GIT_SHA || null,
+  date: DATE, script: 'scripts/measure-query.mjs', node: process.version, tokenEstimate: 'ceil(chars/4)', headSha: SHA,
   sources: { sessions: SESSIONS.map(s => ({ id: s.id, turns: s.messages.length, from: s.id === 'slong' ? 'synthetic (in-script, deterministic)' : s.id.startsWith('sfix') ? 'scripts/fixtures/metrics-sessions.json' : 'scripts/fixtures/render-sessions.json' })), catalog: { concepts: CAT.concepts.length, faults: CAT.faults.length, terms: CAT.terms.length, read: 'catalog/*.jsonl at run time' }, trailRows: TRAIL.length, handles: 'synthetic (km7q2x stem, ab3dd9 checkpoint)', extraAdapter: 'scratch: settable note, failing note, materialized turn-text (in-script)' },
   summary, byGroup, examples, descriptor: desc, refBattery, refSummary, reducerRows, comparison: { items: cmp, total: cmpTotal }, errorMessages: errMsgs, battery: rows,
 };
 const dir = path.join(ROOT, 'docs/concepts/results'); fs.mkdirSync(dir, { recursive: true });
-fs.writeFileSync(path.join(dir, `query-det-${DATE}.json`), J(out, null, 1) + '\n');
+fs.writeFileSync(path.join(dir, `query-det-${DATE}${TAG}.json`), J(out, null, 1) + '\n');
 
 const f = (x, d = 2) => (typeof x === 'number' ? x.toFixed(d) : x);
 const md = [
@@ -336,5 +340,5 @@ const md = [
   '## Versus output_read / entry_read', '', '| need | old tok (calls) | new tok (calls) | new/old bytes | note |', '| --- | --- | --- | --- | --- |',
   ...cmp.map(c => `| ${c.need} | ${c.old.tokens} (${c.old.calls}) | ${c.new.tokens} (${c.new.calls}) | ${c.ratioNewToOld} | ${(c.note || '').replace(/\|/g, '/')} |`), '',
 ];
-fs.writeFileSync(path.join(dir, `query-det-${DATE}.md`), md.join('\n') + '\n');
+fs.writeFileSync(path.join(dir, `query-det-${DATE}${TAG}.md`), md.join('\n') + '\n');
 console.log(md.slice(0, 14).join('\n'));
