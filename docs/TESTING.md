@@ -1,6 +1,6 @@
 # Testing notes and gotchas
 
-How the suites run: `node scripts/ci.mjs [main git cpu keys local validators profile query retry vm]` (serve the repo on a port first for `main`, `git`, `vm`: `python -m http.server 8787`). `keys`, `cpu`, `local`, `validators`, `profile`, `query` (the query surface, docs/QUERY.md) and `retry` (the provider seam's retry, with the mock provider and a stand-in for fetch) are plain node, no browser. `local` starts the real local bridge; its exec run checks need a bash target (see Host shell below).
+How the suites run: `node scripts/ci.mjs [main git cpu keys local validators profile query stripe retry gateway wh vm]` (serve the repo on a port first for `main`, `git`, `wh`, `vm`: `python -m http.server 8787`). `keys`, `cpu`, `local`, `validators`, `profile`, `query` (the query surface, docs/QUERY.md), `stripe` (text striping, `docs/STRIPE.md`, repo text and generated text only), `gateway` (the Claude route's pure gateway core, `app/claude-gateway.js`, and its provider entry, with stand-ins for fetch; no listener, no network) and `retry` (the provider seam's retry, with the mock provider and a stand-in for fetch) are plain node, no browser. `main`, `git`, `wh` (the operator CLI against the mock provider) and `vm` need the served page and a browser. `local` starts the real local bridge; its exec run checks need a bash target (see Host shell below).
 
 ## Playwright
 
