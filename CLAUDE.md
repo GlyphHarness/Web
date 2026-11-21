@@ -52,3 +52,4 @@ Work on `dev`; every piece of work follows the rigid order below.
 - When asked for a terse readout, keep each tool call input under 80 characters and its output under 200. Hide bulk output and extract only the target, using a hint or a terse enumeration token.
 - Do not follow up with extra calls that fan out input or output to get around the cap. Splitting a dump across turns counts as bypassing it.
 - If a tool cannot be capped (for example MCP session tools return full records), say so and ask instead of querying.
+- The cap applies to Bash. For anything uncappable, delegate: fork or spawn an agent whose prompt is baked and short and whose report is capped (under 200 characters, target only). Its own tool output stays in the fork. The spawn call and the report still show in the parent, so keep both terse.
