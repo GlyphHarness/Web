@@ -43,7 +43,7 @@ export function lex(src) {
   const adv = n => { for (let k = 0; k < n; k++) { if (src[i] === '\n') { line++; col = 1; } else col++; i++; } };
   while (i < src.length) {
     const c = src[i], at = { line, col };
-    if (c === '\n' || c === ' ' || c === '\t' || c === '\r' || c === ',' || c === '﻿') { adv(1); continue; }
+    if (c === '\n' || c === ' ' || c === '\t' || c === '\r' || c === ',' || c === '\uFEFF') { adv(1); continue; }
     if (c === '#') { while (i < src.length && src[i] !== '\n') adv(1); continue; }
     if (src.startsWith('...', i)) { toks.push({ t: 'spread', v: '...', ...at }); adv(3); continue; }
     if (c === '"') {
