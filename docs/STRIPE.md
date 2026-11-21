@@ -6,7 +6,7 @@ Text striping shrinks a blob of text to a striped skeleton: kept spans interleav
 
 It is one reducer among others. `outstore.js` already has three (squeeze: noise removal; shortlist: keyword lines; head and tail: `ends`), chosen by what the caller wants (tenet 25). Striping is a fourth, for the case where the caller wants "what is in here" and has no keyword and no helper. The policy that chooses it, and the query-surface header that records which reducer was applied, are a later piece (section 10).
 
-Terms are in `catalog/nomenclature.jsonl` (stripe, skeleton, kept span, omission marker, stripe policy, reducer, reducer class, lexical rarity, analyzed-before indicator, minimum kept width, retained fraction). Concepts: see the inbox records for this piece and the catalog concepts on handles (C-series in `docs/concepts/CATALOG.md`), stems, and ambiguous markers (C3).
+Terms are in `catalog/nomenclature.jsonl` (stripe, skeleton, kept span, omission marker, stripe policy, reducer, reducer class, lexical rarity, analyzed-before indicator, minimum kept width, retained fraction). Concepts: text striping reducer, striped skeleton notation, lexical rarity heuristics, reducer class with analyzed-before indicator (`catalog/concepts.jsonl`); related: handles, stems and ambiguous markers (C3 in `docs/concepts/CATALOG.md`).
 
 Scope: a standalone pure module. No DOM, no page, no storage, no clock, no randomness, no imports.
 
