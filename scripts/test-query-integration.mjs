@@ -27,10 +27,22 @@
 //      body; output_read(handle) returns it. The header is never cut.
 //  D5  `query` goes through present() (PROTOCOL.md "Adding a tool" step 5); `query_ref` is in WHOLE (bounded by the
 //      surface's getMax, 12000, plus a header).
-//  D6  A result whose header.ok is false reads as failed wherever a tool result is judged failed (trail `ok`,
-//      context.turnOf step `ok`, the adapter's flow-turn `ok`): the three agree on the same text.
 //  D7  `query_ref` never goes through the stored-call path of exec ({ref} alone is a label, not a stored call).
-//  D8  Ledger rows are served with `broke` (the prefix-break field of measure): the measure needs it (A1.5).
+//
+// Open decisions, NOT checks (each a question for the spec owner of docs/QUERY.md; the suite takes no side):
+//  O1  Failure agreement. QUERY.md 3.2 defines a flow-turn `ok` as false on a result that starts with `Tool error` or
+//      `Not run`. The trail `ok` and context.turnOf already also treat `Unknown tool`, `Invalid JSON arguments` and
+//      `No stored call` as failed. Whether the adapter's `ok` should follow them, and whether a `query` result whose
+//      header says ok:false reads as failed in turnOf and in the adapter, is a change of a written contract
+//      (QUERY.md 3.2), not a bug fix. Fault dgnuqs (catalog/inbox/seams-m4vb9e.jsonl). Only the trail row of a refused
+//      `query_ref` is pinned (QI23, QUERY.md 6.3).
+//  O2  Ledger `broke`. Serving the prefix-break field of measure on LedgerRow changes the kind (QUERY.md 3.2, OQ11), so
+//      it belongs to the spec owner; A1.5 (the measure) needs it. Concept wjpfhz, deferred.
+//  O3  Mechanism. The gate D1 (`defsAs` fourth parameter, spec flag `query`) is the one mechanism the suite pins; QI6
+//      and QI8 call it. A1.3 may propose another by a `Spec:` commit with a reason.
+//  Out of this suite, by design: `ctx.query` built by the host from real sources and the host `tick()` per turn
+//  (QUERY.md 4.4, 6.3) need main.js and the page; a browser-suite check (scripts/smoke.mjs, named and added by A1.3)
+//  owns them. Here ctx.query is a surface built over the harness adapter, as the host builds it.
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -300,34 +312,17 @@ await check('QI22 trail: a query_ref call leaves a trail row with the ref, the w
   return row?.tool === 'query_ref' && row.ref === 'q1/t0' && row.why === why.slice(0, 200) && row.ok === true && row.session === SID && row.chars > 0 || J(row);
 });
 
-// ================================================================ failure reads the same everywhere (tools.js trail ok, context.turnOf, the adapter's flow-turn ok)
+// ================================================================ failure in the trail (seam: tools.js trail ok; QUERY.md 6.3 tool join)
+// The wire text of a failed query as the tool join defines it (line 1 the header, then the JSON body); built from the surface
+// so that QI37 does not depend on the tool existing.
 const BAD_Q = '{ turns( }';
-// the wire text of a failed query as D4 defines it (what the tool must return); built here from the surface so QI24 and QI25 do not depend on the tool existing
 const wire = r => J(r.header) + '\n' + J(r.data === undefined ? { errors: r.errors } : { data: r.data, ...(r.errors ? { errors: r.errors } : {}) });
-const failingText = async () => { const env = await mkEnv(), r = await env.surface.run(BAD_Q); return { env, out: wire(r), r }; };
-const turnsWith = (env, text) => { env.session.messages.push({ role: 'assistant', content: '', tool_calls: [call('cB', 'query', { q: BAD_Q })] }, { role: 'tool', tool_call_id: 'cB', content: text }, { role: 'assistant', content: 'ok' }); return env.session.messages.length - 1; };
-const adapterOk = async (env, i) => { const r = await Q.createSurface({ adapters: [QH.createHarnessAdapter(env.src)], now: clock() }).run(`{ turns(session: "sq1", first: 100) { i ok } }`); return r.data?.turns?.find(t => t.i === i - 1)?.ok; };
-await check('QI23 failure: a query whose header says ok false is a failed call in the trail row', async () => {
-  const env = await mkEnv(), out = await run(env, 'query', { q: BAD_Q }), row = lastTrail();
-  return split(out).header?.ok === false && row?.tool === 'query' && row.ok === false || J({ out: out.slice(0, 120), row });
-});
-await check('QI24 failure: and a failed step in context.turnOf (the condensed record of the turn)', async () => {
-  const { env, out } = await failingText(), i = turnsWith(env, out), step = C.turnOf(env.session, i).steps.find(s => s.tool === 'query');
-  return step?.ok === false || J({ out: out.slice(0, 120), step });
-});
-await check('QI25 failure: and ok false on the flow-turn the adapter serves, so "which results failed" can be asked of the data', async () => {
-  const { env, out } = await failingText(), i = turnsWith(env, out);
-  return (await adapterOk(env, i)) === false || J({ out: out.slice(0, 120) });
-});
-await check('QI26 failure: the adapter and the trail agree on the plain failure texts of tools.js and context.js (Unknown tool, Invalid JSON, No stored call)', async () => {
-  const env = await mkEnv(), rows = [];
-  for (const [i, text] of [[7, TOOL_TEXT[7]], [9, TOOL_TEXT[9]], [11, TOOL_TEXT[11]]]) rows.push([text.split(':')[0], await adapterOk(env, 2 * i + 4 + 1)]);
-  // the same texts through execTool are failed trail rows (guard) and through turnOf are failed steps (guard)
-  const trail = [];
-  await run(env, 'nosuchtool', {}); trail.push(lastTrail().ok);
-  await run(env, 'run_js', '{"code": "return 1"'); trail.push(lastTrail().ok);
-  await run(env, 'run_js', { ref: 'os:zzzzzz' }); trail.push(lastTrail().ok);
-  return same(trail, [false, false, false]) && rows.every(r => r[1] === false) || J({ adapter: rows, trail });
+await check('QI23 failure: a query_ref the surface refuses is a failed row in the trail, and one it answers is not', async () => {
+  const env = await mkEnv();
+  await run(env, 'query', { q: Q_REF });
+  const bad = await run(env, 'query_ref', { ref: 'q9/t0', op: 'get' }), badRow = lastTrail();
+  const good = await run(env, 'query_ref', { ref: 'q1/t0', op: 'property', name: 'calls' }), goodRow = lastTrail();
+  return split(bad).header?.ok === false && badRow?.tool === 'query_ref' && badRow.ok === false && split(good).header?.ok === true && goodRow.ok === true || J({ bad: bad.slice(0, 100), badRow, goodRow });
 });
 
 // ================================================================ the adapter over the harness's real shapes (seam: query-harness.js, kept as is)
@@ -355,14 +350,6 @@ await check('QI30 adapter (guard): a handle is served as kind, owner, readers; i
 await check('QI31 adapter (guard): ledger rows from measure and report are served with their usage fields and the strategy that ran', async () => {
   const env = await mkEnv(), r = await env.surface.run('{ ledger(session: "sq1") { n model strat prompt cached completion cost chars kept } }'), l = r.data.ledger;
   return r.header.ok && l.length === 3 && l.every(x => x.strat === 'strat-query-1.0' && x.prompt === 900 && x.cached === 640 && x.model === 'mock-1') && l[0].kept === null && l[1].kept > 0 && l[2].kept > 0 || J(l);
-});
-await check('QI32 ledger: LedgerRow exposes broke (the first block of the request that changed), so a prefix break is a query away', async () => {
-  const env = await mkEnv();
-  return Object.hasOwn(env.src ? QH.createHarnessAdapter(env.src).schema.types.LedgerRow.fields : {}, 'broke') || 'LedgerRow has no field broke';
-});
-await check('QI33 ledger: broke is null while tools and turns hold and "tools" on the request whose tool list changed', async () => {
-  const env = await mkEnv(), r = await env.surface.run('{ ledger(session: "sq1") { n broke } }');
-  return r.header.ok && same(r.data.ledger.map(x => x.broke), [null, null, 'tools']) || J({ errors: r.errors?.map(e => e.message), data: r.data });
 });
 
 // ================================================================ the header (QUERY.md 2.1) over the harness adapter
