@@ -295,6 +295,12 @@ const old = (calls, ...outs) => ({ bytes: outs.join('').length, tokens: tok(outs
 for (const c of cmp) { c.ratioNewToOld = Number((c.new.bytes / c.old.bytes).toFixed(2)); c.newTokensSaved = c.old.tokens - c.new.tokens; }
 const cmpTotal = { oldTok: cmp.reduce((a, c) => a + c.old.tokens, 0), newTok: cmp.reduce((a, c) => a + c.new.tokens, 0) };
 
+// ------------------------------------------------------------------ reducers: same query, same data, one reducer each (cejwzy)
+const reducerRows = [];
+for (const [name, dec] of [['none', '@reduce(with: "none")'], ['clip 200', '@reduce(with: "clip", max: 200)'], ['clip 60', '@reduce(with: "clip", max: 60)'], ['lines 2+1', '@reduce(with: "lines", head: 2, tail: 1)'], ['omit', '@reduce(with: "omit")']]) {
+  const { S } = mk({ harnessOnly: true }); const r = await S.run('{ turns(session: "slong", first: 12) @payload(mode: "full") ' + dec + ' { i payload } }'), z = sizes(r);
+  reducerRows.push({ reducer: name, ok: r.header.ok, dataTok: z.dTok, headerTok: z.hTok, namedInHeader: !!(r.header.reducers && r.header.reducers.length) || /reduc/.test(J(r.header.attrs || {})), reducerRowsChars: r.header.reducers ? J(r.header.reducers).length : 0, errors: (r.errors || []).map(e => e.extensions.code) });
+}
 // ------------------------------------------------------------------ error shapes (OQ1: what a model sees on a bad query)
 const errorShapes = rows.filter(r => r.group === 'error').map(r => ({ id: r.id, codes: r.errors, headerChars: r.header, resultTok: r.tTok }));
 const errMsgs = {};
@@ -304,7 +310,7 @@ for (const b of B.filter(x => x.group === 'error')) { const { S } = mk(); const 
 const out = {
   date: DATE, script: 'scripts/measure-query.mjs', node: process.version, tokenEstimate: 'ceil(chars/4)', headSha: process.env.GIT_SHA || null,
   sources: { sessions: SESSIONS.map(s => ({ id: s.id, turns: s.messages.length, from: s.id === 'slong' ? 'synthetic (in-script, deterministic)' : s.id.startsWith('sfix') ? 'scripts/fixtures/metrics-sessions.json' : 'scripts/fixtures/render-sessions.json' })), catalog: { concepts: CAT.concepts.length, faults: CAT.faults.length, terms: CAT.terms.length, read: 'catalog/*.jsonl at run time' }, trailRows: TRAIL.length, handles: 'synthetic (km7q2x stem, ab3dd9 checkpoint)', extraAdapter: 'scratch: settable note, failing note, materialized turn-text (in-script)' },
-  summary, byGroup, examples, descriptor: desc, refBattery, refSummary, comparison: { items: cmp, total: cmpTotal }, errorMessages: errMsgs, battery: rows,
+  summary, byGroup, examples, descriptor: desc, refBattery, refSummary, reducerRows, comparison: { items: cmp, total: cmpTotal }, errorMessages: errMsgs, battery: rows,
 };
 const dir = path.join(ROOT, 'docs/concepts/results'); fs.mkdirSync(dir, { recursive: true });
 fs.writeFileSync(path.join(dir, `query-det-${DATE}.json`), J(out, null, 1) + '\n');
@@ -325,7 +331,7 @@ const md = [
   ...Object.entries(byGroup).map(([g, v]) => `| ${g} | ${v.n} | ${v.headerTok} | ${v.resultTok} | ${f(v.share * 100, 1)}% | ${v.under25}/${v.n} |`), '',
   '## Battery', '', '| id | group | ok | codes | header tok | data tok | share | refs rows | refs chars | ms |', '| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |',
   ...rows.map(r => `| ${r.id} | ${r.group} | ${r.ok} | ${r.errors.join(' ') || '-'} | ${r.hTok} | ${r.dTok} | ${f(r.share * 100, 0)}% | ${r.refs ? r.refs.rows : '-'} | ${r.refs ? r.refs.chars : '-'} | ${f(r.ms, 2)} |`), '',
-  '## Ref steps (Q15-Q17)', '', '| step | ok | code | adapter fn/set calls | result tok |', '| --- | --- | --- | --- | --- |',
+  '## Reducers (same query, slong first 12 turns, payload full)', '', '| reducer | data tok | header tok | named in header |', '| --- | --- | --- | --- |', ...reducerRows.map(r => `| ${r.reducer} | ${r.dataTok} | ${r.headerTok} | ${r.namedInHeader} |`), '', '## Ref steps (Q15-Q17)', '', '| step | ok | code | adapter fn/set calls | result tok |', '| --- | --- | --- | --- | --- |',
   ...refBattery.map(s => `| ${s.step} | ${s.ok} | ${s.code || '-'} | ${s.adapterFnCalls}/${s.adapterSetCalls} | ${s.resultTok} |`), '',
   '## Versus output_read / entry_read', '', '| need | old tok (calls) | new tok (calls) | new/old bytes | note |', '| --- | --- | --- | --- | --- |',
   ...cmp.map(c => `| ${c.need} | ${c.old.tokens} (${c.old.calls}) | ${c.new.tokens} (${c.new.calls}) | ${c.ratioNewToOld} | ${(c.note || '').replace(/\|/g, '/')} |`), '',
