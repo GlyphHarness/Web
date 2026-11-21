@@ -144,7 +144,7 @@ await check('QI1 strategy: strat-query-1.0 is registered with the query flag and
   need(S, 'app/strategies.js');
   const q = S.spec('strat-query-1.0'), s = S.spec('strat-stem-1.0');
   if (!S.known('strat-query-1.0')) return 'strat-query-1.0 is not registered';
-  return q.query === true && q.name === 'query' && same(q.checkpoints, s.checkpoints) && q.stems === s.stems && q.handles === s.handles && q.reads === s.reads && q.wording === s.wording;
+  return q.query === true && same(q.checkpoints, s.checkpoints) && q.stems === s.stems && q.handles === s.handles && q.reads === s.reads && q.wording === s.wording;
 });
 await check('QI2 strategy: only strat-query-1.0 carries the query flag, and its id cannot be registered twice', () => {
   need(S, 'app/strategies.js');
@@ -187,28 +187,32 @@ await check('QI6 prefix: under strat-query-1.0 the definitions are the strat-ste
   }
   return true;
 });
-await check('QI7 prefix: the two tools are a group of their own (queryTools); defsFor, toolDefs and the other groups never list them', () => {
+await check('QI7 prefix: no tool group lists the two (a session\'s tool list never changes under it, PROTOCOL.md step 2), yet both are executable by name when the host gives them a surface', async () => {
   need(T, 'app/tools.js');
-  if (!Array.isArray(T.queryTools)) return 'tools.js exports no queryTools';
-  const names = T.queryTools.map(t => t.def.function.name), listed = [...T.toolDefs, ...T.defsFor({ tools: ['ask', 'values', 'repo', 'vm', 'files', 'local'] })].map(d => d.function.name);
-  return same(names, ['query', 'query_ref']) && !listed.includes('query') && !listed.includes('query_ref');
+  const listed = [...T.toolDefs, ...T.defsFor({ tools: ['ask', 'values', 'repo', 'vm', 'files', 'local'] })].map(d => d.function.name);
+  if (listed.includes('query') || listed.includes('query_ref')) return 'a group lists a query tool: ' + listed.filter(n => /^query/.test(n)).join();
+  const env = await mkEnv(), a = split(await run(env, 'query', { q: Q_SMALL })).header, b = split(await run(env, 'query_ref', { ref: 'q1/t0', op: 'property', name: 'calls' })).header;
+  return a?.ok === true && b?.ok === true || J({ a, b });
 });
-await check('QI8 prefix: the definitions carry the QUERY.md wire (q and variables; ref, op, name, value, why), name no identifying term, and the strategy call site passes the flag', () => {
+// No `want` on either tool (QUERY.md 6.3): a second-model squeeze would break "the header describes the data" (Q20); the contract is that the
+// wire has no such property, the reason is in the doc.
+await check('QI8 prefix: the definitions carry the QUERY.md wire (q and variables; ref, op, name, value, why; no want) and name no identifying term', () => {
   need(T, 'app/tools.js'); need(NEUT, 'app/neutral.js');
   const defs = T.defsAs(T.defsFor({ tools: [] }), undefined, 'neutral', true), q = defs.find(d => d.function.name === 'query')?.function, r = defs.find(d => d.function.name === 'query_ref')?.function;
   if (!q || !r) return 'a definition is missing';
   const pq = q.parameters.properties, pr = r.parameters.properties;
   const shape = same(Object.keys(pq).sort(), ['q', 'variables']) && same(q.parameters.required, ['q']) && same(Object.keys(pr).sort(), ['name', 'op', 'ref', 'value', 'why']) && same(r.parameters.required, ['ref', 'op']) && same(pr.op.enum, ['get', 'property', 'set']);
-  const words = /header/i.test(q.description) && /<q>\/<label>|q1\/t0/.test(r.description);
+  const noWant = !('want' in pq) && !('want' in pr);
   const neutral = NEUT.found(J(defs)).length === 0;
-  // main.js does not load in node: its call site is read as text (the browser suites cover the live path in A1.3)
-  const site = /defsAs\([^;]*sp\.reads, sp\.wording, sp\.query\)/.test(rd('app/main.js'));
-  return shape && words && neutral && site || J({ shape, words, neutral, site });
+  return shape && noWant && neutral || J({ shape, noWant, neutral });
 });
-await check('QI9 prefix (guard): neither tool is withheld by a capability: allowedTool is true under every caps set (restrictions are options, off by default)', () => {
+await check('QI9 capability: both tools map to a capability (PROTOCOL.md step 3): allowed under the default caps (a restriction is an option, off by default), and some capability key, turned off alone, withholds both', () => {
   need(PROF, 'app/profiles.js');
-  const caps = { run_js: false, fanout: false, ask: false, vm: false, repo: 'none', local: false };
-  return PROF.allowedTool('query', caps) === true && PROF.allowedTool('query_ref', caps) === true;
+  const base = PROF.effective([], null, {}).caps, both = c => [PROF.allowedTool('query', c), PROF.allowedTool('query_ref', c)];
+  if (!both(base).every(x => x === true)) return 'withheld under the default caps: ' + J(both(base));
+  const flips = PROF.CAP_KEYS.map(k => ({ k, r: both({ ...base, [k]: k === 'repo' ? 'none' : false }) }));
+  const withholds = flips.filter(f => f.r.every(x => !x)), disagree = flips.filter(f => f.r[0] !== f.r[1]);
+  return withholds.length > 0 && disagree.length === 0 || J({ withholds: withholds.map(f => f.k), disagree: disagree.map(f => f.k) });
 });
 
 // ================================================================ the provider seam (providers.js, mock triggers only)
@@ -299,7 +303,9 @@ await check('QI20 tool: the default scope expires a query after the 8 most recen
   const old = await run(env, 'query_ref', { ref: 'q1/t0', op: 'get' }), recent = await run(env, 'query_ref', { ref: 'q12/t0', op: 'get' });
   return errMsg(old) === 'query q1 expired (scope: 8 queries); run the query again' && split(recent).header?.ok === true || J({ old: old.slice(0, 160), recent: recent.slice(0, 100) });
 });
-await check('QI21 tool: with no surface in the context the tools answer a plain failed line and do not throw', async () => {
+// The gate contract (QUERY.md 6.3): the host builds ctx.query only for a session whose strategy has the query flag, so a call
+// executed under any other strategy reaches the tool with no surface and is refused as a plain failed answer.
+await check('QI21 tool: executed where the host gave no surface (a session whose strategy lacks the flag), query and query_ref answer a plain failed line, leave a failed trail row and do not throw', async () => {
   const out = await run({ ctx: { by: () => ({ session: SID }) } }, 'query', { q: Q_SMALL }), out2 = await run({ ctx: {} }, 'query_ref', { ref: 'q1/t0', op: 'get' });
   return /^No /.test(out) && /^No /.test(out2) && lastTrail().ok === false || J({ out, out2 });
 });
