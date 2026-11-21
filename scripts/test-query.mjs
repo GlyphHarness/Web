@@ -867,6 +867,25 @@ await check('Q22 harness: trail, faults and terms roots', async () => {
   const lb = a.header.kinds[0].labels;
   return a.header.pages[0].total === 2 && a.data.trail.every(r => r.tool === 'shell') && lb.every?.((l, k) => l === 'k' + a.data.trail[k].n) && same(b.data.faults, [{ id: 'faulta' }]) && same(b.data.terms.map(t => t.id), ['terma1', 'termb2']);
 });
+await check('Q22 harness: faults and terms serve the supersedes chain tail only (a superseded record is not served)', async () => {
+  const cat = {
+    faults: [
+      { id: 'fsold1', model: 'm1', fault: 'first wording', class: 'common', seen: '2026-11-18', handled: 'x', evidence: 'e' },
+      { id: 'fsnew1', model: 'm1', fault: 'second wording', class: 'common', seen: '2026-11-19', handled: 'y', evidence: 'e', supersedes: 'fsold1' },
+      { id: 'fsone2', model: 'm2', fault: 'unrelated', class: 'common', seen: '2026-11-20', handled: 'z', evidence: 'e' },
+    ],
+    terms: [
+      { id: 'tmold1', term: 'warp', means: 'first meaning', see: 'docs/x.md', aka: [], since: '2026-11-18' },
+      { id: 'tmnew1', term: 'warp', means: 'second meaning', see: 'docs/x.md', aka: [], since: '2026-11-19', supersedes: 'tmold1' },
+      { id: 'tmone2', term: 'stem', means: 'a branch', see: 'docs/y.md', aka: [], since: '2026-11-20' },
+    ],
+  };
+  const adapter = harness('createHarnessAdapter')({ sessions: () => FX.sessions, ckpt: () => FX.ckpt, trail: () => TRAIL, handles: mkHandles(), catalog: () => cat });
+  const S = api('createSurface')({ adapters: [adapter], now: clock() });
+  const a = await S.run('{ faults(model: "m1", class: "common") { id } terms(first: 5) { id } }');
+  const b = await S.run('{ faults { id } }');
+  return same(a.data.faults, [{ id: 'fsnew1' }]) && same(a.data.terms.map(t => t.id), ['tmnew1', 'tmone2']) && same(b.data.faults.map(f => f.id), ['fsnew1', 'fsone2']) && b.header.pages[0].total === 2;
+});
 await check('Q22 harness: the module graph of the harness adapter takes injected sources only (no import outside app/query files)', async () => {
   const f = path.join(ROOT, 'app/query-harness.js');
   if (!fs.existsSync(f)) return 'app/query-harness.js missing';
