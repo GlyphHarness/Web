@@ -19,12 +19,17 @@ export function chain(handlers) {
 
 // ---- headers. Pairs are [name, value]; names are read, values are carried by reference and never touched.
 const lower = n => String(n).toLowerCase();
+const isObj = v => v !== null && typeof v === 'object' && !Array.isArray(v);
+// a header list is [[name, value], ...]: only the names are looked at
+const isPairs = h => Array.isArray(h) && h.every(p => Array.isArray(p) && typeof p[0] === 'string');
+const badHeaders = () => reject(400, 'bad-headers');
 const HOP = new Set(['host', 'connection']);
 const carry = (pairs, drop) => pairs.filter(([n]) => !drop.has(lower(n))).map(([n, v]) => [n, v]);
 const namesOf = headers => headers.map(([n]) => lower(n));
 
 // Claude Code listener: a blind copy; only the hop-by-hop headers are not forwarded.
 export function passHeaders(pairs) {
+  if (!isPairs(pairs)) return badHeaders();
   const headers = carry(pairs, HOP);
   return { headers, trace: { names: namesOf(headers) } };
 }
@@ -35,6 +40,7 @@ const HARNESS_FORWARD = new Set(['content-type', 'accept', 'anthropic-version'])
 export function harnessHeaders(pairs, opts) {
   const apiKey = opts?.apiKey;
   if (typeof apiKey !== 'string' || !apiKey) return reject(401, 'no-api-key');
+  if (!isPairs(pairs)) return badHeaders();
   const headers = pairs.filter(([n]) => HARNESS_FORWARD.has(lower(n))).map(([n, v]) => [n, v]);
   headers.push(['x-api-key', apiKey]);
   return { verdict: 'allow', headers, trace: { names: namesOf(headers) } };
@@ -65,6 +71,7 @@ const needListener = l => { if (!LISTENERS.has(l)) throw new Error('unknown list
 
 export function admit(listener, req) {
   needListener(listener);
+  if (!isObj(req) || typeof req.method !== 'string' || typeof req.path !== 'string' || !isPairs(req.headers)) return reject(400, 'bad-request');
   return ADMIT[listener](req);
 }
 
@@ -73,13 +80,15 @@ const markerHolders = b => {
   const out = [];
   (Array.isArray(b.tools) ? b.tools : []).forEach((o, i) => o?.cache_control && out.push({ o, area: 'tools', i }));
   (Array.isArray(b.system) ? b.system : []).forEach((o, i) => o?.cache_control && out.push({ o, area: 'system', i }));
-  (b.messages || []).forEach(m => Array.isArray(m?.content) && m.content.forEach(o => o?.cache_control && out.push({ o, area: 'messages' })));
+  (Array.isArray(b.messages) ? b.messages : []).forEach(m => Array.isArray(m?.content) && m.content.forEach(o => o?.cache_control && out.push({ o, area: 'messages' })));
   return out;
 };
 // markers on tools other than the last move to the last tool (the last one's own marker wins when it has one)
 function moveToolMarkers(b) {
   if (!Array.isArray(b.tools) || !b.tools.length) return;
-  const last = b.tools.at(-1), early = b.tools.slice(0, -1).filter(t => t?.cache_control);
+  const last = b.tools.at(-1);
+  if (!isObj(last)) return; // a last tool that is not an object cannot hold a marker: nothing moves
+  const early = b.tools.slice(0, -1).filter(t => t?.cache_control);
   if (!early.length) return;
   const moved = early.at(-1).cache_control;
   for (const t of early) delete t.cache_control;
@@ -95,6 +104,7 @@ function dropOver(b) {
 }
 // Removes or moves markers only; never places one. A copy is returned; the input is not changed.
 export function normaliseCache(body) {
+  if (!isObj(body)) return body;
   const b = structuredClone(body);
   moveToolMarkers(b);
   dropOver(b);
@@ -123,6 +133,7 @@ const POLICIES = [
 ];
 // -> { body, applied }: applied names the policies that changed something
 export function onRequest(ctx, body, policy) {
+  if (!isObj(body)) return { body, applied: [] }; // not a Messages body: nothing to apply to, passed on as given
   const p = policy || {}, applied = [];
   let out = body;
   for (const pol of POLICIES) {
@@ -150,7 +161,6 @@ const checkReduce = r => {
 const DELTA = { text_delta: { kind: 'text', field: 'text' }, thinking_delta: { kind: 'thinking', field: 'thinking' }, input_json_delta: { kind: 'tool_use', field: 'partial_json' } };
 const USAGE_KEYS = ['input_tokens', 'output_tokens', 'cache_read_input_tokens', 'cache_creation_input_tokens'];
 const isNum = v => typeof v === 'number' && Number.isFinite(v);
-const isObj = v => v !== null && typeof v === 'object' && !Array.isArray(v);
 
 export function streamInit(listener, policy, ctx) {
   needListener(listener);
