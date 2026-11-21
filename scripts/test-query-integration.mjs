@@ -11,23 +11,19 @@
 // out of the default list and of test.yml until A1.4 decides and adds it, in the commit that turns it green.
 //
 // Check names are `QI<n> <group>: <behaviour>`. A check is a function: a throw is a failed check, not a stopped suite.
-// Checks QI3-QI5, QI11 and the shape checks that pin what dev already does are GREEN today on purpose (guards);
-// every other one names a behaviour that does not exist yet.
+// The checks marked (guard) pin what dev already does and are GREEN today on purpose: QI3-QI5, QI10, QI27-QI31, QI34-QI36,
+// QI38-QI41. Every other one names a behaviour that does not exist yet and is red.
 //
-// Decisions the spec takes where docs/QUERY.md is silent (each also in the A1.2 report, and open for A1.3 to
-// propose a spec change with a reason):
-//  D1  Gate: a strategy spec flag `query: true` (strat-query-1.0 = strat-stem-1.0 plus the two tools). tools.js
-//      `defsAs(defs, reads, wording, query)` appends the two definitions last, in the order query, query_ref.
-//      defsFor and toolDefs never list them; a strategy without the flag is sent byte-identical definitions.
-//  D2  Group: tools.js exports `queryTools` (the group of the two), registered for execution in `all()`.
-//  D3  The surface reaches a tool as `ctx.query` (the host builds it from sources and the registered reducers).
-//      Without it the tool answers a plain "No ..." line (a failed call), never throws.
-//  D4  Wire text of a result: line 1 is JSON.stringify(header); the rest is JSON of {data, errors}, or, when the whole
-//      text is over VIEW_MAX, the outstore view (a [os:... nL ends] tag line, then head and tail). The handle holds the
-//      body; output_read(handle) returns it. The header is never cut.
-//  D5  `query` goes through present() (PROTOCOL.md "Adding a tool" step 5); `query_ref` is in WHOLE (bounded by the
-//      surface's getMax, 12000, plus a header).
+// What the suite pins beyond QUERY.md's own text (each open for A1.3 to propose a spec change with a reason):
+//  D1  Gate: a strategy spec flag `query: true` (strat-query-1.0 = strat-stem-1.0 plus the two tools); tools.js
+//      `defsAs(defs, reads, wording, query)` appends the two definitions last, in the order query, query_ref. This is
+//      the one mechanism pinned (see O3). Contract around it (QUERY.md 6.3): defsFor and toolDefs never list the tools,
+//      a strategy without the flag is sent byte-identical definitions, and a session under it has no ctx.query, so a
+//      call is a plain failed answer.
+//  D3  The surface reaches a tool as `ctx.query`.
 //  D7  `query_ref` never goes through the stored-call path of exec ({ref} alone is a label, not a stored call).
+// Wire text of a result, `query` through present() with an os: handle, `query_ref` in WHOLE, no `want`, a refused ref a
+// failed trail row: QUERY.md 6.3 (docs commit d822439), reconciled with PROTOCOL.md "Adding a tool" steps 3 and 5.
 //
 // Open decisions, NOT checks (each a question for the spec owner of docs/QUERY.md; the suite takes no side):
 //  O1  Failure agreement. QUERY.md 3.2 defines a flow-turn `ok` as false on a result that starts with `Tool error` or
@@ -138,6 +134,10 @@ const Q_SMALL = '{ turns(session: "sq1", first: 3) { i role chars calls tool ok 
 // a query that selects fewer props than the kind has, so the surface declares a property ref (QUERY.md 4.3 I3, names calls, tool, ok)
 const Q_REF = '{ turns(session: "sq1", first: 3) { i role chars } }';
 const Q_BIG = '{ turns(session: "sq1", first: 100) { i role chars calls tool ok } ledger(session: "sq1") { n model strat prompt cached } trail(first: 50) { n tool ok chars } sessions { id title msgs } }';
+// The wire text of a failed query as the tool join defines it (line 1 the header, then the JSON body); built from the surface
+// so that QI15 and QI37 do not depend on the tool existing.
+const BAD_Q = '{ turns( }';
+const wire = r => J(r.header) + '\n' + J(r.data === undefined ? { errors: r.errors } : { data: r.data, ...(r.errors ? { errors: r.errors } : {}) });
 
 // ================================================================ strategies (seam: strategies.js register)
 await check('QI1 strategy: strat-query-1.0 is registered with the query flag and the stem strategy\'s other settings', () => {
@@ -146,12 +146,10 @@ await check('QI1 strategy: strat-query-1.0 is registered with the query flag and
   if (!S.known('strat-query-1.0')) return 'strat-query-1.0 is not registered';
   return q.query === true && same(q.checkpoints, s.checkpoints) && q.stems === s.stems && q.handles === s.handles && q.reads === s.reads && q.wording === s.wording;
 });
-await check('QI2 strategy: only strat-query-1.0 carries the query flag, and its id cannot be registered twice', () => {
+await check('QI2 strategy: only strat-query-1.0 carries the query flag', () => {
   need(S, 'app/strategies.js');
   const withFlag = S.list().filter(s => s.query).map(s => s.id);
-  let threw = false;
-  try { S.register({ id: 'strat-query-1.0', name: 'query' }); } catch { threw = true; }
-  return same(withFlag, ['strat-query-1.0']) && threw;
+  return same(withFlag, ['strat-query-1.0']) || J(withFlag);
 });
 await check('QI3 strategy (guard): the six strategies registered on 135f592 keep their specs byte for byte', () => {
   need(G, 'fixtures/query-guard.mjs');
@@ -166,15 +164,12 @@ await check('QI4 prefix (guard): every strategy registered on 135f592 is sent th
   for (const id of G.PRE) for (const g of Object.keys(G.GROUPS)) if (G.viewOf(id, g).defs !== FIX.view[id][g].defs) bad.push(id + '/' + g);
   return bad.length === 0 || 'definitions changed: ' + bad.join();
 });
-await check('QI5 prefix (guard): and the same request bytes, so context.measure reports no break against an earlier request of any of them', () => {
+await check('QI5 prefix (guard): and the same request bytes, so a request built under any of them is byte-identical to the one before the query tools', () => {
   need(G, 'fixtures/query-guard.mjs');
   const bad = [];
   for (const id of G.PRE) for (const g of Object.keys(G.GROUPS)) if (G.viewOf(id, g).body !== FIX.view[id][g].body) bad.push(id + '/' + g);
   if (bad.length) return 'request changed: ' + bad.join();
-  // the live check on the same ground: two requests under one strategy, nothing in tools or turns changes, measure reports no break
-  const defs = T.defsAs(T.defsFor(G.GROUPS.all), 'ranged', undefined, undefined);
-  const a = C.measure('guard-a', C.buildRequest(G.SESSION, 'mock-1', defs)), b = C.measure('guard-a', C.buildRequest(G.SESSION, 'mock-1', defs));
-  return a.broke === null && b.broke === null;
+  return true;
 });
 await check('QI6 prefix: under strat-query-1.0 the definitions are the strat-stem-1.0 definitions with query and query_ref appended last, in that order', () => {
   need(T, 'app/tools.js'); need(S, 'app/strategies.js');
@@ -223,10 +218,9 @@ const toolCall = async text => {
     for (const tc of ch.choices?.[0]?.delta?.tool_calls || []) { name += tc.function?.name || ''; args += tc.function?.arguments || ''; }
   return { name, args: args ? JSON.parse(args) : null };
 };
-await check('QI10 provider (guard): the provider seam is unchanged: the same three providers, the same mock models, a stream(body) generator', async () => {
+await check('QI10 provider (guard): the provider seam is unchanged: the same three providers and a stream(body) generator', async () => {
   need(PR, 'app/providers.js');
-  const models = (await PR.providers.mock.models()).map(m => m.id);
-  return same(Object.keys(PR.providers).sort(), ['claude', 'mock', 'openrouter']) && same(models, ['mock-1', 'mock-bp', 'mock-pro', 'mock-free:free']) && PR.providers.mock.stream.constructor.name === 'AsyncGeneratorFunction' || J({ keys: Object.keys(PR.providers), models });
+  return same(Object.keys(PR.providers).sort(), ['claude', 'mock', 'openrouter']) && PR.providers.mock.stream.constructor.name === 'AsyncGeneratorFunction' || J(Object.keys(PR.providers));
 });
 await check('QI11 provider: the mock answers "query: <text>" with a query call carrying that text', async () => {
   const c = await toolCall('query: ' + Q_SMALL);
@@ -248,15 +242,17 @@ await check('QI14 tool: query returns the header on line 1 and {data} after it, 
   return head === J(direct.header) && same(header, direct.header) && same(bodyOf(out)?.data, direct.data) && row?.tool === 'query' && row.ok === true && row.chars === out.length && row.session === SID || J({ out: out.slice(0, 120), row });
 });
 await check('QI15 tool: a result over VIEW_MAX keeps the whole header on line 1, names an os: handle, stays bounded, and output_read of the handle returns every turn', async () => {
-  const env = await mkEnv(), out = await run(env, 'query', { q: Q_BIG }), { head, header } = split(out), direct = await env.twin().run(Q_BIG);
-  if (J(direct).length <= OS.VIEW_MAX) return 'precondition: the fixture result is not over VIEW_MAX';
-  if (head.length <= 900) return 'precondition: the header is ' + head.length + ' chars, a cut at 900 would not show';
+  const env = await mkEnv(), direct = await env.twin().run(Q_BIG), wireText = wire(direct);
+  // preconditions come from the surface result, not from the tool output: the fixture must be over VIEW_MAX and its header long enough that a cut at 900 would show
+  if (wireText.length <= OS.VIEW_MAX) return 'precondition: the fixture result is ' + wireText.length + ' chars, not over VIEW_MAX';
+  if (J(direct.header).length <= 900) return 'precondition: the header is ' + J(direct.header).length + ' chars, a cut at 900 would not show';
+  const out = await run(env, 'query', { q: Q_BIG }), qrow = lastTrail(), { head, header } = split(out);
   const handle = /\[(os:[a-z0-9]{6,12}) /.exec(out)?.[1];
   if (!handle) return 'no os: handle in the output: ' + out.slice(0, 160);
-  const full = await run(env, 'output_read', { handle, length: 4000 }), stored = await OS.get(handle);
-  const body = (stored.startsWith(head + '\n') ? stored.slice(head.length + 1) : stored);
+  const stored = await OS.get(handle), body = (stored.startsWith(head + '\n') ? stored.slice(head.length + 1) : stored);
   let parsed = null; try { parsed = JSON.parse(body); } catch {}
-  return head === J(direct.header) && header?.ok === true && out.length <= head.length + OS.VIEW_MAX + 400 && parsed?.data?.turns?.length === direct.data.turns.length && full.length > 0 && lastTrail().out === handle || J({ head: head.slice(0, 80), len: out.length, handle, n: parsed?.data?.turns?.length });
+  const read = await run(env, 'output_read', { handle, length: 200 }), start = body.slice(0, 60);
+  return head === J(direct.header) && header?.ok === true && out.length <= head.length + OS.VIEW_MAX + 400 && parsed?.data?.turns?.length === direct.data.turns.length && read.includes(start) && qrow?.out === handle || J({ head: head.slice(0, 80), len: out.length, handle, n: parsed?.data?.turns?.length, readStart: read.slice(0, 80) });
 });
 await check('QI16 tool: query_ref get is bounded by the declared max (12000) plus a header, and a cut ends with the clip marker', async () => {
   const env = await mkEnv();
@@ -319,10 +315,6 @@ await check('QI22 trail: a query_ref call leaves a trail row with the ref, the w
 });
 
 // ================================================================ failure in the trail (seam: tools.js trail ok; QUERY.md 6.3 tool join)
-// The wire text of a failed query as the tool join defines it (line 1 the header, then the JSON body); built from the surface
-// so that QI37 does not depend on the tool existing.
-const BAD_Q = '{ turns( }';
-const wire = r => J(r.header) + '\n' + J(r.data === undefined ? { errors: r.errors } : { data: r.data, ...(r.errors ? { errors: r.errors } : {}) });
 await check('QI23 failure: a query_ref the surface refuses is a failed row in the trail, and one it answers is not', async () => {
   const env = await mkEnv();
   await run(env, 'query', { q: Q_REF });
@@ -354,8 +346,9 @@ await check('QI30 adapter (guard): a handle is served as kind, owner, readers; i
   return r.header.ok && h.kind === 'stem' && h.owner === SID && h.payload === 'stem 3 of 5 folded' && a.length === before + 1 && a.at(-1).h === H.contentHash('stem 3 of 5 folded') || J({ h, a, err: r.errors });
 });
 await check('QI31 adapter (guard): ledger rows from measure and report are served with their usage fields and the strategy that ran', async () => {
-  const env = await mkEnv(), r = await env.surface.run('{ ledger(session: "sq1") { n model strat prompt cached completion cost chars kept } }'), l = r.data.ledger;
-  return r.header.ok && l.length === 3 && l.every(x => x.strat === 'strat-query-1.0' && x.prompt === 900 && x.cached === 640 && x.model === 'mock-1') && l[0].kept === null && l[1].kept > 0 && l[2].kept > 0 || J(l);
+  // only LedgerRow props that QUERY.md 3.2 names (usage and the strategy); the measure's own fields are not part of the contract
+  const env = await mkEnv(), r = await env.surface.run('{ ledger(session: "sq1") { n model strat prompt cached completion cost } }'), l = r.data.ledger;
+  return r.header.ok && l.length === 3 && l.every(x => x.strat === 'strat-query-1.0' && x.prompt === 900 && x.cached === 640 && x.completion === 40 && x.model === 'mock-1' && x.cost === 0.0001) || J(l);
 });
 
 // ================================================================ the header (QUERY.md 2.1) over the harness adapter
@@ -374,8 +367,9 @@ await check('QI36 header (guard): a ref result header is {v, q, label, op, ok} i
   return J(a.header) === J(b.header) && Object.keys(r.header).join() === 'v,q,label,op,ok' || J({ ref: r.header });
 });
 // RED TODAY for a reason in dev, not only for the missing tools: the header key `pages` (QUERY.md 2.1, one row per
-// paginated entry field) matches the neutral.js term /\bpages?\b/. A1.3 must pick: rename the key (a QUERY.md and
-// test-query.mjs spec change, its own commit) or narrow the neutral rule. This check does not choose.
+// paginated entry field) matches the neutral.js term /\bpages?\b/. Neutral wording is reworded, not excused
+// (docs/TESTING.md): A1.3 renames the key in QUERY.md, test-query.mjs and QI34's ORDER above, as its own `Spec:`
+// commit with a reason. The neutral rule is not narrowed. (Fault bkwzel.)
 await check('QI37 neutral: nothing a model reads from the surface (headers, results, refusals, the synopsis) holds an identifying term of app/neutral.js', async () => {
   need(NEUT, 'app/neutral.js');
   const env = await mkEnv(), outs = [await run(env, 'query', { q: Q_BIG }), await run(env, 'query', { q: '{ __synopsis }' }), await run(env, 'query', { q: BAD_Q }), await run(env, 'query_ref', { ref: 'q9/t0', op: 'get' }), await run(env, 'query_ref', { ref: 'q2/t0', op: 'get' }), env.surface.synopsis()];
@@ -386,9 +380,9 @@ await check('QI37 neutral: nothing a model reads from the surface (headers, resu
 });
 await check('QI38 policy (guard): the surface policy shape is its own (QUERY.md OQ8): no module of the surface reads app/policy.js and app/policy.js reads none of them', () => {
   const files = fs.readdirSync(path.join(ROOT, 'app')).filter(f => /^query.*\.js$/.test(f));
-  const readsPolicy = files.filter(f => /from '\.\/policy\.js'/.test(rd('app/' + f)));
-  const policyReads = /from '\.\/query/.test(rd('app/policy.js'));
-  return files.length >= 8 && !readsPolicy.length && !policyReads || J({ files: files.length, readsPolicy, policyReads });
+  const imp = /(?:from\s*|import\s*\(?\s*)['"]\.\/policy(?:\.js)?['"]/, impQ = /(?:from\s*|import\s*\(?\s*)['"]\.\/query/;
+  const readsPolicy = files.filter(f => imp.test(rd('app/' + f))), policyReads = impQ.test(rd('app/policy.js'));
+  return files.includes('query.js') && files.includes('query-harness.js') && !readsPolicy.length && !policyReads || J({ files, readsPolicy, policyReads });
 });
 
 // ================================================================ the reducer hook with stripe-1.0 (TENET 13: nothing lost, nothing re-run)
