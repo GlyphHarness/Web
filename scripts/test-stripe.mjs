@@ -618,8 +618,9 @@ await check('S1 pure: parse, verify, classify, fingerprint and locate return equ
 });
 
 // ============================================================ S2 Identity
-await check('S2 identity: n <= budget returns the text itself, reduced false, no header (maxChars, fraction 1, maxTokens)', () => {
-  for (const t of [EMB.prose, EMB.log, 'short text', EMB.nomen]) for (const p of [{ maxChars: t.length }, { maxChars: t.length + 1000 }, { fraction: 1 }, { maxTokens: Math.ceil(t.length / 4) }]) {
+// the budget is min(maxChars, fraction * n, maxTokens * cpt) and fraction always counts (default 0.3), so fraction 1 is set in each case (R11)
+await check('S2 identity: n <= budget returns the text itself, reduced false, no header (fraction 1 with maxChars or maxTokens)', () => {
+  for (const t of [EMB.prose, EMB.log, 'short text', EMB.nomen]) for (const p of [{ fraction: 1, maxChars: t.length }, { fraction: 1, maxChars: t.length + 1000 }, { fraction: 1 }, { fraction: 1, maxTokens: Math.ceil(t.length / 4) }]) {
     const r = strip(t, p);
     if (r.text !== t || r.reduced !== false || r.n !== t.length) return `${t.slice(0, 12)} ${J(p)} -> ${J({ reduced: r.reduced, n: r.n })}`;
   }
@@ -747,6 +748,223 @@ await check('S6 escape: golden grammar literals (parse): double tilde is one til
   return same(norm(p.parts), [{ kept: 'ab[~12] cd' }, { omit: { n: 129, w: 27, l: 1, k: 'a' } }, { kept: 'ef' }, { omit: { n: 5 } }])
     && same(norm(q.parts), [{ kept: 'xx[' }, { omit: { n: 266 } }]) && same(norm(r.parts), [{ kept: '[~~' }]) && same(norm(t.parts), [{ kept: '[~12]' }]) && !!p.header
     && S.locate(p, 0).offset === 0 && S.locate(p, 1).offset === 139;
+});
+
+// ============================================================ S7 Budget
+// R11: the budget is min(maxChars, fraction * n, maxTokens * cpt), fraction always counting (default 0.3); floorLength is the length of the
+//      skeleton the module returns for the same text and policy at maxChars 1 (section 2.1: below the floor the output is the floor skeleton).
+// R12: with no protect match, that floor skeleton has no kept span: header, "\n", one marker for the whole text (soft keeps yield first).
+const budgetOf = (n, p = {}) => Math.min(p.maxChars ?? Infinity, (p.fraction ?? 0.3) * n, p.maxTokens != null ? p.maxTokens * (p.cpt ?? 4) : Infinity);
+const floorOf = (src, p = {}) => strip(src, { ...p, maxChars: 1 }).text.length;
+const s7problem = (src, p) => {
+  const r = strip(src, p), b = budgetOf(src.length, p);
+  if (src.length <= b) return r.text === src && r.reduced === false ? null : 'identity expected';
+  if (r.reduced !== true) return 'not reduced above budget';
+  const f = floorOf(src, p);
+  return r.text.length <= Math.max(b, f) ? null : `length ${r.text.length} > max(budget ${b}, floor ${f})`;
+};
+await check('S7 budget: output length <= max(budget, floor) over the corpus at every mode and budget fraction', () =>
+  firstBad(runs(), x => x.r.text.length > Math.max(budgetOf(x.src.length, { fraction: x.b }), floorOf(x.src, { mode: x.mode, fraction: x.b })) ? `${x.r.text.length} > budget ${budgetOf(x.src.length, { fraction: x.b })}` : null));
+await check('S7 budget: maxChars, maxTokens with cpt and fraction combine as a minimum', () => {
+  const src = EMB.claude, n = src.length;
+  for (const p of [{ maxChars: 300 }, { maxChars: 300, fraction: 0.9 }, { maxTokens: 60 }, { maxTokens: 50, cpt: 3 }, { fraction: 0.05, maxChars: 900 }, { maxChars: 500, maxTokens: 100 }, { maxChars: 700, maxTokens: 100, cpt: 2, fraction: 0.5 }]) {
+    const w = s7problem(src, p); if (w) return J(p) + ' ' + w;
+    const out = strip(src, p).text, b = budgetOf(n, p);
+    if (b >= 300 && out.length <= b * 0.3) return J(p) + ': output ' + out.length + ' is far below budget ' + b; // the budget is used, not only respected
+  }
+  return true;
+});
+await check('S7 budget: with no protect match the floor skeleton is a header and one marker for the whole text', () => {
+  for (const mode of MODES) for (const src of [EMB.claude, EMB.log, genProse(7, 30), genBlob(7, 80).text]) {
+    if (protIv(src).length) continue;
+    const d = decode(strip(src, { mode, maxChars: 1 }).text);
+    if (d.parts.length !== 1 || !d.parts[0].omit || d.parts[0].omit.n !== src.length) return mode + ' ' + J(d.parts.map(p => p.omit || p.kept.length));
+  }
+  return true;
+});
+await check('S7 budget: the floor skeleton keeps every protected span whole, and nothing else (soft keeps yield first)', () => {
+  const src = genProse(8, 30).split('\n\n').map((p, i) => i === 2 ? p + ' see os:abc123def456 here' : i === 5 ? 'os:q1w2e3r4t5y6 ' + p : p).join('\n\n');
+  const d = decode(strip(src, { maxChars: 1 }).text), iv = protIv(src);
+  return iv.length === 2 && reproduces(src, d) === null && d.parts.filter(p => p.kept != null).length === 2 && iv.every(([a, b]) => covers(keptIv(d), a, b)) && d.parts.filter(p => p.kept != null).every(p => /^os:[a-z0-9]{12}$/.test(p.kept));
+});
+await check('S7 budget: the header counts inside the budget (a budget under the header plus one marker gives the floor, not a shorter text)', () => {
+  const src = EMB.stems, f = floorOf(src), r = strip(src, { maxChars: Math.max(1, f - 10) });
+  return r.reduced === true && r.text.length === f;
+});
+await check('S7 budget: a larger budget keeps strictly more on inputs of 2000 chars or more (the budget is spent, nesting makes it monotone)', () => {
+  for (const { name, text } of corpus().filter(c => c.text.length >= 2000)) for (const mode of MODES) {
+    const lo = decode(strip(text, { mode, fraction: 0.1 }).text).kept, hi = decode(strip(text, { mode, fraction: 0.7 }).text).kept;
+    if (!(hi > lo)) return `${name} ${mode}: ${lo} -> ${hi}`;
+  }
+  return true;
+});
+
+// ============================================================ S8 Nesting
+const keptOf = (res, src) => res.reduced ? keptIv(decode(res.text)) : [[0, src.length]];
+const nested = (a, b) => { for (const [s, e] of a) if (!covers(b, s, e)) return [s, e]; return null; };
+await check('S8 nesting: for budget fractions 0.1 < 0.2 < 0.3 < 0.5 < 0.7 the kept positions of each output are inside the next, every mode, whole corpus', () => {
+  const by = new Map();
+  for (const x of runs()) { const k = x.name + ' ' + x.mode; if (!by.has(k)) by.set(k, []); by.get(k).push(x); }
+  for (const [k, xs] of by) { xs.sort((a, b) => a.b - b.b); for (let i = 1; i < xs.length; i++) { const bad = nested(keptIv(xs[i - 1].dec), keptIv(xs[i].dec)); if (bad) return `${k} ${xs[i - 1].b} -> ${xs[i].b} at ${bad}`; } }
+  return true;
+});
+await check('S8 nesting: the same holds on a maxChars ladder with other policies (keepFirst, keepLast, minGap, known)', () => {
+  const policies = [{}, { mode: 'words' }, { mode: 'lines' }, { mode: 'chars' }, { keepFirst: 0, keepLast: 2 }, { minGap: 30, minKeep: 4 }, { known: ['handle', 'budget', 'stored'] }];
+  for (const src of [EMB.stems, EMB.log, EMB.outstore, genJson(3, 40), EMB.claude]) for (const p of policies) {
+    const rs = [150, 300, 600, 1200, 2400].map(m => [m, strip(src, { ...p, fraction: 1, maxChars: m })]);
+    for (let i = 1; i < rs.length; i++) { const bad = nested(keptOf(rs[i - 1][1], src), keptOf(rs[i][1], src)); if (bad) return `${J(p)} ${rs[i - 1][0]} -> ${rs[i][0]} at ${bad}`; }
+  }
+  return true;
+});
+await check('S8 nesting: protected spans stay kept at every rung of the ladder (the floor is the first rung)', () => {
+  const src = genProse(11, 40).split('\n\n').map((p, i) => i === 3 ? p + ' see os:abc123def456 here' : p).join('\n\n'), iv = protIv(src);
+  for (const m of [1, 100, 400, 1600]) if (!iv.every(([a, b]) => covers(keptOf(strip(src, { fraction: 1, maxChars: m }), src), a, b))) return 'rung ' + m;
+  return iv.length === 1;
+});
+
+// ============================================================ S9 Min width and gap
+// R14: gaps are checked on texts without astral characters or CR (the surrogate and CRLF rules extend the kept side last and may shrink a gap).
+const widthProblems = (src, d, { minKeep = 2, minGap = 16, prot = protIv(src) } = {}) => {
+  for (const p of d.parts) {
+    if (p.kept != null && p.kept.length < minKeep && !overlaps(prot, p.start, p.end)) return `kept run ${J(p.kept)} at ${p.start} is under ${minKeep}`;
+    if (p.omit && p.start > 0 && p.end < src.length && p.omit.n < minGap) return `omitted run of ${p.omit.n} at ${p.start} is under ${minGap}`;
+  }
+  return null;
+};
+await check('S9 width: defaults over the corpus: no unprotected kept run under 2, no inner omitted run under 16 (5 in chars mode)', () =>
+  firstBad(runs(), x => widthProblems(x.src, x.dec, { minGap: x.mode === 'chars' ? 5 : 16 })));
+await check('S9 width: the policy keys move the limits (minKeep 5, minGap 40; chars with minGap 9)', () => {
+  for (const src of [EMB.stems, EMB.outstore, EMB.log, genProse(12, 40), genJson(5, 30)]) {
+    for (const mode of ['auto', 'words', 'lines']) { const w = widthProblems(src, decode(strip(src, { mode, minKeep: 5, minGap: 40 }).text), { minKeep: 5, minGap: 40 }); if (w) return `${mode} ${w}`; }
+    const w = widthProblems(src, decode(strip(src, { mode: 'chars', minGap: 9 }).text), { minGap: 9 }); if (w) return 'chars ' + w;
+  }
+  return true;
+});
+
+// ============================================================ S10 No splits
+const ASTRAL = ['\u{1D49C}', '\u{1D4B7}', '\u{1D4B8}', '\u{1F600}', '\u{20BB7}'];
+const genAstral = seed => { const r = rng(seed), alpha = ['a', 'b', 'ab', '\u{1D49C}', '\u{1D4B7}x', 'x\u{1D49C}y', '\u{20BB7}'], out = []; for (let i = 0; i < 700; i++) { const w = []; for (let j = 0, k = 1 + Math.floor(r() * 3); j < k; j++) w.push(pick(r, alpha)); out.push(w.join('') + (r() < 0.2 ? ' \u{1F600} ' : ' ')); } return out.join('').trim(); };
+const splitProblems = (src, d) => {
+  const hi = c => c >= 0xD800 && c <= 0xDBFF, lo = c => c >= 0xDC00 && c <= 0xDFFF;
+  for (const p of d.parts) for (const q of [p.start, p.end]) {
+    if (q <= 0 || q >= src.length) continue;
+    if (hi(src.charCodeAt(q - 1)) && lo(src.charCodeAt(q))) return 'surrogate pair split at ' + q;
+    if (src[q - 1] === '\r' && src[q] === '\n') return 'CRLF split at ' + q;
+  }
+  return null;
+};
+const noSplitInputs = lazy(() => [
+  ['astral-words', genAstral(1)], ['astral-words-2', genAstral(2)], ['astral-only', '\u{1D49C}\u{1D4B7}'.repeat(300)],
+  ['astral-prose', genProse(13, 25).replace(/ (the|of|and) /g, ' $1\u{1F600} ')],
+  ['crlf-prose', genProse(14, 25).replace(/\n/g, '\r\n')], ['crlf-wrapped', wrap(genProse(15, 25).replace(/\n\n/g, ' '), 40).replace(/\n/g, '\r\n')],
+  ['crlf-log', genLog(2, 50).replace(/\n/g, '\r\n')], ['crlf-astral', genAstral(3).replace(/ /g, (m, i) => i % 9 === 0 ? '\r\n' : m)],
+]);
+await check('S10 splits: no kept span or marker boundary between the halves of a pair or between CR and LF (astral and CRLF fixtures, all modes and budgets)', () => {
+  const inputs = noSplitInputs(); // the fixtures hold what the check is about: pairs, and CRLF
+  if (!inputs.some(([, s]) => /[\uD800-\uDBFF][\uDC00-\uDFFF]/.test(s)) || !inputs.some(([, s]) => s.includes('\r\n')) || !ASTRAL.every(c => c.length === 2)) return 'fixtures';
+  for (const [name, src] of inputs) for (const mode of MODES) for (const p of [{ fraction: 0.1 }, { fraction: 0.2 }, { fraction: 0.3 }, { fraction: 0.5 }, { maxChars: 120 }, { maxChars: 1 }]) {
+    let d; try { d = decode(strip(src, { mode, ...p }).text); } catch (e) { return `${name} ${mode} ${J(p)}: ${e.message}`; }
+    const w = splitProblems(src, d) || reproduces(src, d); if (w) return `${name} ${mode} ${J(p)}: ${w}`;
+  }
+  return true;
+});
+
+// ============================================================ S11 Must-keep
+const protText = lazy(() => genProse(40, 60).split('\n\n').map((p, i) => i === 3 ? p + ' see os:abc123def456 for details' : i === 7 ? 'os:q1w2e3r4t5y6 ' + p : i === 11 ? p.slice(0, 120) + ' ORDER-4711 ' + p.slice(120) : p).join('\n\n'));
+await check('S11 keep: every protect match survives whole at any budget and mode (default pattern and a custom one)', () => {
+  const src = protText(), pats = ['os:[a-z0-9]{6,12}', 'ORDER-\\d{4}'], iv = protIv(src, pats);
+  if (iv.length !== 3) return 'fixture has ' + iv.length + ' matches';
+  for (const mode of MODES) for (const p of [{ fraction: 0.1 }, { fraction: 0.3 }, { fraction: 0.7 }, { maxChars: 200 }, { maxChars: 1 }]) {
+    const r = strip(src, { mode, protect: pats, ...p }), kept = keptOf(r, src);
+    if (!iv.every(([a, b]) => covers(kept, a, b))) return `${mode} ${J(p)}`;
+  }
+  return true;
+});
+await check('S11 keep: a handle in the text is protected with no protect key given, and an empty protect list protects nothing', () => {
+  const src = protText(), iv = protIv(src, ['os:[a-z0-9]{6,12}']);
+  const withDefault = keptOf(strip(src, { maxChars: 1 }), src), none = strip(src, { maxChars: 1, protect: [] }).text;
+  return iv.length === 2 && iv.every(([a, b]) => covers(withDefault, a, b)) && decode(none).parts.length === 1;
+});
+await check('S11 keep: with keepFirst 1 the body starts with the first line, to lineCap (default 80 and 30), when the budget is above the floor', () => {
+  for (const { name, text } of corpus().filter(c => c.text.length >= 1500)) for (const cap of [undefined, 30]) {
+    const first = text.split('\n')[0], want = first.slice(0, cap ?? 80);
+    if (!want) continue;
+    const d = decode(strip(text, { fraction: 0.3, keepFirst: 1, ...(cap ? { lineCap: cap } : {}) }).text), p0 = d.parts[0];
+    if (!(p0.kept != null && p0.start === 0 && p0.kept.startsWith(want))) return `${name} cap ${cap}: ${J(p0.kept ?? p0.omit)}`;
+  }
+  return true;
+});
+await check('S11 keep: keepFirst 2 keeps two short first lines whole; keepFirst 0 and the floor budget do not require them', () => {
+  const src = 'First short line here\nSecond short line there\n' + genProse(16, 30), d = decode(strip(src, { fraction: 0.3, keepFirst: 2 }).text);
+  const d1 = decode(strip(src, { maxChars: 1 }).text);
+  return d.parts[0].kept != null && d.parts[0].kept.startsWith('First short line here\nSecond short line there') && d1.parts.length === 1;
+});
+await check('S11 keep: keepLast k keeps the last k lines (k 1, 2, 3) at fraction 0.3', () => {
+  const src = wrap(genProse(17, 40).replace(/\n\n/g, ' '), 60), lines = src.split('\n');
+  for (const k of [1, 2, 3]) {
+    const d = decode(strip(src, { fraction: 0.3, keepLast: k }).text), last = d.parts.at(-1);
+    if (!(last.kept != null && last.end === src.length && last.kept.endsWith(lines.slice(-k).join('\n')))) return 'k ' + k;
+  }
+  return true;
+});
+
+// ============================================================ S12 Retention preference
+// The baseline is outstore.present's head and tail ('ends'). present stores the blob through IndexedDB, so a labelled stand-in is installed
+// here (the suite is plain node): put and get on a Map, callbacks after a tick. The baseline output is not edited, only produced.
+const installIdb = () => {
+  if (globalThis.indexedDB) return;
+  const data = new Map(), later = fn => { const r = {}; setTimeout(() => { r.result = fn(); r.onsuccess && r.onsuccess(); }, 0); return r; };
+  const store = { put: (v, k) => later(() => { data.set(k, v); return k; }), get: k => later(() => data.get(k)) };
+  globalThis.indexedDB = { open: () => { const r = { result: { createObjectStore() {}, transaction: () => ({ objectStore: () => store }) } }; setTimeout(() => { r.onupgradeneeded && r.onupgradeneeded(); r.onsuccess && r.onsuccess(); }, 0); return r; } };
+};
+const wholeUnits = (text, set) => { const hit = new Set(); for (const m of text.matchAll(UNIT)) if (set.has(m[0])) hit.add(m[0]); return hit.size; };
+const keptText = d => d.parts.filter(p => p.kept != null).map(p => p.kept).join('\n'); // units never join across kept spans
+await check('S12 retention: on seeded blobs the share of hapax identifiers and numbers kept beats head-and-tail at equal output chars (2x together, 1.5x each)', async () => {
+  installIdb();
+  for (const mode of ['auto', 'words']) for (let seed = 1; seed <= 5; seed++) {
+    const b = genBlob(seed, 300), text = O.squeeze(b.text);
+    if (text !== b.text) return 'fixture is not squeezed';
+    const base = await O.present(text), chars = base.length;
+    if (!/ ends\]\n/.test(base.split('\n')[0] + '\n')) return 'baseline is not the ends view: ' + base.slice(0, 60);
+    const r = strip(text, { mode, maxChars: chars }), d = decode(r.text);
+    if (r.text.length > chars) return `seed ${seed}: stripe ${r.text.length} chars over baseline ${chars}`;
+    const ids = new Set(b.ids), nums = new Set(b.nums), all = new Set([...b.ids, ...b.nums]), kt = keptText(d), bt = base.split('\n').slice(1).join('\n');
+    const sI = wholeUnits(kt, ids) / ids.size, sN = wholeUnits(kt, nums) / nums.size, sA = wholeUnits(kt, all) / all.size;
+    const bI = wholeUnits(bt, ids) / ids.size, bN = wholeUnits(bt, nums) / nums.size, bA = wholeUnits(bt, all) / all.size;
+    const beats = (s, b0, f) => s > 0 && s >= f * b0;
+    if (!beats(sA, bA, 2) || !beats(sI, bI, 1.5) || !beats(sN, bN, 1.5)) return `${mode} seed ${seed}: stripe ids ${sI.toFixed(2)} nums ${sN.toFixed(2)} all ${sA.toFixed(2)} vs baseline ${bI.toFixed(2)} ${bN.toFixed(2)} ${bA.toFixed(2)}`;
+  }
+  return true;
+});
+
+// ============================================================ S13 Mode shapes
+// R9: the shape checks switch off the sources of partial units (keepFirst 0, class prose, no 40-char units with a digit in the inputs).
+const SHAPE = { keepFirst: 0, class: 'prose' };
+const shapeCorpus = lazy(() => corpus().filter(c => !(c.text.match(UNIT) || []).some(u => u.length >= 40 && /\d/.test(u)) && !protIv(c.text).length));
+await check('S13 modes: lines mode puts every marker boundary at a line boundary', () => {
+  for (const { name, text } of shapeCorpus()) for (const b of BUDGETS) {
+    const d = decode(strip(text, { ...SHAPE, mode: 'lines', fraction: b }).text);
+    for (const p of omits(d)) for (const q of [p.start, p.end]) if (!(q === 0 || q === text.length || text[q - 1] === '\n' || text[q] === '\n')) return `${name} ${b}: boundary ${q} is inside a line`;
+  }
+  return true;
+});
+await check('S13 modes: words mode keeps no partial unit: every kept run starts and ends at a unit edge', () => {
+  for (const { name, text } of shapeCorpus()) for (const b of BUDGETS) {
+    const d = decode(strip(text, { ...SHAPE, mode: 'words', fraction: b }).text), units = unitIv(text);
+    for (const p of d.parts) if (p.kept != null) for (const q of [p.start, p.end]) if (units.some(([a, e]) => a < q && q < e)) return `${name} ${b}: boundary ${q} inside a unit`;
+  }
+  return true;
+});
+await check('S13 modes: chars mode cuts units on the gram grid (2 wide, the last 3 when the unit is odd)', () => {
+  for (const { name, text } of shapeCorpus()) for (const b of BUDGETS) {
+    const d = decode(strip(text, { ...SHAPE, mode: 'chars', fraction: b }).text), units = unitIv(text);
+    for (const p of d.parts) if (p.kept != null) for (const q of [p.start, p.end]) for (const [a, e] of units) if (a < q && q < e && !((q - a) % 2 === 0 && e - q >= 2)) return `${name} ${b}: boundary ${q} in unit ${a}-${e} is off the grid`;
+  }
+  return true;
+});
+await check('S13 modes: auto is the default (equal to mode auto and to the DEFAULTS policy) and the four modes do not all give the same text', () => {
+  const t = EMB.stems, a = strip(t), outs = MODES.map(mode => strip(t, { mode }).text);
+  return same(a, strip(t, { mode: 'auto' })) && same(a, strip(t, S.DEFAULTS)) && S.DEFAULTS.mode === 'auto' && new Set(outs).size >= 3;
 });
 
 // ---- next group ----
