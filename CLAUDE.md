@@ -48,5 +48,5 @@ Work on `dev`; every piece of work follows the rigid order below.
 - No native dialogs (alert/confirm/prompt); use `modal()`.
 - Restrictions (allowlists, deny rules, extra gates) are options, off by default. Do not build or enable them upfront; add one when it is wanted as a feature.
 - Limits of the session you happen to run in (a cloud session's repository scope, its network proxy) are not product requirements. Do not mirror them in the harness. The control for GitHub access is the token's own repository list.
-- Specs before code; a spec change during implementation is its own commit with a reason.
+- Specs before code; a spec change during implementation is its own commit with a reason. Checks cover seams (their contracts) and interactions between seams, not everything; a bug fix is not a concern. Pinning proven seams by hierarchical checksum is a hypothesis (GlyphHarness/next-net-epoch `notes/seam-pinning.md`), not built.
 - Catalog via inbox files only (`.claude/skills/catalog/SKILL.md`): agents write `catalog/inbox/<agent>-<shortid>.jsonl`; the steward alone merges into `catalog/*.jsonl`. Records are append-only, one JSON per line.
