@@ -15,6 +15,15 @@
 //  R9 in `words` and `chars` mode the keepFirst cap, the 40-char digit rule, the log lead rule and protect spans are the only
 //     partial-unit sources, so those are switched off (keepFirst 0, class override prose) or absent from the fixtures.
 //  R10 `lines` mode alignment: every omitted run starts and ends at a line boundary (start of text, end of text, next to "\n").
+//  R11 budget = min(maxChars, fraction * n, maxTokens * cpt) with fraction always counting; floorLength = length of the output at maxChars 1.
+//  R12 with no protect match the floor skeleton is the header and one marker for the whole text.
+//  R14 gaps (minGap) are checked on inputs without astral chars or CR: the surrogate and CRLF rules extend the kept side last.
+//  R16 classify: prose = long lines and no feature over its threshold, mixed = short lines and none.
+//  R17 the analyzed-before map is keyed by the handle; the key form for a fingerprint ref is not checked.
+//  R18 known: aggregate over the terms handed in (they are kept less often than without), not per term.
+//  R20 for n under 40 whether a text is returned or reduced is not asserted (a skeleton is longer than it).
+//  D1..D4 (join with present, header of the query surface, wire stability, re-pointing) are deferred in the doc and not specified here.
+//  Golden bytes: only the parse literals of the grammar in S6 (doc 1.2). Everything else is a property over the corpus.
 import fs from 'node:fs';
 import path from 'node:path';
 import assert from 'node:assert';
@@ -967,7 +976,184 @@ await check('S13 modes: auto is the default (equal to mode auto and to the DEFAU
   return same(a, strip(t, { mode: 'auto' })) && same(a, strip(t, S.DEFAULTS)) && S.DEFAULTS.mode === 'auto' && new Set(outs).size >= 3;
 });
 
-// ---- next group ----
+// ============================================================ S14 Class record
+const FEAT = ['headed', 'list', 'tabular', 'code', 'log', 'json'], LABEL = new RegExp(`^(?:(${FEAT.join('|')})(?:\\+(${FEAT.join('|')}))?|prose|mixed)$`);
+await check('S14 class: classify is deterministic and returns a label (one feature, two features joined by plus, prose or mixed) with the six line shares', () => {
+  for (const { name, text } of corpus()) {
+    const a = S.classify(text), b = S.classify(text), m = LABEL.exec(a.label);
+    if (!same(a, b) || !m || (m[1] && m[1] === m[2])) return name + ' ' + a.label;
+    if (!FEAT.every(f => typeof a.features[f] === 'number' && a.features[f] >= 0 && a.features[f] <= 1)) return name + ' features ' + J(a.features);
+  }
+  return true;
+});
+await check('S14 class: the prototype fixtures give the labels of section 5.1 (stems, CLAUDE.md, concepts, ci.mjs, outstore.js, a validators run)', () => {
+  const got = { stems: S.classify(EMB.stems).label, claude: S.classify(EMB.claude).label, concepts: S.classify(EMB.concepts).label, ci: S.classify(EMB.ci).label, outstore: S.classify(EMB.outstore).label, log: S.classify(EMB.log).label };
+  return same(got, { stems: 'headed+list', claude: 'list+headed', concepts: 'json', ci: 'code', outstore: 'code', log: 'log' }) || J(got);
+});
+// R16: the two fall-through labels, on a long-line text (prose) and on short lines with none of the six features (mixed)
+await check('S14 class: prose when no feature reaches its threshold and lines are long, mixed when lines are short', () =>
+  S.classify(genProse(18, 20)).label === 'prose' && S.classify('ab\ncd\nef\ngh\nij').label === 'mixed');
+await check('S14 class: the header class equals classify(text).label for every reduced output, and a class override verbatim (known and unknown labels)', () => {
+  const bad = firstBad(runs(), x => x.dec.hm[4] === S.classify(x.src).label && x.r.class === x.dec.hm[4] ? null : `header ${x.dec.hm[4]} vs ${S.classify(x.src).label}`);
+  if (bad !== true) return bad;
+  for (const c of ['log', 'json', 'list+headed', 'zz-custom']) { const r = strip(EMB.stems, { class: c }); if (r.class !== c || decode(r.text).hm[4] !== c) return 'override ' + c; }
+  return true;
+});
+
+// ============================================================ S15 Analyzed-before
+// R6: policyDigest = fingerprint of the sorted-key JSON of the policy as the caller passed it, minus handle and seen.
+// R7: header.seen from parse is true for a bare seen, and the earlier percent (number N or the string "N%") for seen N%; falsy when absent.
+// R8: a header-only output is the header line, with or without one trailing newline. R17: the blob id is the handle (the fingerprint form is not checked).
+const digestOf = p => { const q = {}; for (const k of Object.keys(p).sort()) if (k !== 'handle' && k !== 'seen') q[k] = p[k]; return S.fingerprint(JSON.stringify(q)); };
+const seenFor = (src, p) => { const r = strip(src, p); return { r, seen: { [OS]: { rid: S.ID, policyDigest: digestOf(p), pct: +decode(r.text).hm[5], class: r.class } } }; };
+const pctSeen = (h, pct) => h && (h.seen === pct || h.seen === pct + '%');
+await check('S15 seen: same blob id, rid and digest gives the header alone with seen, and parse recovers it', () => {
+  for (const p of [{}, { fraction: 0.2 }, { mode: 'words', minGap: 20 }]) for (const src of [EMB.stems, EMB.log]) {
+    const { r: first, seen } = seenFor(src, p), r = S.stripe(src, { handle: OS, ...p, seen }), t = r.text.replace(/\n$/, ''), head = first.text.split('\n')[0];
+    if (t.includes('\n') || t !== head.slice(0, -1) + ' seen]' || !HEADER.test(t)) return J(p) + ' ' + t.slice(0, 80);
+    const pr = S.parse(r.text);
+    if (pr.header.seen !== true || (pr.parts || []).length) return J(p) + ' parse: ' + J(pr.header);
+  }
+  return true;
+});
+await check('S15 seen: a different digest (other policy, narrower or wider budget) gives the full skeleton with seen and the earlier percent', () => {
+  const src = EMB.stems;
+  for (const [was, now] of [[{}, { minGap: 20 }], [{ fraction: 0.5 }, { fraction: 0.2 }], [{ fraction: 0.2 }, { fraction: 0.5 }], [{ mode: 'lines' }, { mode: 'words' }]]) {
+    const { seen } = seenFor(src, was), r = S.stripe(src, { handle: OS, ...now, seen }), plain = strip(src, now), d = decode(r.text), earlier = seen[OS].pct;
+    if (d.hm[6] !== ` seen ${earlier}%`) return `${J(was)} -> ${J(now)}: ${d.head}`;
+    if (!same(d.parts.map(p => p.kept ?? p.raw), decode(plain.text).parts.map(p => p.kept ?? p.raw)) || d.hm[5] !== decode(plain.text).hm[5]) return `${J(was)} -> ${J(now)}: body or pct differs from the unseen run`;
+    const pr = S.parse(r.text);
+    if (!pctSeen(pr.header, earlier) || S.verify(src, pr) !== true) return `${J(was)} -> ${J(now)}: parse ${J(pr.header)}`;
+  }
+  return true;
+});
+await check('S15 seen: not seen gives no suffix (empty map, another blob id), and seen is a known policy key, not ignored', () => {
+  const src = EMB.stems, { seen } = seenFor(src, {});
+  for (const s of [undefined, {}, { 'os:zzzzzzzzzz': seen[OS] }]) {
+    const r = S.stripe(src, { handle: OS, ...(s ? { seen: s } : {}) }), d = decode(r.text);
+    if (d.hm[6] || S.parse(r.text).header.seen || r.text !== strip(src).text || !same(r.ignored, [])) return J(s);
+  }
+  return true;
+});
+
+// ============================================================ S16 Known
+await check('S16 known: an empty known list gives bytes identical to no known (every mode)', () => {
+  for (const mode of MODES) for (const src of [EMB.stems, EMB.log, genBlob(2, 100).text]) if (!same(S.stripe(src, { handle: OS, mode, known: [] }), S.stripe(src, { handle: OS, mode }))) return mode;
+  return true;
+});
+// R18: aggregate over the terms of known, on blobs where the budget only fits some hapax identifiers: those kept without known are
+//      kept less often with known (damped by half, they rank below the numbers), same blob and policy.
+await check('S16 known: a term in known is retained less than the same term not in known (seeded blobs, same policy)', () => {
+  for (let seed = 1; seed <= 4; seed++) {
+    const b = genBlob(seed, 300), ids = new Set(b.ids), p = { fraction: 0.12 };
+    const unitsIn = r => (keptText(decode(r.text)).match(UNIT) || []).filter(u => ids.has(u));
+    const K = unitsIn(strip(b.text, p));
+    if (K.length < 10) return `seed ${seed}: fixture keeps only ${K.length} identifiers`;
+    const kept = new Set(K), after = unitsIn(strip(b.text, { ...p, known: K })).filter(u => kept.has(u)).length;
+    if (!(after < K.length)) return `seed ${seed}: ${after} of ${K.length} kept again`;
+  }
+  return true;
+});
+
+// ============================================================ S17 Defaults
+await check('S17 defaults: an empty policy equals the DEFAULTS policy, and DEFAULTS holds the values of section 3', () => {
+  for (const src of [EMB.stems, EMB.log, 'short']) if (!same(S.stripe(src, {}), S.stripe(src, S.DEFAULTS))) return 'differs';
+  const table = { mode: 'auto', fraction: 0.3, minKeep: 2, minGap: 16, gram: 2, localWeight: 0.5, window: 25, segment: 120, keepFirst: 1, keepLast: 0, lineCap: 80, protect: ['os:[a-z0-9]{6,12}'], detailFrom: 48, known: [], seen: {}, cpt: 4 };
+  for (const [k, v] of Object.entries(table)) if (!same(S.DEFAULTS[k], v)) return `${k}: ${J(S.DEFAULTS[k])}`;
+  for (const k of ['maxChars', 'maxTokens', 'class', 'handle', 'maxInput']) if (S.DEFAULTS[k] != null) return `${k} is set in DEFAULTS`;
+  return true;
+});
+await check('S17 defaults: unknown policy keys do not change the bytes and are listed in ignored; known keys are not', () => {
+  const src = EMB.claude, plain = S.stripe(src, {}), r = S.stripe(src, { zzz: 1, qq: 'x', Mode: 'lines' });
+  const ok = S.stripe(src, { maxChars: 5000, maxTokens: 5000, class: 'prose', handle: OS, seen: {}, known: [], maxInput: 1e9 });
+  return same(plain.ignored, []) && same([...r.ignored].sort(), ['Mode', 'qq', 'zzz']) && r.text === plain.text && same(r.parts, plain.parts) && same(ok.ignored, []);
+});
+await check('S17 defaults: maxInput unset never refuses (a text of 60000 chars is reduced, nothing thrown)', () => {
+  const src = genProse(50, 800).slice(0, 60000), r = strip(src);
+  return src.length === 60000 && r.reduced === true && S.verify(src, S.parse(r.text)) === true;
+});
+
+// ============================================================ S18 Handle link
+await check('S18 link: the header ref is policy.handle when given, else fp: plus fingerprint(text)', () => {
+  for (const { name, text } of corpus().slice(0, 24)) {
+    const a = decode(S.stripe(text, { handle: 'os:abcdef123456' }).text), b = decode(S.stripe(text, {}).text);
+    if (a.hm[1] !== 'os:abcdef123456' || b.hm[1] !== 'fp:' + S.fingerprint(text)) return name + ' ' + a.hm[1] + ' ' + b.hm[1];
+  }
+  return true;
+});
+await check('S18 link: outstore.slice at the decoded offset of each kept span returns it, and outstore.range at the next omitted run reads that run', () => {
+  const tail = r => r === '' || r.startsWith('\n[');
+  return firstBad(runs(), x => {
+    for (const p of x.dec.parts) {
+      const len = p.kept != null ? Math.min(p.kept.length, 4000) : Math.min(p.omit.n, 3000), want = x.src.slice(p.start, p.start + len);
+      const got = p.kept != null ? O.slice(x.src, { offset: p.start, length: len }) : O.range(x.src, { offset: p.start, length: len });
+      if (!got.startsWith(want) || !tail(got.slice(want.length))) return `at ${p.start}`;
+    }
+    return null;
+  });
+});
+// detailFrom 1 makes every marker carry l, so the line of a kept span follows from the skeleton alone (R5, line is 1-based)
+await check('S18 link: locate(parsed, i) gives the offset and the 1-based line of the i-th kept span', () => {
+  for (const { name, text } of corpus().slice(0, 16)) for (const mode of ['auto', 'lines']) {
+    const out = strip(text, { mode, detailFrom: 1 }).text, pr = S.parse(out), kept = decode(out).parts.filter(p => p.kept != null);
+    for (let i = 0; i < kept.length; i++) { const l = S.locate(pr, i); if (l.offset !== kept[i].start || l.line !== lineOf(text, kept[i].start)) return `${name} ${mode} span ${i}: ${J(l)} vs ${kept[i].start}/${lineOf(text, kept[i].start)}`; }
+  }
+  return true;
+});
+
+// ============================================================ S19 Edges
+// R20: for n under 40 whether the text is returned or reduced is not asserted (a skeleton is longer than the text); no throw, S4 and S7 are.
+const edgeInputs = lazy(() => [
+  ['empty', ''], ['one-char', 'x'], ['one-astral', '\u{1D49C}'], ['spaces-and-tabs', ' \n\t \n  '.repeat(300)], ['spaces', ' '.repeat(5000)], ['newlines', '\n'.repeat(800)],
+  ['crlf-only', '\r\n'.repeat(400)], ['long-line', 'abcdefghij'.repeat(600)], ['long-compound', 'ab.cd/ef-gh_ij'.repeat(400)], ['delimiters', '=*~!?;,()'.repeat(300)],
+  ['marker-like', '[~'.repeat(400)], ['astral-emoji', '\u{1F600}'.repeat(500)], ['astral-units', genAstral(4)], ['digits', '0123456789'.repeat(500)],
+]);
+await check('S19 edges: empty, one char, whitespace, one long line, only delimiters, astral and marker-like texts return without throwing, pass S4 and satisfy S7', () => {
+  for (const [name, src] of edgeInputs()) for (const mode of MODES) for (const p of [{ fraction: 0.3 }, { fraction: 0.1 }, { fraction: 0.7 }, { maxChars: 1 }, { maxChars: 120 }]) {
+    let r; try { r = strip(src, { mode, ...p }); } catch (e) { return `${name} ${mode} ${J(p)} threw: ${e.message}`; }
+    const b = budgetOf(src.length, p);
+    if (!r.reduced) { if (r.text !== src) return `${name} ${mode} ${J(p)}: unreduced text differs`; continue; }
+    let d; try { d = decode(r.text); } catch (e) { return `${name} ${mode} ${J(p)}: ${e.message}`; }
+    if (reproduces(src, d) || S.verify(src, S.parse(r.text)) !== true) return `${name} ${mode} ${J(p)}: parse-back`;
+    if (r.text.length > Math.max(b, floorOf(src, { mode, ...p }))) return `${name} ${mode} ${J(p)}: ${r.text.length} over budget ${b}`;
+  }
+  return true;
+});
+await check('S19 edges: a text of 40 chars or more above the budget is reduced, also when it is whitespace, one unit or only delimiters', () => {
+  for (const [name, src] of edgeInputs()) if (src.length >= 40 && strip(src).reduced !== true) return name;
+  return true;
+});
+
+// ============================================================ S20 No dependencies
+await check('S20 deps: app/stripe.js has no import and no reference to document, window, localStorage, fetch, Date, Math.random, Math.log, Math.exp, Math.pow, Intl or toLocale', () => {
+  const code = fs.readFileSync(MODULE, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:'"`\\])\/\/.*$/gm, '$1');
+  const bad = [/^\s*import\b/m, /\bimport\s*\(/, /\brequire\s*\(/, /\bdocument\b/, /\bwindow\b/, /\blocalStorage\b/, /\bfetch\b/, /\bDate\b/, /\bMath\.(random|log|exp|pow)\b/, /\bIntl\b/, /toLocale/].find(re => re.test(code));
+  return !bad || String(bad);
+});
+await check('S20 deps: the module loads and runs under bare node in a fresh process with the same result as in this one', () => {
+  const src = EMB.stems, here = JSON.stringify(S.stripe(src, { handle: OS, fraction: 0.2 }));
+  const prog = "let t='';process.stdin.on('data',d=>t+=d).on('end',async()=>{const m=await import(process.argv[1]);process.stdout.write(JSON.stringify(m.stripe(t,{handle:'" + OS + "',fraction:0.2})));});";
+  const r = spawnSync(process.execPath, ['-e', prog, pathToFileURL(MODULE).href], { input: src, encoding: 'utf8' });
+  return r.status === 0 && r.stdout === here || (r.stderr || 'differs').split('\n')[0];
+});
+
+// ============================================================ S21 Fingerprint
+await check('S21 fingerprint: 10 chars of 0-9 a-z, equal for equal text (also for an empty string and for an equal copy)', () => {
+  for (const { text } of corpus().concat([{ text: '' }, { text: 'x' }])) { const a = S.fingerprint(text), b = S.fingerprint(String(text).split('').join('')); if (!/^[0-9a-z]{10}$/.test(a) || a !== b) return J(a) + ' ' + J(b); }
+  return true;
+});
+await check('S21 fingerprint: different for a 1-char edit (replace first, replace inner, delete last, insert at end, swap neighbours) on every fixture', () => {
+  for (const { name, text } of corpus()) {
+    const m = text.length >> 1, f = S.fingerprint(text);
+    const edits = [(text[0] === 'q' ? 'z' : 'q') + text.slice(1), text.slice(0, m) + (text[m] === 'q' ? 'z' : 'q') + text.slice(m + 1), text.slice(0, -1), text + 'q'];
+    if (text[m] !== text[m + 1]) edits.push(text.slice(0, m) + text[m + 1] + text[m] + text.slice(m + 2));
+    for (const e of edits) if (e !== text && S.fingerprint(e) === f) return name;
+  }
+  return true;
+});
+await check('S21 fingerprint: no two fixtures share one', () => { const c = corpus(), s = new Set(c.map(x => S.fingerprint(x.text))); return s.size === c.length; });
+
+// ---- end of groups ----
 if (S.missing) console.log('app/stripe.js: ' + S.missing);
 console.log('\n' + Object.entries(counts).map(([g, n]) => `${g}:${n}`).join(' '));
 console.log(fails ? `${fails} failed` : 'all passed');
