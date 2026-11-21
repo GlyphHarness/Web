@@ -1,6 +1,6 @@
 ---
 name: seams
-description: Use for where a change goes (which seam) and for spec-first work: acceptance checks written and committed red before the implementation.
+description: "Use for where a change goes (which seam) and for spec-first work: acceptance checks written and committed red before the implementation."
 model: sonnet
 ---
 

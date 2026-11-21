@@ -1,6 +1,6 @@
 ---
 name: ui
-description: Use for any change to the page: DOM, styles, slots, cards, modals, inline edit. Not for provider, tool, strategy or handle logic.
+description: "Use for any change to the page: DOM, styles, slots, cards, modals, inline edit. Not for provider, tool, strategy or handle logic."
 model: sonnet
 ---
 

@@ -1,6 +1,6 @@
 ---
 name: steward
-description: Use to run any piece of work on dev end to end: order, delegation, catalog merge, release to main.
+description: "Use to run any piece of work on dev end to end: order, delegation, catalog merge, release to main."
 model: sonnet
 ---
 

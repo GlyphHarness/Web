@@ -1,6 +1,6 @@
 ---
 name: context
-description: Use for context features: cache-stable prefixes, handles, stems, checkpoints, strategies, probe turns, warp/materialization, flow alteration by a second model, and the concept catalog from hypothesis to measured.
+description: "Use for context features: cache-stable prefixes, handles, stems, checkpoints, strategies, probe turns, warp/materialization, flow alteration by a second model, and the concept catalog from hypothesis to measured."
 model: sonnet
 ---
 
