@@ -16,7 +16,7 @@ const arg = (k, d) => { const i = process.argv.indexOf('--' + k); return i > 0 ?
 const DATE = arg('date', new Date().toISOString().slice(0, 10)), DRY = process.argv.includes('--dry'), SUMMARY = process.argv.includes('--summary');
 const OUTDIR = join(ROOT, 'docs/concepts/results'), JSONL = join(OUTDIR, `stripe-probe-${DATE}.jsonl`), MD = join(OUTDIR, `stripe-probe-${DATE}.md`);
 const MODEL = 'qwen/qwen3.7-flash', CAP = 40, PIN = 'fbdd865', FRACTION = 0.25;
-const SECRETS = 'C:\\wh\\secrets.env', KEYVAR = 'OPENROUTER_API_KEY';
+const SECRETS = (typeof arg('secrets') === 'string' && arg('secrets')) || process.env.STRIPE_PROBE_SECRETS || 'C:\\wh\\secrets.env', KEYVAR = 'OPENROUTER_API_KEY';
 const MAXTOK = { about: 160, fact: 60 };
 
 const rd = p => readFileSync(join(ROOT, p), 'utf8');
