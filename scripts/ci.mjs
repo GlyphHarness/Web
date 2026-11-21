@@ -1,5 +1,5 @@
 // Run the smoke suites and write a record of every check (docs/STEMS.md §4).
-// Usage: node scripts/ci.mjs [main] [git] [cpu] [keys] [local] [validators] [profile] [query] [stripe] [retry] [gateway] [queryint] [wh] [vm] [--url URL] [--out ci-record.json]
+// Usage: node scripts/ci.mjs [main] [git] [cpu] [keys] [local] [validators] [profile] [query] [stripe] [retry] [gateway] [queryint] [querystripe] [wh] [vm] [--url URL] [--out ci-record.json]
 // Exit status 1 when a check fails or a suite stops early.
 //
 // record: {sha, t, suites: [{suite, ok, ms, checks: [{name, ok}], failed: [names], stopped, tail}]}
@@ -9,7 +9,7 @@ import fs from 'node:fs';
 const args = process.argv.slice(2);
 const flag = (n, d) => { const i = args.indexOf('--' + n); return i >= 0 ? args.splice(i, 2)[1] : d; };
 const url = flag('url', 'http://localhost:8787/'), out = flag('out', 'ci-record.json');
-const FILES = { main: 'scripts/smoke.mjs', git: 'scripts/smoke-git.mjs', cpu: 'scripts/test-cpu-shares.mjs', keys: 'scripts/test-paste-keys.mjs', local: 'scripts/test-localbridge.mjs', vm: 'scripts/smoke-vm.mjs', validators: 'scripts/test-validators.mjs', wh: 'scripts/test-wh.mjs', profile: 'scripts/test-profile.mjs', query: 'scripts/test-query.mjs', stripe: 'scripts/test-stripe.mjs', retry: 'scripts/test-retry.mjs', gateway: 'scripts/test-gateway.mjs', queryint: 'scripts/test-query-integration.mjs' }; // queryint: red by design until A1.3, not in the default list (A1.3 adds it)
+const FILES = { main: 'scripts/smoke.mjs', git: 'scripts/smoke-git.mjs', cpu: 'scripts/test-cpu-shares.mjs', keys: 'scripts/test-paste-keys.mjs', local: 'scripts/test-localbridge.mjs', vm: 'scripts/smoke-vm.mjs', validators: 'scripts/test-validators.mjs', wh: 'scripts/test-wh.mjs', profile: 'scripts/test-profile.mjs', query: 'scripts/test-query.mjs', stripe: 'scripts/test-stripe.mjs', retry: 'scripts/test-retry.mjs', gateway: 'scripts/test-gateway.mjs', queryint: 'scripts/test-query-integration.mjs', querystripe: 'scripts/test-query-stripe.mjs' }; // queryint: red by design until A1.3, not in the default list (A1.3 adds it); querystripe: red until A1.4, not in the default list (A1.4 adds it)
 const want = args.length ? args : ['main', 'git', 'cpu', 'keys', 'local', 'validators', 'profile', 'query', 'stripe', 'retry', 'gateway', 'wh'];
 
 const run = suite => new Promise(ok => {

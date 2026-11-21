@@ -1,12 +1,14 @@
 // Query surface integration (Epic A1, story A1.2): the contract between the query surface (docs/QUERY.md) and the
 // harness modules it joins: tools.js (tools `query`, `query_ref`), strategies.js (the strategy they live under),
 // outstore.js and handles.js (the result behind a handle), the ledger and trail rows, session turns, the provider
-// seam (mock triggers) and the reducer hook (stripe-1.0). Plain node, mock data only, no network, no browser.
+// seam (mock triggers) and the reducer hook. Plain node, mock data only, no network, no browser.
 // Run: node scripts/test-query-integration.mjs
-// This suite is RED BY DESIGN until A1.3 (adapter and tool wiring) and A1.4 (stripe as a registered reducer) land.
-// So it is registered in scripts/ci.mjs as `queryint` but is NOT in the default list and not in test.yml:
+// This suite is RED BY DESIGN until A1.3 (adapter and tool wiring) lands. It is registered in scripts/ci.mjs as
+// `queryint` but is NOT in the default list and not in test.yml until then:
 //   node scripts/ci.mjs queryint        (or node scripts/test-query-integration.mjs)
-// A1.3 adds it to the default list and to test.yml in the commit that turns it green.
+// A1.3 adds `queryint` to the default list and to test.yml in the commit that turns it green.
+// stripe-1.0 registered by name is the separate suite scripts/test-query-stripe.mjs (ci key `querystripe`): it stays
+// out of the default list and of test.yml until A1.4 decides and adds it, in the commit that turns it green.
 //
 // Check names are `QI<n> <group>: <behaviour>`. A check is a function: a throw is a failed check, not a stopped suite.
 // Checks QI3-QI5, QI11 and the shape checks that pin what dev already does are GREEN today on purpose (guards);
@@ -29,8 +31,6 @@
 //      context.turnOf step `ok`, the adapter's flow-turn `ok`): the three agree on the same text.
 //  D7  `query_ref` never goes through the stored-call path of exec ({ref} alone is a label, not a stored call).
 //  D8  Ledger rows are served with `broke` (the prefix-break field of measure): the measure needs it (A1.5).
-//  D9  query-harness.js exports `reducers`: a name -> function map the host passes to createSurface; it holds
-//      stripe-1.0 (app/stripe.js) under its id; nothing applies it unless a query or policy names it.
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -421,17 +421,7 @@ await check('QI41 stripe (hook, guard): a get ref on a label whose query striped
   const decl = r.header.refs?.find(x => x.op === 'get'), g = await env.surface.ref('q1/t2', { op: 'get' });
   return decl?.via === 'I2' && g.header.ok && g.data === p && g.header.reducer?.with === 'stripe-1.0' || J({ decl, ok: g.header, same: g.data === p });
 });
-await check('QI42 stripe (registry): query-harness.js exports reducers, a name -> function map holding stripe-1.0 under its id with the output of app/stripe.js', async () => {
-  need(QH, 'app/query-harness.js'); need(ST, 'app/stripe.js');
-  const red = QH.reducers;
-  if (!red || typeof red !== 'object') return 'query-harness.js exports no reducers';
-  const text = LONG;
-  return typeof red[ST.ID] === 'function' && (await red[ST.ID](text, { maxChars: 400 }, {})) === ST.stripe(text, { maxChars: 400 }).text || 'the registered stripe-1.0 differs from app/stripe.js';
-});
-await check('QI43 stripe (registry): with the registry passed to the surface the same query works; without a @reduce or policy row a long payload is clipped by the default, not striped', async () => {
-  const env = await mkEnv({ reducers: QH.reducers }), a = await env.surface.run(Q_LONG), b = await env.surface.run(`{ turns(session: "sq1", role: "tool", first: 1) { i payload } }`);
-  return a.header.ok && ST.verify(LONG, ST.parse(a.data.turns[0].payload)) && b.header.ok && !(b.header.reducers || []).some(x => x.with === 'stripe-1.0') && !/^\[fp:/.test(b.data.turns[0].payload) || J({ a: a.errors?.map(e => e.message), rows: b.header.reducers });
-});
+// stripe-1.0 as a registered reducer (named by @reduce, resolved by name) is the separate suite scripts/test-query-stripe.mjs (ci key `querystripe`, A1.4).
 
-console.log(fails ? `\n${fails} check(s) failed (red by design until A1.3 and A1.4: see the header of this file)` : '\nall checks passed');
+console.log(fails ? `\n${fails} check(s) failed (red by design until A1.3: see the header of this file)` : '\nall checks passed');
 process.exitCode = fails ? 1 : 0;
