@@ -18,6 +18,8 @@ Survey passes (coarse; hypothesis evidence, not verified beyond what each states
 | trust | A4 | trust.md |
 | time | A5 A6 | time.md |
 | look | A7 | look.md |
+| Q2, Q3, Q9 as options with measures (B1.1) | Q2 Q3 Q9 | q2-q3-q9.md |
+| contract records on ten real shapes (B1.2) | A1 | real-shapes.md; data: contract-records.jsonl |
 
 ## Rules for every note
 - Built and hypothesis are stated apart. Everything is hypothesis until the operator says build.
@@ -51,13 +53,13 @@ Start: 6 contracts (clock, stream, store, surface, module, identity), 1 catalog,
 
 ## Open questions (for the steward; also listed in the reply)
 Q1 "self-improvement-resistant surfaces" (A3): meaning unclear. Readings: (a) surfaces that code or a model ingested at runtime cannot rewrite to loosen its own limits (catalog and delegations immutable to the app); (b) surfaces hardened against AI-automated attack. Reading (a) is used in trust.md; operator to confirm.
-Q2 Scope: embedder runtime (own host, wasm engine) or layer over a browser (then JS glue exists at the edge)? "wasm does not bind through JS" differs between them.
-Q3 Relation to harness: separate product or a way to express harness seams? Existing "seam contract" overlaps in spirit only.
+Q2 (options, measures and a working choice: q2-q3-q9.md; still open) Scope: embedder runtime (own host, wasm engine) or layer over a browser (then JS glue exists at the edge)? "wasm does not bind through JS" differs between them.
+Q3 (options, measures and a working choice: q2-q3-q9.md; still open) Relation to harness: separate product or a way to express harness seams? Existing "seam contract" overlaps in spirit only.
 Q4 "guards project traces" (A6): used as "a guard looks at a projection of a run trace". Alternate: projected-versus-occurred as in flow lint (gwokxx). Confirm.
 Q5 Trust vs CLAUDE.md: restrictions are options, off by default. Here "trust no ingested source" is hypothesised as provenance and data-not-instruction classification, with any enforcement tier as an option. Confirm.
 Q6 Knockout of effects already external (message sent, payment made): voidable? Hypothesis: effects declare compensation or are non-voidable.
 Q7 A2 parenthetical "not header/SEO": read as the app is not a crawled document and uses no head metadata. Confirm.
 Q8 Who may add or change catalog records (user, signed vendor, the app)? Ties to A4 and Q1.
-Q9 Wasm feature baseline (component model, GC, threads): survey later, outside this pass.
+Q9 (options, measures and a working choice: q2-q3-q9.md; survey S9.1-S9.3 written, not run; still open) Wasm feature baseline (component model, GC, threads).
 Q10 Explored records (docs/platform/explored-*.jsonl) have no catalog destination: catalog/README.md defines three catalogs (nomenclature, concepts, faults). Steward decision: add an explored catalog, or keep them as docs files.
 Q11 PH17 "settled" baseline: survey S7.1 found WebGPU shipping in four engines but no primary WebGL deprecation statement; "settled" stays unproven (candidate baseline wording, pkwzte).
