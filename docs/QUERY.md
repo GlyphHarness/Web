@@ -1,6 +1,6 @@
 # Query surface
 
-Status: hypothesis (2026-11-21). Rigid-order steps 1 and 2. Nothing here is built; Q1..Q22 in section 7 are what `seams` turns into failing checks.
+Status: implemented, unintegrated (2026-11-21). The surface is built in `app/query*.js` (not wired into the page, tools or any strategy); `scripts/test-query.mjs` holds the Q1..Q22 checks, 177 green. Measured in part: `docs/concepts/results/query-det-2026-11-21.md` (deterministic runs) and `docs/concepts/results/query-probe-2026-11-21.md` (a 30-request smoke probe, scripted loop, not a production-style session). The header share target (under 25% of result tokens) is missed at 43.6%; the OQ1 target (parse/validate failures under 15% by the third query) is missed in the smoke probe. The rest of section 8 is unmeasured.
 
 Claim: the harness holds data (session flows, turns, stems, handles, checkpoints, ledger and trail rows, catalog records). One small query language fetches any of it. Every result opens with a header that says what the result is made of and which follow-up actions it passes along. The model acts only on what the header declared. Policy decides how much comes back.
 
@@ -473,3 +473,4 @@ Where this document was silent, `app/query*.js` chose as follows (step 4; no che
 - `kinds` is `[]` for a query that selects only scalars.
 - A property op whose name is absent from the kind function's result falls back to `entry[name]`.
 - Harness adapter: ledger rows get a 1-based `n` from stored order, trail rows `n` likewise, audit labels are `a<n>` from 0; concepts serve chain tails only, in file order; a handle payload resolves through the injected `handles.resolve(id, reader)`.
+- Q22 deviation, fixed: the first implementation served every line of the `faults` and `terms` roots, so superseded records leaked, while Q22 requires the chain tail for the catalog roots. The fixture then in use held no superseded fault or term, so the check stayed green. A check with a superseded fault and a superseded term was added (790e379, red), and `faults` and `terms` now share the chain-tail filter with `concepts` (3fb4fa9).
