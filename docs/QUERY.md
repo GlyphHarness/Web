@@ -456,3 +456,20 @@ Each is a decision taken now to avoid blocking, flagged to measure at step 5 (a 
 - `app/query-harness.js`: the harness adapter (6.3), the only file that knows harness shapes; takes injected sources.
 - `scripts/test-query.mjs`: plain node, no browser, mock data and `scripts/fixtures/` only; a ci suite named `query` added to `scripts/ci.mjs` (`FILES` map). Fixtures: `scripts/fixtures/metrics-sessions.json` (existing) and a small catalog fixture copy for Example 2 (new, by `seams`).
 - Later joins, each its own piece with a spec first: tools `query` and `query_ref` in `app/tools.js` (the `fn(...)` shape; trail rows already carry `ref` and `why`), a card for the result (`ui`), the policy mapping from `app/policy.js`, a new strategy id (OQ11), an entry in `docs/PROTOCOL.md`.
+
+## 10. Decisions taken at implementation
+
+Where this document was silent, `app/query*.js` chose as follows (step 4; no check was changed).
+
+- `policy.ov` lists only locks that overrode a decorator that was present.
+- With `verbose: false` the dropped row is `{what: 'payload.mode full', why: 'policy:verbose false'}`; a header ref `max` is the smaller of `getMax` and the summary max.
+- Labels mode, descriptor mode and ref scope of a kind or query come from its first path.
+- Error codes: `NO_OPERATION` (no operation to run), `BAD_SELECTION` (`payload` on a kind that is not gettable; fragment type mismatch), `TYPE_MISMATCH` (negative `first`), `RESOLVE_FAILED` (a root or payload failure; path `[key]` or the payload path), `REDUCER_FAILED` (message names the reducer, never the raw value).
+- A data entry's `_` is appended last. The ref gate checks, in order: format, unknown query, expired, unknown label, policy deny (live policy), requireWhy, declared, name, value, then the source call. A ref with a property or set op and no name is `REF_BAD_NAME`.
+- Expiry: a query scope of N expires when later queries exceed N; a tick scope when ticks since exceed N.
+- The `get` cap clip is not a reducer row.
+- The audit hash is cyrb53 (base 36) over the JSON of the returned data, or of `[code, message]` for a refusal.
+- The materialized descriptor block carries `desc` (`sent`, `seen`, `always`, `off`, `prefaced`) and, when sent or always, `text`.
+- `kinds` is `[]` for a query that selects only scalars.
+- A property op whose name is absent from the kind function's result falls back to `entry[name]`.
+- Harness adapter: ledger rows get a 1-based `n` from stored order, trail rows `n` likewise, audit labels are `a<n>` from 0; concepts serve chain tails only, in file order; a handle payload resolves through the injected `handles.resolve(id, reader)`.
