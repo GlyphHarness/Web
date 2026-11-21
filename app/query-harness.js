@@ -41,9 +41,9 @@ function flowTurns(s) {
 }
 
 // the chain tail of each supersedes chain: a record another names in `supersedes` is not served
+const tail = recs => { const named = new Set(recs.map(c => c.supersedes).filter(Boolean)); return recs.filter(c => !named.has(c.id)); };
 function tails(concepts) {
-  const named = new Set(concepts.map(c => c.supersedes).filter(Boolean));
-  return concepts.filter(c => !named.has(c.id)).map(c => ({ ...c, supersedes: c.supersedes ?? null, nmodels: (c.models || []).length }));
+  return tail(concepts).map(c => ({ ...c, supersedes: c.supersedes ?? null, nmodels: (c.models || []).length }));
 }
 
 export function createHarnessAdapter(src) {
@@ -70,8 +70,8 @@ export function createHarnessAdapter(src) {
     handle: async a => one(await src.handles.info(a.id)),
     audit: a => page(at(src.handles.audit().filter(r => r.id === a.id), null).map(r => ({ ...r, n: r.n - 1 })), a),
     concepts: a => page(tails(cat().concepts || []).filter(c => (!a.status || c.status === a.status) && (!a.model || (c.models || []).some(m => m.model === a.model))), a),
-    faults: a => page((cat().faults || []).filter(f => (!a.model || f.model === a.model) && (!a.class || f.class === a.class)), a),
-    terms: a => page((cat().terms || []).filter(t => !a.match || t.term.toLowerCase().includes(String(a.match).toLowerCase())), a),
+    faults: a => page(tail(cat().faults || []).filter(f => (!a.model || f.model === a.model) && (!a.class || f.class === a.class)), a),
+    terms: a => page(tail(cat().terms || []).filter(t => !a.match || t.term.toLowerCase().includes(String(a.match).toLowerCase())), a),
   };
   return { name: 'harness', schema: { types, roots }, kinds, resolve: async (root, args, ctx) => R[root](args, ctx) };
 }
