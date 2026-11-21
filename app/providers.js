@@ -29,10 +29,10 @@ async function* sse(res, onRaw) {
 // the local replay server). opt.trace is an array that receives one record per
 // request: the body sent, the status, and the raw response text in the chunks
 // it arrived in with millisecond offsets. The API key is never recorded.
-function openaiCompatible({ label, base }) {
+function openaiCompatible({ label, base, needsKey = true }) {
   const root = opt => (opt?.base || base).replace(/\/+$/, '');
   return {
-    label, needsKey: true, base,
+    label, needsKey, base,
     async models(_key, opt) {
       const r = await fetch(root(opt) + '/models');
       if (!r.ok) throw new Error(`models: HTTP ${r.status}`);
@@ -318,4 +318,6 @@ const mock = {
 export const providers = {
   openrouter: retrying(openaiCompatible({ label: 'OpenRouter', base: 'https://openrouter.ai/api/v1' })),
   mock: retrying(mock),
+  // the gateway's harness listener (loopback, docs/platform/claude-route-survey.md): the key lives with the gateway, the page holds none
+  claude: retrying(openaiCompatible({ label: 'Claude (container gateway)', base: 'http://127.0.0.1:8792/v1', needsKey: false })),
 };
