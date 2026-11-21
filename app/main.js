@@ -518,10 +518,14 @@ const ask2 = (title, text, yes = 'OK', no = 'Cancel') => modal({ title, body: te
 
 const cfgCurrent = () => ({ settings: { ...state.meta.settings, newProfile: profiles().find(p => p.id === state.meta.settings.newProfile)?.name, metricsLayout: panels.getLayout() }, policies: policyList(), profiles: profiles(), providers: Object.keys(providers), machine: vmWanted(), keys: Object.fromEntries(Object.entries(state.keys).filter(([, v]) => typeof v === 'string')),
   values: allValues().map(v => { const r = vals.current(v); return { id: v.id, scope: v.scope.kind === 'global' ? 'defaults' : v.scope.kind === 'session' ? 'session' : 'profile:' + (profiles().find(p => p.id === v.scope.id)?.name || v.scope.id), label: r.label, value: r.value, purpose: r.purpose }; }) });
+// Providers kept out of the dropdown only; config import and validation still accept them.
+// 'claude' (container gateway, 127.0.0.1:8792) has no listener yet: remove it here once one exists.
+const PROVIDERS_NOT_LISTED = ['claude'];
+const showProvider = id => { const sel = $('#provider'); sel.value = id; if (sel.value !== id) sel.value = 'openrouter'; };
 // Inputs re-read from state after a merge.
 function showSettings() {
   const set = state.meta.settings;
-  $('#provider').value = set.provider; $('#model').value = set.model || ''; $('#helper').value = set.helper || '';
+  showProvider(set.provider); $('#model').value = set.model || ''; $('#helper').value = set.helper || '';
   $('#polmodel').value = set.policyModel || ''; $('#ghlabel').value = set.ghlabel || ''; $('#logrepo').value = set.logRepo || '';
   $('#budget').value = set.branchBudget || BRANCH_BUDGET; $('#pace').value = pace();
   $('#concernrepo').value = set.concernRepo || ''; $('#key').value = state.keys[set.provider] || ''; $('#ghkey').value = state.keys.github || '';
@@ -2433,8 +2437,8 @@ export function boot(env) {
   $('#build').textContent = `build ${VERSION} · schema ${SCHEMA} · ${env.ref ? 'ref ' + env.ref : 'default branch'}`;
   $('#ref').value = env.ref;
   const set = state.meta.settings;
-  $('#provider').append(...Object.entries(providers).map(([id, p]) => h('option', { value: id, text: p.label })));
-  $('#provider').value = set.provider;
+  $('#provider').append(...Object.entries(providers).filter(([id]) => !PROVIDERS_NOT_LISTED.includes(id)).map(([id, p]) => h('option', { value: id, text: p.label })));
+  showProvider(set.provider);
   $('#model').value = set.model;
   $('#key').value = state.keys[set.provider] || '';
   $('#ghkey').value = state.keys.github || '';
