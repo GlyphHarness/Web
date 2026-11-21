@@ -542,6 +542,64 @@ check('G10.6', 'streamStep never throws on an event of the wrong shape: it passe
   return true;
 });
 
+// ---------------------------------------------------------------- G12 wrong-shaped input (fault trbwvd): never a throw, a documented result
+// Documented results: onRequest and normaliseCache hand a body that is not a plain object back as given (onRequest: applied []),
+// and skip any part of a body whose shape is not the Messages one; admit refuses a request that is not {method:string,
+// path:string, headers:[[string,value],...]} with 400 'bad-request'; passHeaders and harnessHeaders refuse headers that are not
+// a list of [string, value] pairs with 400 'bad-headers'. The listener name stays the one thing that throws (G2.8).
+const WRONG_BODIES = [null, undefined, 5, 'x', true, [], [1, null], {}, { messages: null }, { messages: 'x' }, { messages: {} }, { messages: 5 },
+  { messages: [null, 'x', 5, [], { content: 'x' }, { content: null }, { content: [null, 'x', 5, []] }] },
+  { tools: 'x' }, { tools: {} }, { tools: 5 }, { tools: [null] }, { tools: ['a', 'b'] }, { tools: [{ name: 'a', cache_control: E }, null] }, { tools: [{ name: 'a', cache_control: E }, 'z'] }, { tools: [{ name: 'a', cache_control: E }, 7] },
+  { system: 5 }, { system: null }, { system: {} }, { system: [null, 'x', 5] },
+  { thinking: 'x' }, { thinking: null }, { thinking: 5, output_config: 5 }, { thinking: [], output_config: 'x' }, { output_config: null }, { thinking: { budget_tokens: 'x' }, output_config: { effort: 5 } }];
+const ALL_ON = { cache: { normalise: true }, thinking: { maxBudget: 2000, maxEffort: 'low' } };
+check('G12.1', 'onRequest on any wrong-shaped body, ctx or policy: no throw, {body, applied: []}, the body as given', () => {
+  for (const b of WRONG_BODIES) for (const ctx of [undefined, null, {}, 'x', { class: 5 }]) {
+    let r;
+    try { r = G.onRequest(ctx, b, ALL_ON); } catch (e) { return J([b, String(e.message)]); }
+    const same = b !== null && typeof b === 'object' && !Array.isArray(b) ? eq(r.body, b) : r.body === b || (Array.isArray(b) && eq(r.body, b));
+    if (!same || !eq(r.applied, [])) return J([b, r]);
+  }
+  for (const p of [null, undefined, 5, 'x', [], { cache: null, thinking: 5 }, { cache: 'x', thinking: 'x' }, { thinking: { maxBudget: 'x', maxEffort: 5 } }]) {
+    try { const r = G.onRequest({}, { model: 'm', messages: [] }, p); if (!Array.isArray(r.applied)) return J([p, r]); } catch (e) { return J([p, String(e.message)]); }
+  }
+  return true;
+});
+check('G12.2', 'normaliseCache on any wrong-shaped body: no throw, the body as given', () => {
+  for (const b of WRONG_BODIES) {
+    let r;
+    try { r = G.normaliseCache(b); } catch (e) { return J([b, String(e.message)]); }
+    if (!eq(r, b)) return J([b, r]);
+  }
+  return true;
+});
+check('G12.3', 'a wrong-shaped part is skipped, the right-shaped part is still normalised (a string among tools stays, the marker moves to the last tool object)', () => {
+  const r = G.normaliseCache({ tools: ['s', { name: 'a', cache_control: E }, { name: 'b' }], messages: [null, { role: 'user', content: [null, 'x', mk('q', E)] }] });
+  return r.tools[0] === 's' && !('cache_control' in r.tools[1]) && eq(r.tools[2].cache_control, E) && r.messages[0] === null && eq(r.messages[1].content[2].cache_control, E) || J(r);
+});
+const WRONG_REQS = [null, undefined, 5, 'x', [], {}, { method: 'POST' }, { path: '/v1/messages' }, { method: 'POST', path: '/v1/messages' }, { method: null, path: null, headers: null },
+  { method: 'POST', path: '/v1/messages', headers: 'x' }, { method: 'POST', path: '/v1/messages', headers: {} }, { method: 'POST', path: '/v1/messages', headers: 5 },
+  { method: 'POST', path: '/v1/messages', headers: [null] }, { method: 'POST', path: '/v1/messages', headers: ['ab'] }, { method: 'POST', path: '/v1/messages', headers: [[]] }, { method: 'POST', path: '/v1/messages', headers: [[5, 'v']] },
+  { method: 'POST', path: 5, headers: [] }, { method: 'POST', path: {}, headers: [] }, { method: 'POST', path: ['/v1/messages'], headers: [['x-claude-code-session-id', 'a']] }, { method: 5, path: '/v1/messages', headers: [] }, { method: ['POST'], path: '/v1/chat/completions', headers: [] }];
+check('G12.4', 'admit on any wrong-shaped request, on both listeners: no throw, a 400 refusal with reason bad-request', () => {
+  for (const l of LISTENERS) for (const q of WRONG_REQS) {
+    let r;
+    try { r = G.admit(l, q); } catch (e) { return J([l, q, String(e.message)]); }
+    if (r.verdict !== 'reject' || r.status !== 400 || r.reason !== 'bad-request') return J([l, q, r]);
+  }
+  return true;
+});
+const WRONG_HEADERS = [null, undefined, 5, 'x', {}, [null], ['ab'], [[]], [[5, 'v']], [['ok', 'v'], null], [['ok', 'v'], 'cd'], [{ 0: 'a' }]];
+check('G12.5', 'passHeaders and harnessHeaders on headers that are not a list of [name, value] pairs: no throw, a 400 refusal with reason bad-headers and no headers', () => {
+  for (const h of WRONG_HEADERS) for (const call of [() => G.passHeaders(h), () => G.harnessHeaders(h, { apiKey: 'test-not-a-key-OWN' })]) {
+    let r;
+    try { r = call(); } catch (e) { return J([h, String(e.message)]); }
+    if (r.verdict !== 'reject' || r.status !== 400 || r.reason !== 'bad-headers' || 'headers' in r) return J([h, r]);
+  }
+  const r = G.harnessHeaders(null, {});
+  return r.verdict === 'reject' && r.status >= 400 && !('headers' in r) && eq(G.passHeaders([]).headers, []) || J(r);
+});
+
 // ---------------------------------------------------------------- G11 the provider entry (seam: providers; R2)
 const entry = P.providers.claude;
 check('G11.1', 'the registry has a claude entry in the provider shape, no key needed, aimed at a loopback listener', () => entry && typeof entry.label === 'string' && entry.label.length > 0 && entry.needsKey === false && /^http:\/\/127\.0\.0\.1:\d+\/v1$/.test(entry.base) && typeof entry.models === 'function' && typeof entry.stream === 'function' || J(entry));
