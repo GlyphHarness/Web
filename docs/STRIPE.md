@@ -251,7 +251,7 @@ All on production-style sessions per `docs/concepts/PROGRAMME.md` and `.claude/s
 
 Offline, no model (plain node over the repo's own docs, catalog and a corpus of real stored tool results from silo sessions):
 
-1. Retained fraction: kept chars and estimated tokens against the budget, and the budget error. Provisional: within 10% of budget for n >= 2000.
+1. Retained fraction: kept chars and estimated tokens against the budget, and the budget error. Provisional: within 10% of budget for n >= 2000. Marker overhead (marker chars over output chars): provisional under 30% for n >= 2000.
 2. Rare-token retention: share of df-1 units kept versus share of top-decile-df units kept, against head-and-tail at equal chars. Provisional: rare retention at least 2x the head-and-tail baseline.
 3. Identifier and number retention: share of identifier-class and number-class units kept versus baseline. Provisional: at least 1.5x.
 4. Parse-back exactness: `verify` true on 100% of runs; determinism 100%; nesting violations 0.
