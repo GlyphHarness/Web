@@ -25,6 +25,9 @@ const opt = (n, d) => { const i = argv.indexOf('--' + n); return i >= 0 ? argv[i
 const QUICK = flag('quick');
 const DATE = opt('date', new Date().toISOString().slice(0, 10));
 const OUT = path.resolve(ROOT, opt('out', 'docs/concepts/results'));
+const git = (...a) => { try { return execFileSync('git', a, { cwd: ROOT }).toString().trim(); } catch { return 'unknown'; } };
+const HEAD_SHA = git('rev-parse', 'HEAD');
+const TAG = opt('tag', null); // output name gateway-det-<date>[-<tag>]; the first run (before the fixes) has no tag
 
 // ---------------------------------------------------------------- small helpers
 const J = v => JSON.stringify(v);
@@ -369,7 +372,9 @@ function prefixBattery(t) {
 
 // ---------------------------------------------------------------- 4. credential blindness (R3, R18) over the whole battery
 const CAN = ['sk-ant-test-CANARYA-not-a-key', 'Bearer sk-ant-oat01-test-CANARYB-not-a-token', 'oauth-2025-04-20-CANARYC', 'sess=CANARYD-not-a-cookie', 'CANARYE-not-a-session', 'CANARYF-own-key-not-a-key'];
-const HEADER_NAMES = ['authorization', 'Authorization', 'x-api-key', 'X-API-KEY', 'anthropic-beta', 'proxy-authorization', 'cookie', 'x-claude-code-session-id', 'x-foo-token', 'anthropic-version'];
+const HEADER_NAMES = ['authorization', 'Authorization', 'x-api-key', 'X-API-KEY', 'anthropic-beta', 'proxy-authorization', 'cookie', 'x-claude-code-session-id', 'x-foo-token', 'anthropic-version', 'content-type', 'Accept', 'transfer-encoding', 'content-length', 'x-other'];
+const ALLOW = ['content-type', 'accept', 'anthropic-version'];
+const DROPPED_BY_HARNESS = ['authorization', 'proxy-authorization', 'cookie', 'anthropic-beta', 'x-claude-code-session-id', 'x-foo-token', 'transfer-encoding', 'content-length', 'x-other'];
 const guarded = name => { const boom = k => { throw new Error('header value read: ' + name + ' ' + String(k)); }; return new Proxy({}, { get: (_, k) => boom(k), has: (_, k) => boom(k), ownKeys: () => boom('keys'), getOwnPropertyDescriptor: (_, k) => boom(k), getPrototypeOf: () => boom('proto') }); };
 function canaryBattery(t) {
   const leaks = [], echoes = []; let probes = 0;
@@ -392,6 +397,13 @@ function canaryBattery(t) {
     const clientCanaries = pairs.filter(([n]) => ['authorization', 'x-api-key'].includes(n.toLowerCase())).map(p => p[1]);
     t('harness-client-credential-not-forwarded', h.verdict === 'allow' && !h.headers.some(([n, v]) => clientCanaries.includes(v) && ['authorization', 'x-api-key'].includes(n.toLowerCase())) && h.headers.filter(([n]) => n.toLowerCase() === 'x-api-key').length === 1 && h.headers.find(([n]) => n.toLowerCase() === 'x-api-key')[1] === CAN[5], 'ci=' + ci);
     t('harness-own-key-only-in-x-api-key', h.headers.filter(([n, v]) => v === CAN[5] && n.toLowerCase() !== 'x-api-key').length === 0 && !J(rest(h)).includes(CAN[5]), 'ci=' + ci);
+    const hn = h.headers.map(([n]) => n.toLowerCase());
+    t('harness-forwards-allowlist-and-own-key-only', hn.every(n => ALLOW.includes(n) || n === 'x-api-key'), hn.join(',') + ' ci=' + ci);
+    t('harness-drops-every-other-client-header', DROPPED_BY_HARNESS.every(n => !hn.includes(n)) && !hn.includes('authorization'), 'ci=' + ci);
+    t('harness-allowlisted-values-carried-by-reference', ALLOW.every(n => { const src = pairs.filter(p => p[0].toLowerCase() === n); const out = h.headers.filter(p => p[0].toLowerCase() === n); return src.length === out.length && src.every((p, i) => out[i][1] === p[1]); }), 'ci=' + ci);
+    t('harness-header-count-is-allowlisted-plus-one', h.headers.length === pairs.filter(p => ALLOW.includes(p[0].toLowerCase())).length + 1, 'ci=' + ci);
+    const pc = G.passHeaders(pairs);
+    t('claude-code-listener-blind-copy-in-order', pc.headers.length === pairs.length && pc.headers.every(([n, v], i) => n === pairs[i][0] && v === pairs[i][1]), 'ci=' + ci);
     for (const key of [undefined, '', null, 0, {}, [], CAN[0].slice(0, 0)]) { const r = G.harnessHeaders(pairs, { apiKey: key }); scan('harnessHeaders.no-key', r); t('harness-no-key-fails-closed', r.verdict === 'reject' && r.status === 401 && !('headers' in r), String(key)); }
     scan('harnessHeaders.no-opts', G.harnessHeaders(pairs));
     for (const l of ['claude-code', 'harness']) {
@@ -534,6 +546,11 @@ function codecBattery(t, streams) {
   t('codec-bad-json-reported', (x => x.events.length === 0 && x.bad.length === 1)(G.sseSplit('data: {oops\n\n')), 'bad');
   t('codec-event-only-frame-skipped', G.sseSplit('event: ping\n\n').events.length === 0, 'event-only');
   const nullFrame = G.sseSplit('data: null\n\n');
+  for (const [label, body] of [['null', 'null'], ['number', '42'], ['array', '[]'], ['string', '"s"'], ['true', 'true']]) {
+    const x = G.sseSplit('data: ' + body + '\n\n');
+    t('codec-non-object-frame-goes-to-bad-' + label, x.events.length === 0 && x.bad.length === 1 && x.rest === '', body);
+  }
+  { const x = G.sseSplit(f(p) + 'data: null\n\n' + f(m)); t('codec-non-object-frame-does-not-drop-neighbours', eq(x.events, [p, m]) && x.bad.length === 1, 'neighbours'); }
   const order = G.sseSplit(f(p) + 'data: {oops\n\n' + f(m));
   return { frames, cutsTried: cuts, jsonNullFrameYieldsEvents: J(nullFrame.events), badFrameOrderRecoverable: !(order.events.length === 2 && order.bad.length === 1 && false) && 'events and bad are returned in separate lists; their relative order is not' };
 }
@@ -589,29 +606,84 @@ function fuzz(t) {
     }
   }
   t('fz-admit-matches-model', wrong === 0, 'wrong=' + wrong);
-  for (const bad of [null, undefined]) { try { G.admit('harness', bad); } catch (e) { nulls++; note('admit', e, String(bad)); } }
+  for (const l of ['claude-code', 'harness']) for (const bad of [null, undefined, 0, 'x', [], {}, { method: 'POST' }, { method: 'POST', path: '/v1/messages' }, { method: 5, path: '/v1/messages', headers: [] }, { method: 'POST', path: 7, headers: [] }, { method: 'POST', path: '/v1/messages', headers: null }, { method: 'POST', path: '/v1/messages', headers: {} }, { method: 'POST', path: '/v1/messages', headers: [null] }, { method: 'POST', path: '/v1/messages', headers: [[1, 'v']] }, { method: undefined, path: '/v1/messages', headers: [] }]) {
+    let v, threw = false; try { v = G.admit(l, bad); } catch (e) { threw = true; nulls++; note('admit', e, J(bad)); }
+    t('admit-wrong-shape-400-bad-request', !threw && v.verdict === 'reject' && v.status === 400 && v.reason === 'bad-request', l + ' ' + J(bad));
+  }
   // header lists of the wrong shape
-  for (const [fn, name] of [[() => G.passHeaders(null), 'passHeaders(null)'], [() => G.harnessHeaders(null, { apiKey: 'k' }), 'harnessHeaders(null)']]) { try { fn(); } catch (e) { note('headers', e, name); } }
+  const badLists = [null, undefined, 0, 'x', {}, [null], [[1, 'v']], [['a', 'v'], 5], [[]]];
+  for (const bl of badLists) {
+    for (const [fn, name] of [[() => G.passHeaders(bl), 'passHeaders'], [() => G.harnessHeaders(bl, { apiKey: 'k' }), 'harnessHeaders']]) {
+      let v, threw = false; try { v = fn(); } catch (e) { threw = true; note('headers', e, name + '(' + J(bl) + ')'); }
+      t('headers-wrong-shape-400-bad-headers', !threw && v.verdict === 'reject' && v.status === 400 && v.reason === 'bad-headers' && !('headers' in v), name + ' ' + J(bl));
+    }
+  }
+  { const v = G.harnessHeaders(null, {}); t('harness-key-checked-before-headers', v.verdict === 'reject' && v.status === 401 && v.reason === 'no-api-key', 'null headers, no key'); }
+  t('fz-no-throw-anywhere', Object.keys(throws).length === 0 && nulls === 0, 'classes=' + Object.keys(throws).length + ' nulls=' + nulls);
+  // onRequest: bodies that are not objects come back as given
+  for (const b of [null, undefined, 0, 'x', [], [1], true]) { let r, threw = false; try { r = G.onRequest({}, b, { cache: { normalise: true }, thinking: { maxBudget: 2000, maxEffort: 'low' } }); } catch (e) { threw = true; note('onRequest', e, J(b)); } t('onrequest-non-object-body-returned-as-given', !threw && r.body === b, J(b)); }
   return { streamsTried, bodies, admits, throwClasses: Object.entries(throws).map(([k, v]) => ({ class: k, count: v.count, minimalInput: v.minimal })) };
 }
 
 // ---------------------------------------------------------------- 8. observations that are defects or spec gaps, each with its minimal input (recorded, not asserted)
-function defects() {
+function faultProbes(t) {
   const probe = f => { try { const r = f(); return { threw: false, result: J(r)?.slice(0, 160) }; } catch (e) { return { threw: true, error: String(e.message).slice(0, 100) }; } };
   const cc = { cache_control: { type: 'ephemeral' } }, P = { cache: { normalise: true } };
-  const fwd = ['authorization', 'x-api-key', 'proxy-authorization', 'cookie', 'transfer-encoding', 'content-length', 'host', 'connection', 'x-other'];
+  const fwd = ['authorization', 'x-api-key', 'proxy-authorization', 'cookie', 'transfer-encoding', 'content-length', 'host', 'connection', 'x-other', 'content-type', 'accept', 'anthropic-version'];
   const sent = fwd.map(n => [n, 'v-' + n]);
-  return {
-    streamStepNullEvent: { input: "streamStep(streamInit('harness', {}, {}), null)", ...probe(() => G.streamStep(G.streamInit('harness', {}, {}), null)), reachableFrom: "sseSplit('data: null\\n\\n').events -> " + J(G.sseSplit('data: null\n\n').events) },
-    onRequestNullBody: { input: 'onRequest({}, null, {cache:{normalise:true}})', ...probe(() => G.onRequest({}, null, P)), noPolicy: probe(() => G.onRequest({}, null, {})) },
+  const out = {
+    streamStepNullEvent: { input: "streamStep(streamInit('harness', {}, {}), null)", ...probe(() => G.streamStep(G.streamInit('harness', {}, {}), null)), reachableFrom: "sseSplit('data: null') -> events " + J(G.sseSplit('data: null\n\n').events) + ', bad ' + G.sseSplit('data: null\n\n').bad.length },
+    onRequestNullBody: { input: 'onRequest({}, null, {cache:{normalise:true}})', ...probe(() => G.onRequest({}, null, P)) },
     onRequestMessagesNotArray: { input: 'onRequest({}, {messages: {}}, {cache:{normalise:true}})', ...probe(() => G.onRequest({}, { messages: {} }, P)) },
-    onRequestStringToolAfterMarkedTool: { input: "onRequest({}, {tools:[{name:'a',cache_control:{type:'ephemeral'}},'x'],messages:[]}, {cache:{normalise:true}})", ...probe(() => G.onRequest({}, { tools: [{ name: 'a', ...cc }, 'x'], messages: [] }, P)) },
-    onRequestNullToolAfterMarkedTool: { input: 'onRequest({}, {tools:[{name:"a",cache_control:{type:"ephemeral"}},null],messages:[]}, {cache:{normalise:true}})', ...probe(() => G.onRequest({}, { tools: [{ name: 'a', ...cc }, null], messages: [] }, P)) },
+    onRequestStringToolAfterMarkedTool: { input: "onRequest({}, {tools:[{name:'a',cache_control},'x'],messages:[]}, normalise)", ...probe(() => G.onRequest({}, { tools: [{ name: 'a', ...cc }, 'x'], messages: [] }, P)) },
+    onRequestNullToolAfterMarkedTool: { input: 'onRequest({}, {tools:[{name:"a",cache_control},null],messages:[]}, normalise)', ...probe(() => G.onRequest({}, { tools: [{ name: 'a', ...cc }, null], messages: [] }, P)) },
     admitNullRequest: { input: "admit('harness', null)", ...probe(() => G.admit('harness', null)) },
+    passHeadersNull: { input: 'passHeaders(null)', ...probe(() => G.passHeaders(null)) },
+    harnessHeadersNull: { input: "harnessHeaders(null, {apiKey:'OWN'})", ...probe(() => G.harnessHeaders(null, { apiKey: 'OWN' })) },
     harnessHeadersForwarded: { input: 'harnessHeaders(' + J(fwd) + ' with values, {apiKey:"OWN"})', forwardedNames: G.harnessHeaders(sent, { apiKey: 'OWN' }).headers.map(h => h[0]), droppedNames: fwd.filter(n => !G.harnessHeaders(sent, { apiKey: 'OWN' }).headers.some(h => h[0] === n)) },
     passHeadersForwarded: { forwardedNames: G.passHeaders(sent).headers.map(h => h[0]), droppedNames: fwd.filter(n => !G.passHeaders(sent).headers.some(h => h[0] === n)) },
     unitNotes: { budgetUnit: 'UTF-16 code units of the delta string, tokens estimated as ceil(chars/4)', zeroBudgetHaltsAtFirstDelta: 'verified in corner sweep' },
   };
+  const ok = (name, cond, detail) => t(name, !!cond, detail);
+  ok('fault-fhkyrn-streamstep-null-passes-through', (() => { try { const r = G.streamStep(G.streamInit('harness', {}, {}), null); return r.out.length === 1 && r.out[0] === null && r.verdict.verdict === 'allow' && r.abort === false; } catch { return false; } })(), out.streamStepNullEvent.result);
+  ok('fault-fhkyrn-sse-null-frame-is-bad', G.sseSplit('data: null\n\n').events.length === 0 && G.sseSplit('data: null\n\n').bad.length === 1, 'sseSplit null');
+  ok('fault-trbwvd-onrequest-null-body-unchanged', !out.onRequestNullBody.threw && G.onRequest({}, null, P).body === null, out.onRequestNullBody.result);
+  ok('fault-trbwvd-onrequest-messages-object-no-throw', !out.onRequestMessagesNotArray.threw, out.onRequestMessagesNotArray.result);
+  ok('fault-trbwvd-nonobject-last-tool-no-throw', !out.onRequestStringToolAfterMarkedTool.threw && !out.onRequestNullToolAfterMarkedTool.threw, 'string and null last tool');
+  ok('fault-trbwvd-last-tool-string-nothing-moves', J(G.onRequest({}, { tools: [{ name: 'a', ...cc }, 'x'], messages: [] }, P).body.tools) === J([{ name: 'a', ...cc }, 'x']), 'tools unchanged');
+  ok('fault-trbwvd-admit-null-400', !out.admitNullRequest.threw && /"status":400/.test(out.admitNullRequest.result) && /bad-request/.test(out.admitNullRequest.result), out.admitNullRequest.result);
+  ok('fault-trbwvd-pass-and-harness-headers-null-400', !out.passHeadersNull.threw && !out.harnessHeadersNull.threw && /bad-headers/.test(out.passHeadersNull.result) && /bad-headers/.test(out.harnessHeadersNull.result), out.passHeadersNull.result + ' | ' + out.harnessHeadersNull.result);
+  ok('fault-mkqsxn-harness-forward-is-allowlist', J(out.harnessHeadersForwarded.forwardedNames.map(n => n.toLowerCase()).sort()) === J(['accept', 'anthropic-version', 'content-type', 'x-api-key']), J(out.harnessHeadersForwarded.forwardedNames));
+  ok('fault-mkqsxn-cookie-and-proxy-authorization-dropped', ['cookie', 'proxy-authorization', 'authorization', 'transfer-encoding', 'content-length', 'x-other'].every(n => out.harnessHeadersForwarded.droppedNames.includes(n)), J(out.harnessHeadersForwarded.droppedNames));
+  ok('claude-code-listener-drops-only-hop-headers', J(out.passHeadersForwarded.droppedNames) === J(['host', 'connection']), J(out.passHeadersForwarded.droppedNames));
+  return out;
+}
+
+// ---------------------------------------------------------------- 9. non-object events injected into mixed streams (fault fhkyrn), both listeners
+function nonObjectEvents(t, streams) {
+  const S = streams.find(s => s.id === 'mixed-1K'), ev = S.events, pol = { budget: { text: 600, thinking: 300, total: 2500 }, reduce: [] };
+  let probes = 0;
+  for (const listener of ['claude-code', 'harness']) {
+    // reference run on the clean stream: the state after each prefix
+    const states = []; { let st = G.streamInit(listener, pol, {}); states.push(J(st)); for (const e of ev) { const x = G.streamStep(st, e); st = x.state; states.push(J(st)); } }
+    for (const bad of [null, 42, 'str', [], true, undefined]) {
+      for (let pos = 0; pos <= ev.length; pos += (pos < 40 || pos > ev.length - 20) ? 1 : 7) {
+        let st = G.streamInit(listener, pol, {}), okPrefix = true; const outs = [];
+        for (let i = 0; i < pos; i++) { const x = G.streamStep(st, ev[i]); st = x.state; outs.push(...x.out); if (x.abort) okPrefix = false; }
+        if (!okPrefix) continue; // the stream already halted here; the injected event is after the end
+        const before = J(st);
+        let x, threw = false; try { x = G.streamStep(st, bad); } catch (e) { threw = true; }
+        probes++;
+        if (threw) { t('nonobject-event-never-throws', false, listener + ' ' + String(bad) + ' @' + pos); continue; }
+        const same = x.out.length === 1 && Object.is(x.out[0], bad) && x.verdict.verdict === 'allow' && x.abort === false && J(x.state) === before;
+        t('nonobject-event-passes-through-state-unchanged', same, listener + ' ' + String(bad) + ' @' + pos);
+        // and the stream continues to the same end as the clean one
+        let st2 = x.state; for (let i = pos; i < ev.length; i++) { const y = G.streamStep(st2, ev[i]); st2 = y.state; }
+        t('nonobject-event-stream-continues-to-same-final-state', J(st2) === states[states.length - 1], listener + ' ' + String(bad) + ' @' + pos);
+      }
+    }
+  }
+  return { probes, stream: S.id, note: 'null, 42, "str", [], true and undefined injected at every position near the ends and every 7th in the middle, both listeners; passed through unchanged, state and counters untouched, stream continues to the same final state' };
 }
 
 // ---------------------------------------------------------------- the deterministic part, one run
@@ -630,7 +702,8 @@ function deterministic() {
   D.reducers = reducerBattery(t);
   D.codec = codecBattery(t, streams);
   D.fuzz = fuzz(t);
-  D.defects = defects();
+  D.faultProbes = faultProbes(t);
+  D.nonObjectEvents = nonObjectEvents(t, streams);
   D.checks = t.out(); D.checkTotals = t.sum();
   D.sweepOutputHash = hash.digest('hex').slice(0, 32);
   return D;
@@ -719,16 +792,16 @@ const detMs = hr() - t0;
 const streams = genAll().filter(s => s.events.length <= 120000);
 const IND = indicative(streams);
 IND.memory = memory();
-const gitRev = (() => { try { return execFileSync('git', ['rev-parse', '--short', 'HEAD'], { cwd: ROOT }).toString().trim(); } catch { return 'unknown'; } })();
+const gitRev = HEAD_SHA.slice(0, 7);
 const result = {
-  meta: { date: DATE, script: 'scripts/measure-gateway.mjs', quick: QUICK, node: process.version, platform: `${process.platform} ${process.arch}`, cpus: os.cpus().length, gitHead: gitRev, gatewaySha256: sha(fs.readFileSync(path.join(ROOT, 'app', 'claude-gateway.js'))).slice(0, 16), deterministicRunMs: Math.round(detMs / 2), note: 'deterministic part is compared by hash; indicative part is wall clock and heap on this machine, not a pass or fail' },
+  meta: { date: DATE, script: 'scripts/measure-gateway.mjs', quick: QUICK, node: process.version, platform: `${process.platform} ${process.arch}`, cpus: os.cpus().length, gitHead: gitRev, headSha: HEAD_SHA, tag: TAG, gatewayDirty: git('status', '--porcelain', '--', 'app/claude-gateway.js') !== '', gatewaySha256: sha(fs.readFileSync(path.join(ROOT, 'app', 'claude-gateway.js'))).slice(0, 16), deterministicRunMs: Math.round(detMs / 2), note: 'deterministic part is compared by hash; indicative part is wall clock and heap on this machine, not a pass or fail' },
   deterministic: A,
   determinism: { runs: 2, hashA, hashB, equal: hashA === hashB },
   indicative: IND,
-  unmeasured: 'see docs/concepts/results/gateway-det-' + DATE + '.md',
+  unmeasured: 'see the Unmeasured table in the .md next to this file',
 };
 fs.mkdirSync(OUT, { recursive: true });
-const base = path.join(OUT, `gateway-det-${DATE}`);
+const base = path.join(OUT, `gateway-det-${DATE}${TAG ? '-' + TAG : ''}`);
 fs.writeFileSync(base + '.json', J(result, null, 1) + '\n');
 
 // the table
@@ -736,7 +809,7 @@ const row = (...c) => '| ' + c.join(' | ') + ' |';
 const tab = (head, rows) => [row(...head), row(...head.map(() => '---')), ...rows.map(r => row(...r))].join('\n');
 const sum = A.checkTotals, sw = A.sweep.rows;
 const md = [];
-md.push(`# Gateway core, deterministic measurements (${DATE})`, '',
+md.push(`# Gateway core, deterministic measurements (${DATE}${TAG ? ', ' + TAG : ''}, head ${HEAD_SHA})`, '',
   `Script \`scripts/measure-gateway.mjs\`, core \`app/claude-gateway.js\` (sha256 ${result.meta.gatewaySha256}, repo head ${gitRev}). Synthetic streams and bodies from a seeded PRNG; no network, no model, no key. Full JSON: \`${path.relative(ROOT, base).replace(/\\/g, '/')}.json\`. Hypotheses: \`docs/platform/claude-route-survey.md\` (R-numbers). Timing is wall clock on one machine (${result.meta.platform}, node ${process.version}), indicative only; counts, sweeps and hashes are deterministic.`, '',
   `**Checks run: ${sum.run}, failed: ${sum.fail}.** Determinism: two full runs, hash ${hashA === hashB ? 'equal' : 'DIFFERENT'} (${hashA.slice(0, 16)}). Halt sweep points: ${A.sweep.pointsTotal} single-budget plus ${A.triple.trials} combined-budget trials plus ${A.corner.vals * 6} corner budgets. Credential canary: ${A.canary.probes} probes, ${A.canary.leaks} leaks.`, '',
   '## Streams', '', tab(['stream', 'kind', 'payload chars', 'events', 'sha256 (SSE bytes)'], A.streams.map(s => [s.id, s.kind, s.bytes, s.events, s.sha256])), '',
@@ -758,7 +831,8 @@ md.push(`# Gateway core, deterministic measurements (${DATE})`, '',
   '## Reducer hook round trip', '', J(A.reducers), '',
   '## SSE codec', '', J(A.codec), '',
   '## Robustness fuzz (seeded)', '', `streams ${A.fuzz.streamsTried}, bodies ${A.fuzz.bodies}, admits ${A.fuzz.admits}. Thrown error classes (input minimal as found):`, '', tab(['class', 'count', 'minimal input'], A.fuzz.throwClasses.map(c => [c.class, c.count, '`' + c.minimalInput.replace(/\|/g, '/') + '`'])), '',
-  '## Defects and spec gaps, minimal inputs (recorded in the catalog inbox as faults)', '', '```json', J(A.defects, null, 1), '```', '',
+  '## Non-object events (fault fhkyrn)', '', `${A.nonObjectEvents.probes} injections on ${A.nonObjectEvents.stream}: ${A.nonObjectEvents.note}.`, '',
+  '## Fault probes: the minimal inputs of the three recorded faults (mkqsxn, fhkyrn, trbwvd), asserted on this head', '', '```json', J(A.faultProbes, null, 1), '```', '',
   '## Unmeasured (need a real Claude Code and an API key in a container)', '',
   tab(['R', 'what is still open', 'needs'], [
     ['R1', 'event to OpenAI-style chunk mapping on recorded streams (the mapping is the harness listener, not built)', 'the listener, plus recorded real Messages streams'],
@@ -771,7 +845,7 @@ md.push(`# Gateway core, deterministic measurements (${DATE})`, '',
     ['R13', 'cache-hit ratio through the gateway within 2 points of direct', 'a scripted 30-turn session, key, real upstream, direct arm'],
     ['R14', 'acceptance of a synthetic stop sequence without retry or continue prompt', 'real Claude Code, key, each haltStopReason (end_turn, max_tokens)'],
     ['R15', 'cache-hit not lower, higher in a churn case, attribution block stays stripped', 'real upstream, key, scripted churn session, recorded requests'],
-    ['R16', 'unpublished listener isolation and no forwarded credential', 'the node listeners (not built) and a container network; core shape checks measured'],
+    ['R16', 'unpublished listener isolation and no forwarded credential', 'the node listeners (not built) and a container network; core shape and header-allowlist checks measured'],
     ['R17', 'thinking alteration signature rejection and recovery cost', 'real upstream, key, a tool loop with an altered thinking block'],
     ['R9, R10', 'later: mirror and tool execution once', 'routes A, B or E running'],
   ]), '');
