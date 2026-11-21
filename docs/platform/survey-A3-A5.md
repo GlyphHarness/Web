@@ -1,0 +1,57 @@
+# Survey A3 and A5 (coarse run, 2026-11-21)
+
+Status: hypothesis evidence, not verified beyond what is stated. Records: docs/platform/explored-A3-A5.jsonl (13 explored records, 30 breadcrumbs). Catalog inbox: catalog/inbox/survey-dcmvtq.jsonl (names and the explored concept).
+Method: search first (standard), then the one best source per question; budget 3 fetched sources per area (A3: RFC 10024, RFC 9111 4.4, DPV repository; A5: MDN Event.timeStamp, XTDB blog, HLC paper which failed to load). Seven web searches gave leads (gist). Fetch answers were extracted by a small model from a prompt, so "concrete" means a primary page read through that extraction.
+
+## Explored record
+Defined as the `explored` catalog (intake B1), one JSON line per source looked at. Fields:
+- `id` 6 letters; `concern` (area, question, short); `at` YYYY-MM-DD; `source` (url or path; for a search, the query).
+- `kept` (<= 60 words): the kept blob, own words, noise filtered. `loc`: where in the source it came from.
+- `unread`: ranges and linked pages not read, so a later run resumes there instead of refetching.
+- `breadcrumbs` [{`target`, `gist` (<= 25 words), `confidence`, `deferred_because`}]; `supersedes`? (a change is a new line).
+- A line in the catalog inbox also has `"to": "explored"`.
+Names: explored record rgnhri, kept blob rqkbvs ("blob" in C10 means skill blob; hence "kept blob"), unread range rzokfr. Concept: explored catalog ictovp. Relation: collector vifitn (context inbox) removes exploring turns on the host; explored catalog does it for outside sources. Platform concepts it feeds: ghttaf, ydsgja, mvfezw, eeroue, lojtwn, dgtcqd, gsioti.
+
+## Breadcrumbs
+Names: breadcrumb bfebtg, source confidence rgtztt. Concept: deferred breadcrumbs mhvnlg.
+- A breadcrumb names the blob it came from (the record it sits in), so its place is known.
+- Confidence: `concrete` read and checked; `gist` seen in a summary (a search result or a listing); `inferred` from memory or context, with a search to confirm deferred. Own memory is never concrete.
+
+## Coarse run
+Names: coarse run gwwknz, concern rank vbamkc. Concept: ranked coarse run ztjmrd.
+- Rank before any fetch: 1 function and features, 2 security, 3 nomenclature and what a name means for the product. Lower ranks wait.
+- Per concern: grep catalog and inbox for covered ground, search (standard), the one best source, smallest blob; budget default 5 sources, here 3.
+- Everything seen and not followed becomes a breadcrumb; no second pass without the operator or a concept record promoting the concern.
+- Ranking applied here: A3 by S3.2 (function) and S3.1 (security) before S3.3 and S3.4; A5 S5.1 and S5.2 (function) before S5.3.
+
+## Answers A3
+| q | answer | confidence | records |
+| --- | --- | --- | --- |
+| S3.1 | Hybrid X25519MLKEM768 is standardized: RFC 10024, Standards Track, August 2026 (also SecP256r1MLKEM768, SecP384r1MLKEM1024). A vendor says it is the preferred group in most major browsers; its origin-side support went 0.5% to 12.8% (2023 to now). PQ certificate signatures (ML-DSA) and the CA/B Forum stance: not found. | RFC concrete; browser and share claims gist; certificates open | qsmdre zxplio |
+| S3.2 | RFC 9111 4.4 invalidates by URI only (target, plus same-origin Location and Content-Location after an unsafe 2xx or 3xx): no enumeration. Tag purge (Fastly Surrogate-Key, Cloudflare and Akamai Cache-Tag) drops all members sharing a key; it needs the server to tag each response and is a vendor convention, not a standard. QUERY method and cursor connections: unverified. | RFC concrete; vendors gist | aznodo gdqdyk |
+| S3.3 | Partial. W3C DPV (v2.3) is a vocabulary and ontology with an EU-GDPR extension and modules for 40+ countries; the only US entry is national, no state-law extension listed; ODRL is a policy language without legal content, a DPV-with-ODRL guide is in development. Global Privacy Control not verified. | DPV concrete; ODRL relation gist | zkwyuo yxhqbt |
+| S3.4 | None found as a defined term. Closest meaning: the constraint layer sits outside the agent's writable scope and changes need a human or cryptographic gate (supports Q1 reading a). Preprints on governed self-modification exist, one with a self-reported result. | gist (search only) | pxkham |
+
+## Answers A5
+| q | answer | confidence | records |
+| --- | --- | --- | --- |
+| S5.1 | Event.timeStamp is a DOMHighResTimeStamp: ms from the global's time origin (navigation start in a window) to event creation. Resolution coarsened: Chrome 0.1 ms, Safari and Firefox 1 ms, 5 to 20 microseconds when cross-origin isolated, 16.667 ms under Firefox resistFingerprinting. One stamp per event; no per-transition times found (so a press-drag-release has no single record; the gap versus an event record). Coalesced and predicted pointer events not checked. | concrete (MDN, extracted); gap partly inferred | npqhtm rmyvsg |
+| S5.2 | SQL:2011 defines system-time, application-time and bitemporal tables with AS OF reads. XTDB exposes them, keeps separate current and historical indices so current reads stay fast, and appends rather than rewrites. History is append-only, growth unbounded unless pruned; no compaction or retention policy found. Datomic: not covered. | XTDB concrete; growth gist | uoisfy jumffu |
+| S5.3 | No single authoritative practice found. Wall-clock stamps alone can go backwards (leap seconds, steps); monotonic clocks are for durations on one machine; hybrid logical clocks (physical time plus logical counter) track NTP time and keep causality, with skew bounds (one vendor: 500 ms). The HLC paper could not be read. | gist | rjlqui bsnwuf |
+
+## Deferred (30 breadcrumbs in the records; ranked, top first)
+1. S3.1 PQ certificates: CA/B Forum and root programs on ML-DSA (inferred, no source seen).
+2. S3.2 HTTP QUERY RFC and its cacheability; JSON:API or GraphQL cursor connections (inferred).
+3. S5.2 retention and compaction of history: TDSQL VLDB paper, Datomic excision (gist, inferred).
+4. S5.3 HLC paper text (the PDF is saved locally by the fetch tool; no readable text).
+5. S5.1 Event Timing API and coalesced or predicted pointer events (inferred).
+6. S3.1 browser versions and dates for the default group; Cloudflare Radar figure (gist, inferred).
+7. S3.3 Global Privacy Control; DPV-with-ODRL guide; US state-law coverage (inferred, concrete pointer).
+8. S3.4 Governed Individuation preprint, harness-tampering audit, vendor self-modification rule (gist), after Q1 is confirmed.
+9. Vendor purge docs and essays, JUXT slides, other HLC notes (gist; low value).
+
+## Open questions
+- S3.1 second half and the browser-default claim need a second pass; promote or leave?
+- Do searches count against the "sources" budget? Here only fetched sources counted.
+- Q1 (README) now has literature backing for reading (a) only as gist.
+- 2026 items (RFC 10024, the working draft dates) come from the fetched pages; no cross-check was run.
