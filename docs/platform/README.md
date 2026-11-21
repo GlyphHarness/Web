@@ -1,7 +1,7 @@
 # Platform (app platform concept)
 
 Status: hypothesis. Built: nothing. Source: docs/concepts/INTAKE-2026-11-21.md section A (A1-A7).
-Rigid order here: steps 1-2 only (names, concept records). No spec, no code, no release. Records: merged into catalog/nomenclature.jsonl and catalog/concepts.jsonl (commit ff3646a); later changes are supersede lines in catalog/inbox/platform-hrmwqz.jsonl until the steward merges them.
+Rigid order here: steps 1-2 only (names, concept records). No spec, no code, no release. Records: merged into catalog/nomenclature.jsonl and catalog/concepts.jsonl (commit ff3646a); supersede lines pkwzte, dbnrfa, cvmhly, xtqeuj, fgsoab merged in 0bacbb5.
 
 ## Goal (hypothesis)
 An app context with V8-and-HTML-class capability whose abstraction points are contracts as data, so wasm is native and does not bind through JavaScript.

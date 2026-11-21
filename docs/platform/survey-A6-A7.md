@@ -1,6 +1,6 @@
 # Survey A6 and A7 (coarse pass, 2026-11-21)
 
-Records: `docs/platform/explored-A6-A7.jsonl` (8 explored records; wtsgpk is the S7.1 W3C, Khronos and trade search). Catalog (merged, `catalog/nomenclature.jsonl` and `catalog/concepts.jsonl`): nomenclature tjuwez (early cutoff) and bkrsad (misfire policy; superseded by mzqhdl in inbox `catalog/inbox/survey-kwtbpe.jsonl`, pending merge), concept yhmcoe (hypothesis). Budget 3 fetched sources per area; search snippets are marked gist.
+Records: `docs/platform/explored-A6-A7.jsonl` (8 explored records; wtsgpk is the S7.1 W3C, Khronos and trade search). Catalog (merged, `catalog/nomenclature.jsonl` and `catalog/concepts.jsonl`): nomenclature tjuwez (early cutoff) and bkrsad (misfire policy; superseded by mzqhdl, also in `catalog/nomenclature.jsonl`), concept yhmcoe (hypothesis). Budget 3 fetched sources per area; search snippets are marked gist.
 Platform ids linked, not duplicated: vsbder (PH13), tllxhx (PH14), gdhqxh (PH15), gsioti (PH12), hhwzgq (PH16), wurhdd (PH17), hcipca, mkohts.
 
 ## Kept and deferred
