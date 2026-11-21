@@ -62,7 +62,7 @@ Pitched flows, dithering and natural steering versus structured flows: the user'
 
 - A flow pitched for a story is named `ep-<story>-<slug>` (example `ep-A1.5-serial-vs-query`), lower case, no spaces. The name appears in three places only: the story's block in the epic doc, the session's tag sidecar (flow tag plus premise; checkable from the sidecar alone, FLOWS.md invariant 1), and the concern or result record that cites it.
 - A flow is recorded as a hypothesis first (what it expects, what refutes it), with the strategy id it ran under, the model, the wh dir and the arm (steering mode: natural, strapped, dithered). A change to what the model sees is a new strategy id: `strat-<name>-<major>.<minor>`, never an edit.
-- The terms (flow, tag, snap policy, turn template, stack, dithering, validator, projection) are the catalog's; this plan adds only the three in `catalog/inbox/steward-qtojvs.jsonl` (epic, driver stage, epic gate; see section 9).
+- The terms (flow, tag, snap policy, turn template, stack, dithering, validator, projection) are the catalog's; this plan adds only the three merged from the steward inbox (epic, driver stage, epic gate; see section 9).
 - QF1..QF8 in `docs/concepts/FLOWS.md` stay open questions; A3 turns QF2, QF3, QF5, QF7 and QF8 into measured choices, one story each. Their answers are recorded as concept results with `supersedes`, not as edits.
 
 ## 6. The measure and record loop (every story)
@@ -99,7 +99,7 @@ Stated as found; some items are the people's or other sessions' state, not decis
 
 ## 9. Catalog entries from this plan
 
-`catalog/inbox/steward-qtojvs.jsonl` holds: nomenclature for epic, driver stage and epic gate ("gate" alone is already a catalog term, so this plan says epic gate); eight concept records (hypotheses) for the ladder and the central claims of A1, A2, A3, B1 (two) and B2 (two); and two fault lines (tool-call gotchas, class common). The steward merges it after review; it is not merged by this commit.
+The steward inbox merged into `catalog/*.jsonl` (ids in this plan) holds: nomenclature for epic, driver stage and epic gate ("gate" alone is already a catalog term, so this plan says epic gate); eight concept records (hypotheses) for the ladder and the central claims of A1, A2, A3, B1 (two) and B2 (two); and two fault lines (tool-call gotchas, class common). The steward merges it after review; it is not merged by this commit.
 
 ## 10. First week (week of Monday 2026-11-23)
 

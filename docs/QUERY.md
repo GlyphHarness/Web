@@ -6,7 +6,7 @@ Claim: the harness holds data (session flows, turns, stems, handles, checkpoints
 
 Related, not replaced: handles (`app/handles.js`, opaque ids with per-reader views), `output_read` and `entry_read` (`app/tools.js`), query shape as the synopsis and select then fetch (`docs/concepts/INVENTORY.md` I-hypotheses), enumerable result set (`docs/platform/protocols.md` PH6), progressive exposure and entry_read (`docs/TENETS.md` 21, 38). The query surface is a sibling of these, not a rewrite: v1 coexists with `output_read` and `entry_read`.
 
-Terms (catalog nomenclature, `catalog/inbox/context-bbpyva.jsonl` until merged): query surface, result-set header, query decorator, kind, label, query-ref, declared interaction, staged intent, reducer hook, materialized kind, data-source adapter, query scope. Sibling piece not defined here: text striping (another agent); here only the hook where its reducers plug in (section 5).
+Terms (catalog nomenclature, merged into `catalog/nomenclature.jsonl`): query surface, result-set header, query decorator, kind, label, query-ref, declared interaction, staged intent, reducer hook, materialized kind, data-source adapter, query scope. Sibling piece not defined here: text striping (another agent); here only the hook where its reducers plug in (section 5).
 
 Standalone first: a pure ES module, no DOM, no storage, no network, no clock except an injected one. Page integration (tool calls in `app/tools.js`, a card) is a later piece (section 9).
 

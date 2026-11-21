@@ -1,6 +1,6 @@
 # Claude route survey (coarse pass, 2026-11-21)
 
-Status: hypothesis. Built: nothing. Concern: a pluggable Claude route for WebHarness (the browser harness uses the user's own Claude Code, running in a podman container, as a provider beside OpenRouter). Rigid order here: steps 1-2 (names, concept records R1..R18) plus a plan for 3-8. Branch `claude-route`, cut from dev 2c6b717. Records: `catalog/inbox/survey-rtecld.jsonl` (explored, nomenclature, concepts; the steward merges).
+Status: hypothesis. Built: nothing. Concern: a pluggable Claude route for WebHarness (the browser harness uses the user's own Claude Code, running in a podman container, as a provider beside OpenRouter). Rigid order here: steps 1-2 (names, concept records R1..R18) plus a plan for 3-8. Branch `claude-route`, cut from dev 2c6b717. Records: merged into `catalog/*.jsonl` (nomenclature, concepts) and `docs/platform/explored-claude-route.jsonl` (explored records, kept as docs files as for A3 to A7, Q10).
 Confidence words: concrete = read; gist = seen in a summary or a fetch tool's answer; inferred = memory or context, not checked.
 
 ## Where I looked
