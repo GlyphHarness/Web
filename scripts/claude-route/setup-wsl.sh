@@ -8,12 +8,13 @@
 # or inside the distro, as root:
 #   sh /mnt/c/.../setup-wsl.sh
 # Env: WH_CLAUDE_USER (default wh), WH_CLAUDE_DIR (default ~/claude-work), WH_CLAUDE_SESSION (default claude),
-#      WH_CLAUDE_UPDATE=1 reinstalls/updates the npm package.
+#      WH_CLAUDE_UPDATE=1 reinstalls/updates the npm package; WH_CLAUDE_VERSION=X.Y.Z installs @anthropic-ai/claude-code@X.Y.Z
+#      (unset: unpinned; it takes effect when the package is installed, so together with WH_CLAUDE_UPDATE=1 on an existing install).
 set -eu
 
 USER_NAME=${WH_CLAUDE_USER:-wh}
 SESSION=${WH_CLAUDE_SESSION:-claude}
-PKG=@anthropic-ai/claude-code
+PKG=@anthropic-ai/claude-code${WH_CLAUDE_VERSION:+@$WH_CLAUDE_VERSION}   # unpinned when WH_CLAUDE_VERSION is unset or empty
 
 if [ -z "${WSL_DISTRO_NAME:-}" ]; then
   # Host side: re-run this same script inside the distro, as root (the default WSL user there).
@@ -22,7 +23,7 @@ if [ -z "${WSL_DISTRO_NAME:-}" ]; then
   win=$(cygpath -m "$here/setup-wsl.sh" 2>/dev/null || echo "$here/setup-wsl.sh")
   export MSYS_NO_PATHCONV=1
   lin=$(wsl.exe -d "$DISTRO" -u root -- wslpath -u "$win" | tr -d '\r')
-  WSLENV=WH_CLAUDE_USER:WH_CLAUDE_DIR:WH_CLAUDE_SESSION:WH_CLAUDE_UPDATE exec wsl.exe -d "$DISTRO" -u root -- sh "$lin"
+  WSLENV=WH_CLAUDE_USER:WH_CLAUDE_DIR:WH_CLAUDE_SESSION:WH_CLAUDE_UPDATE:WH_CLAUDE_VERSION exec wsl.exe -d "$DISTRO" -u root -- sh "$lin"
 fi
 
 [ "$(id -u)" = 0 ] || { echo "run as root inside the distro (wsl -u root); no sudo password is used" >&2; exit 1; }

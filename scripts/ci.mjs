@@ -1,5 +1,5 @@
 // Run the smoke suites and write a record of every check (docs/STEMS.md §4).
-// Usage: node scripts/ci.mjs [main] [git] [vm] [--url URL] [--out ci-record.json]
+// Usage: node scripts/ci.mjs [main] [git] [cpu] [keys] [local] [validators] [profile] [retry] [gateway] [wh] [vm] [--url URL] [--out ci-record.json]
 // Exit status 1 when a check fails or a suite stops early.
 //
 // record: {sha, t, suites: [{suite, ok, ms, checks: [{name, ok}], failed: [names], stopped, tail}]}
