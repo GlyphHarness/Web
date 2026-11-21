@@ -168,7 +168,8 @@ async function step(name, surf, fn) {
   const m = mk();
   await m.S.run('{ turns(session: "slong", first: 20) { i role chars payload } }');                          // q1: t14 is the 30000-char result; payload clipped for t14 only
   await step('get declared (I2 clipped label t14)', m, S => S.ref('q1/t14', { op: 'get' }));
-  await step('get not declared (t3 fit, no expansion)', m, S => S.ref('q1/t3', { op: 'get' }));
+  await step('get on a clipped label t3 (declared)', m, S => S.ref('q1/t3', { op: 'get' }));
+  await step('get on a fit label t0 (not declared, REF_NOT_DECLARED)', m, S => S.ref('q1/t0', { op: 'get' }));
   await step('property not selected -> declared (I3) calls', m, S => S.ref('q1/t1', { op: 'property', name: 'calls' }));
   await step('property selected (not declared)', m, S => S.ref('q1/t1', { op: 'property', name: 'role' }));
   await step('property bad name', m, S => S.ref('q1/t1', { op: 'property', name: 'foo' }));

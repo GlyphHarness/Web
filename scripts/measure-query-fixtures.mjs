@@ -56,10 +56,10 @@ export const mkScratch = calls => ({
   },
   kinds: {
     note: { name: 'note', type: 'Note', label: e => e.id, key: e => e.id, props: ['id', 'title', 'status'], gettable: true, settable: ['status'],
-      fn(e, what) { calls.fn++; if (what.payload) { if (e.id === 'boom') throw new Error('source offline'); return e.body; } return Object.fromEntries(what.props.map(p => [p, e[p] ?? null])); },
-      set(e, name, value) { calls.set++; return { value }; } },
+      fn(e, what) { if (what.payload) { if (e.id === 'boom') throw new Error('source offline'); return e.body; } return Object.fromEntries(what.props.map(p => [p, e[p] ?? null])); },
+      set(e, name, value) { return { value }; } },
     'turn-text': { name: 'turn-text', type: 'TurnText', label: e => 'x' + e.i, key: e => 'x' + e.i, props: ['id', 'i'], gettable: true, settable: [], materialized: { descriptor: DESC },
-      fn(e, what) { calls.fn++; return what.payload ? `${e.role}#${e.i}: ${e.text}` : Object.fromEntries(what.props.map(p => [p, e[p] ?? null])); } },
+      fn(e, what) { return what.payload ? `${e.role}#${e.i}: ${e.text}` : Object.fromEntries(what.props.map(p => [p, e[p] ?? null])); } },
   },
   resolve: async (root, a) => {
     if (root === 'notes') return { entries: NOTES.slice(0, a.first ?? 20), total: NOTES.length, next: null };
@@ -74,14 +74,12 @@ export const mkScratch = calls => ({
 export function mk(opts = {}) {
   const calls = { fn: 0, set: 0, resolve: 0 }, handles = mkHandles();
   const harness = createHarnessAdapter({ sessions: () => SESSIONS, ckpt: () => MET.ckpt, trail: () => TRAIL, handles, catalog: () => CAT });
-  const scratch = mkScratch(calls);
-  for (const a of [harness, scratch]) {
+  const scratch = mkScratch(calls), adapters = opts.harnessOnly ? [harness] : [harness, scratch];
+  for (const a of adapters) {
     const r = a.resolve; a.resolve = (...x) => { calls.resolve++; return r(...x); };
     for (const k of Object.values(a.kinds)) { const f = k.fn, s = k.set; k.fn = (...x) => { calls.fn++; return f(...x); }; if (s) k.set = (...x) => { calls.set++; return s(...x); }; }
   }
-  // scratch kinds already count inside their own fn; the wrapper above counts harness kinds only once more, so reset the double count
-  scratch.kinds.note.fn = ((f) => (...x) => f(...x))(scratch.kinds.note.fn);
   const policy = opts.policy || {};
-  return { S: createSurface({ adapters: [harness, scratch], now: clock(), reader: 'sfixA', policy, prefaced: opts.prefaced }), calls, policy, handles };
+  return { S: createSurface({ adapters, now: clock(), reader: 'sfixA', policy, prefaced: opts.prefaced }), calls, policy, handles };
 }
 
