@@ -103,13 +103,13 @@ function summary() {
   const conds = ['full', 'stripe', 'ends'], tasks = ['fact', 'about'], blobsIds = [...new Set(rs.map(r => r.cell.blob))];
   const pick = (c, t, b) => rs.find(r => r.cell.cond === c && r.cell.task === t && (!b || r.cell.blob === b));
   let md = `# stripe-1.0 live probe, ${DATE}\n\nModel \`${MODEL}\` (temperature 0, reasoning off, max_tokens ${MAXTOK.about}/${MAXTOK.fact}); ${rs.length} requests; one run per cell, so n is 6 blobs per condition: read the counts, not the percentages. Script \`scripts/probe-stripe.mjs\`; pairs in \`stripe-probe-${DATE}.jsonl\` (no keys, no headers). No legend for the marker notation was given to the model in any condition.\n\n`;
-  md += `| condition | view chars (mean) | fact correct | fact answer in view | about keyword score (mean of 6) | about keywords in view (mean) |\n| --- | --- | --- | --- | --- | --- |\n`;
+  md += `| condition | view chars (mean) | prompt tokens (mean, fact asks) | fact correct | fact answer in view | about keyword score (mean of 6) | about keywords in view (mean) |\n| --- | --- | --- | --- | --- | --- | --- |\n`;
   const agg = {};
   for (const c of conds) {
     const f = rs.filter(r => r.cell.cond === c && r.cell.task === 'fact'), a = rs.filter(r => r.cell.cond === c && r.cell.task === 'about');
-    agg[c] = { factOk: f.filter(r => r.score === 1).length, factN: f.length, inView: f.filter(r => r.truth.inView).length, aboutMean: a.length ? a.reduce((s, r) => s + r.score, 0) / a.length : null, aboutN: a.length, kwView: a.length ? a.reduce((s, r) => s + r.truth.inView, 0) / a.length : null, chars: f.length ? f.reduce((s, r) => s + r.view.chars, 0) / f.length : null };
+    agg[c] = { factOk: f.filter(r => r.score === 1).length, factN: f.length, inView: f.filter(r => r.truth.inView).length, aboutMean: a.length ? a.reduce((s, r) => s + r.score, 0) / a.length : null, aboutN: a.length, kwView: a.length ? a.reduce((s, r) => s + r.truth.inView, 0) / a.length : null, chars: f.length ? f.reduce((s, r) => s + r.view.chars, 0) / f.length : null, ptok: f.length ? f.reduce((s, r) => s + (r.response.usage?.prompt_tokens || 0), 0) / f.length : null };
     const x = agg[c];
-    md += `| ${c} | ${x.chars == null ? '-' : Math.round(x.chars)} | ${x.factOk}/${x.factN} | ${x.inView}/${x.factN} | ${x.aboutMean == null ? '-' : x.aboutMean.toFixed(2)} (n ${x.aboutN}) | ${x.kwView == null ? '-' : x.kwView.toFixed(2)} |\n`;
+    md += `| ${c} | ${x.chars == null ? '-' : Math.round(x.chars)} | ${x.ptok == null ? '-' : Math.round(x.ptok)} | ${x.factOk}/${x.factN} | ${x.inView}/${x.factN} | ${x.aboutMean == null ? '-' : x.aboutMean.toFixed(2)} (n ${x.aboutN}) | ${x.kwView == null ? '-' : x.kwView.toFixed(2)} |\n`;
   }
   md += `\n## Per blob (fact: 1 correct, 0 wrong, in view y/n; about: keyword score)\n\n| blob | view chars full/stripe/ends | fact full | fact stripe | fact ends | about full | about stripe | about ends |\n| --- | --- | --- | --- | --- | --- | --- | --- |\n`;
   for (const b of blobsIds) {
