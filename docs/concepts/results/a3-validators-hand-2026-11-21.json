@@ -1,0 +1,614 @@
+[
+ {
+  "line": 10,
+  "section": "Steps",
+  "text_hash": "ywvro91u6l",
+  "text": "Concept record first in `catalog/inbox/context-<shortid>.jsonl`, status hypothesis, with the claim (",
+  "shape": {
+   "check": "presence",
+   "strength": "strong",
+   "expected": [
+    {
+     "kind": "path",
+     "text": "catalog/inbox/context-<shortid>.jsonl",
+     "pattern": "catalog/inbox/context-[A-Za-z0-9]+\\.jsonl"
+    }
+   ],
+   "forbidden": [],
+   "result": "a tool call writes or names the concept record file in the inbox"
+  },
+  "gaps": "status hypothesis, claim and metric (content); \"first\" (order against the first run)",
+  "witnesses": [
+   {
+    "kind": "path",
+    "text": "catalog/inbox/context-abcdef.jsonl"
+   },
+   {
+    "kind": "path",
+    "text": "C:/wh/x/catalog/inbox/context-hxdvpy.jsonl"
+   }
+  ],
+  "decoys": [
+   {
+    "kind": "path",
+    "text": "catalog/concepts.jsonl"
+   },
+   {
+    "kind": "path",
+    "text": "catalog/inbox/seams-abcdef.jsonl"
+   }
+  ]
+ },
+ {
+  "line": 11,
+  "section": "Steps",
+  "text_hash": "l6rpkr1l9z",
+  "text": "Give the variant a strategy id `strat-<name>-<major>.<minor>` (major = what the model sees changes).",
+  "shape": {
+   "check": "presence",
+   "strength": "strong",
+   "expected": [
+    {
+     "kind": "strategy",
+     "text": "strat-<name>-<major>.<minor>",
+     "pattern": "^strat-[a-z0-9]+(-[a-z0-9]+)*-[0-9]+\\.[0-9]+$"
+    }
+   ],
+   "forbidden": [],
+   "result": "every ledger row of the session carries a strategy id of that form"
+  },
+  "gaps": "\"blue runs under strat-serial-1.0\" (which arm is blue is not recorded); one variable per id",
+  "witnesses": [
+   {
+    "kind": "strategy",
+    "text": "strat-serial-1.0"
+   },
+   {
+    "kind": "strategy",
+    "text": "strat-stem-2.0"
+   }
+  ],
+  "decoys": [
+   {
+    "kind": "strategy",
+    "text": "strat-stem"
+   },
+   {
+    "kind": "strategy",
+    "text": "serial-1.0"
+   }
+  ]
+ },
+ {
+  "line": 12,
+  "section": "Steps",
+  "text_hash": "dhb97jijxo",
+  "text": "Mock first: spec the checks, run the mock case study, fix until green. The mock models a prefix cach",
+  "shape": {
+   "check": "order",
+   "strength": "strong",
+   "expected": [
+    {
+     "kind": "command",
+     "text": "node scripts/casestudy.mjs (no --live)",
+     "pattern": "node scripts/casestudy\\.mjs(?!.*--live)"
+    },
+    {
+     "kind": "command",
+     "text": "node scripts/casestudy.mjs --live",
+     "pattern": "node scripts/casestudy\\.mjs.*--live"
+    }
+   ],
+   "forbidden": [],
+   "result": "the mock case study is run, then the live one"
+  },
+  "gaps": "\"spec the checks\" and \"fix until green\" (no command names them)",
+  "witnesses": [
+   {
+    "kind": "command",
+    "text": "node scripts/casestudy.mjs"
+   },
+   {
+    "kind": "command",
+    "text": "node scripts/casestudy.mjs --live --repeat 3"
+   }
+  ],
+  "decoys": [
+   {
+    "kind": "command",
+    "text": "node scripts/smoke.mjs"
+   },
+   {
+    "kind": "command",
+    "text": "node scripts/wh.mjs step"
+   }
+  ]
+ },
+ {
+  "line": 13,
+  "section": "Steps",
+  "text_hash": "1ad8g1y1kt",
+  "text": "Choose the work as PROGRAMME.md says (pertinent work on the board, no toy tasks). Example: the side ",
+  "shape": {
+   "check": "presence",
+   "strength": "weak",
+   "expected": [
+    {
+     "kind": "path",
+     "text": "docs/concepts/PROGRAMME.md",
+     "pattern": "docs/concepts/PROGRAMME\\.md"
+    }
+   ],
+   "forbidden": [],
+   "result": "the programme file is named by a tool call"
+  },
+  "gaps": "choosing pertinent work, no toy tasks (judgement); a read shows the file was looked at, not that it was followed",
+  "witnesses": [
+   {
+    "kind": "path",
+    "text": "docs/concepts/PROGRAMME.md"
+   }
+  ],
+  "decoys": [
+   {
+    "kind": "path",
+    "text": "docs/concepts/HYPOTHESES.md"
+   },
+   {
+    "kind": "path",
+    "text": "docs/case-studies/side-goal-2026-11-19-live.md"
+   }
+  ]
+ },
+ {
+  "line": 14,
+  "section": "Steps",
+  "text_hash": "mba56cj7w7",
+  "text": "Run live in a silo with the canary and full stages and the run count of PROGRAMME.md: `node scripts/",
+  "shape": {
+   "check": "presence",
+   "strength": "strong",
+   "expected": [
+    {
+     "kind": "command",
+     "text": "node scripts/casestudy.mjs --live --repeat <N>",
+     "pattern": "node scripts/casestudy\\.mjs --live --repeat [0-9]+"
+    },
+    {
+     "kind": "command",
+     "text": "node scripts/wh.mjs",
+     "pattern": "node scripts/wh\\.mjs"
+    }
+   ],
+   "forbidden": [],
+   "result": "a live run is started with the case study driver or the operator CLI"
+  },
+  "gaps": "silo, canary then full stages, run count (PROGRAMME.md numbers, not in the bullet)",
+  "witnesses": [
+   {
+    "kind": "command",
+    "text": "node scripts/casestudy.mjs --live --repeat 3"
+   },
+   {
+    "kind": "command",
+    "text": "node scripts/wh.mjs step --dir x"
+   }
+  ],
+  "decoys": [
+   {
+    "kind": "command",
+    "text": "node scripts/casestudy.mjs"
+   },
+   {
+    "kind": "command",
+    "text": "node scripts/smoke.mjs"
+   }
+  ]
+ },
+ {
+  "line": 15,
+  "section": "Steps",
+  "text_hash": "4q3ynapcyl",
+  "text": "Coherence: did the core act on the right state. A cheaper run that loses track fails. The verdict is",
+  "shape": null,
+  "none_reason": "judgement",
+  "none_why": "the verdict is the operator reading the diff and the ledger; no record says it was read"
+ },
+ {
+  "line": 16,
+  "section": "Steps",
+  "text_hash": "m5lik81by9",
+  "text": "Report median and range per strategy (requests, uncached input, cache write/read, output with reason",
+  "shape": null,
+  "none_reason": "cross-session",
+  "none_why": "the table is over runs per strategy; its location is named by another bullet"
+ },
+ {
+  "line": 17,
+  "section": "Steps",
+  "text_hash": "jl9fzhne01",
+  "text": "Write result and faults to the inbox, negative results kept with why and the model.",
+  "shape": {
+   "check": "presence",
+   "strength": "strong",
+   "expected": [
+    {
+     "kind": "path",
+     "text": "catalog/inbox/<file>.jsonl",
+     "pattern": "catalog/inbox/[A-Za-z0-9-]+\\.jsonl"
+    }
+   ],
+   "forbidden": [],
+   "result": "a tool call writes or names a file in the catalog inbox"
+  },
+  "gaps": "faults and negative results kept with why and the model (content)",
+  "witnesses": [
+   {
+    "kind": "path",
+    "text": "catalog/inbox/context-abcdef.jsonl"
+   }
+  ],
+  "decoys": [
+   {
+    "kind": "path",
+    "text": "catalog/concepts.jsonl"
+   },
+   {
+    "kind": "path",
+    "text": "docs/case-studies/x.md"
+   }
+  ]
+ },
+ {
+  "line": 20,
+  "section": "Rules",
+  "text_hash": "cji9eegzb9",
+  "text": "Production-style only: never one-off challenge sessions, never graft sessions set up only for the te",
+  "shape": null,
+  "none_reason": "turn-text",
+  "none_why": "whether a prompt is a challenge, graft or puzzle is its content, judged by reading"
+ },
+ {
+  "line": 21,
+  "section": "Rules",
+  "text_hash": "1b2nvy01rs",
+  "text": "Observe natural steering first: let the model run the work unaided and note where it steers, before ",
+  "shape": null,
+  "none_reason": "cross-session",
+  "none_why": "natural steering before structure is an order of arms across sessions"
+ },
+ {
+  "line": 22,
+  "section": "Rules",
+  "text_hash": "19c9gaz1tb",
+  "text": "Then compare: imperative structured workflow; turns altered in-line by content; turns materialized d",
+  "shape": null,
+  "none_reason": "cross-session",
+  "none_why": "a comparison of arms; one variable per strategy id compares strategy specs, not one session"
+ },
+ {
+  "line": 23,
+  "section": "Rules",
+  "text_hash": "17fnulmgdm",
+  "text": "Steering points stay generic (\"what do these hold now?\"); steps stay in the turns in plain words; id",
+  "shape": null,
+  "none_reason": "turn-text",
+  "none_why": "whether a steering point is generic and steps are in plain words is wording, judged by reading"
+ },
+ {
+  "line": 24,
+  "section": "Rules",
+  "text_hash": "1x8ex5a1yv",
+  "text": "Probe turn (aka priming turn; specified, not built): a generic prompt turn whose reply is discarded,",
+  "shape": {
+   "check": "presence",
+   "strength": "weak",
+   "expected": [
+    {
+     "kind": "cache",
+     "text": "a row with cache write, then a row with cache read",
+     "pattern": "write>0,cached>0"
+    }
+   ],
+   "forbidden": [],
+   "result": "a ledger row with cache write is followed by a row with cache read"
+  },
+  "gaps": "that the first row is a probe turn with a discarded reply and generic refs (turn text); H2, H9 as a strategy variant; the pair fits any cached run",
+  "witnesses": [
+   {
+    "kind": "cache",
+    "text": "write>0,cached>0"
+   }
+  ],
+  "decoys": []
+ },
+ {
+  "line": 25,
+  "section": "Rules",
+  "text_hash": "zxf84h4qpb",
+  "text": "Warp (partly built): vary what a stem's downstream turns see by re-pointing handles or materializing",
+  "shape": {
+   "check": "presence",
+   "strength": "strong",
+   "expected": [
+    {
+     "kind": "field",
+     "text": "resolved",
+     "pattern": "resolved"
+    }
+   ],
+   "forbidden": [],
+   "result": "the session record holds a resolved field (content hash per turn)"
+  },
+  "gaps": "one hash per turn (only presence of the field is checked); the model not being told of the change (turn text)",
+  "witnesses": [
+   {
+    "kind": "field",
+    "text": "resolved"
+   }
+  ],
+  "decoys": []
+ },
+ {
+  "line": 26,
+  "section": "Rules",
+  "text_hash": "1ra98gy1ak",
+  "text": "Second-model flow alteration (hypothesis, not built): hand the helper model procedures, background a",
+  "shape": null,
+  "none_reason": "not-built",
+  "none_why": "a hypothesis not built: no record exists that it could leave"
+ },
+ {
+  "line": 27,
+  "section": "Rules",
+  "text_hash": "cemtzf18fm",
+  "text": "Opportunistic strategies (apply only where a condition holds, such as long cores) are variants with ",
+  "shape": null,
+  "none_reason": "cross-session",
+  "none_why": "the condition and the comparison with blue span sessions; the condition (a long core) is not a recorded flag"
+ },
+ {
+  "line": 28,
+  "section": "Rules",
+  "text_hash": "49q1kk1vin",
+  "text": "`promoted` is set only by PROGRAMME.md's thresholds; in the catalog it stays `measured` (status map ",
+  "shape": {
+   "check": "presence",
+   "strength": "strong",
+   "expected": [],
+   "forbidden": [
+    {
+     "kind": "content",
+     "text": "\"status\":\"promoted\"",
+     "pattern": "\"status\": ?\"promoted\""
+    }
+   ],
+   "result": "no tool call argument sets a catalog status to promoted"
+  },
+  "gaps": "only a record written in a tool call argument is seen; thresholds of PROGRAMME.md",
+  "witnesses": [
+   {
+    "kind": "content",
+    "text": "{\"status\":\"promoted\"}"
+   },
+   {
+    "kind": "content",
+    "text": "\"status\": \"promoted\""
+   }
+  ],
+  "decoys": [
+   {
+    "kind": "content",
+    "text": "\"status\":\"measured\""
+   }
+  ]
+ },
+ {
+  "line": 29,
+  "section": "Rules",
+  "text_hash": "zfn46h16ce",
+  "text": "Never edit cached bytes mid-run; a changed spec is a new strategy id.",
+  "shape": null,
+  "none_reason": "bytes",
+  "none_why": "cached bytes edited mid-run: prefix bytes are not in a profile or ledger row"
+ },
+ {
+  "line": 30,
+  "section": "Rules",
+  "text_hash": "x5av1z14kx",
+  "text": "Tests and the mock never call real models; only operator-driven sessions do. The key is the environm",
+  "shape": {
+   "check": "presence",
+   "strength": "strong",
+   "expected": [],
+   "forbidden": [
+    {
+     "kind": "content",
+     "text": "an API key (sk-...)",
+     "pattern": "sk-[A-Za-z0-9_-]{16,}"
+    }
+   ],
+   "result": "no tool call argument holds an API-key-shaped string"
+  },
+  "gaps": "\"tests never call real models\" (provider and model of ledger rows are not a rule here); key in message text or tool results (arguments only)",
+  "witnesses": [
+   {
+    "kind": "content",
+    "text": "sk-or-v1-abcdef0123456789abcd"
+   }
+  ],
+  "decoys": [
+   {
+    "kind": "content",
+    "text": "sk-short"
+   },
+   {
+    "kind": "content",
+    "text": "task-list-of-things"
+   }
+  ]
+ },
+ {
+  "line": 31,
+  "section": "Rules",
+  "text_hash": "6l6qoq1aot",
+  "text": "A fault is recorded per model, class `common`, `uncommon` or `provider`.",
+  "shape": {
+   "check": "presence",
+   "strength": "strong",
+   "expected": [
+    {
+     "kind": "content",
+     "text": "\"class\":\"common|uncommon|provider\"",
+     "pattern": "\"class\": ?\"(common|uncommon|provider)\""
+    }
+   ],
+   "forbidden": [],
+   "result": "a fault record written in a tool call carries one of the three classes"
+  },
+  "gaps": "per model; a fault record is only one of the things a write can hold",
+  "witnesses": [
+   {
+    "kind": "content",
+    "text": "{\"class\":\"common\"}"
+   },
+   {
+    "kind": "content",
+    "text": "\"class\": \"provider\""
+   }
+  ],
+  "decoys": [
+   {
+    "kind": "content",
+    "text": "\"class\":\"rare\""
+   }
+  ]
+ },
+ {
+  "line": 32,
+  "section": "Rules",
+  "text_hash": "173qc01142",
+  "text": "Long variance is normal (reasoning 168..4755 tokens on similar turns): never conclude from one run; ",
+  "shape": null,
+  "none_reason": "cross-session",
+  "none_why": "spread over the runs PROGRAMME.md requires: a count over sessions and a number the bullet does not hold"
+ },
+ {
+  "line": 35,
+  "section": "Records",
+  "text_hash": "1xdhmne342",
+  "text": "Concepts are the C ids of `docs/concepts/CATALOG.md`; a result line cites it and the H id. Status wo",
+  "shape": {
+   "check": "presence",
+   "strength": "strong",
+   "expected": [
+    {
+     "kind": "content",
+     "text": "\"to\":\"concepts\"",
+     "pattern": "\"to\": ?\"concepts\""
+    }
+   ],
+   "forbidden": [],
+   "result": "a concept line is written in a tool call argument"
+  },
+  "gaps": "full record, new status, supersedes the earlier id; the path (covered by the bullets at 10 and 17)",
+  "witnesses": [
+   {
+    "kind": "content",
+    "text": "{\"to\":\"concepts\",\"id\":\"abcdef\"}"
+   },
+   {
+    "kind": "content",
+    "text": "\"to\": \"concepts\""
+   }
+  ],
+  "decoys": [
+   {
+    "kind": "content",
+    "text": "\"to\":\"faults\""
+   }
+  ]
+ },
+ {
+  "line": 36,
+  "section": "Records",
+  "text_hash": "i56ooqlp8w",
+  "text": "Faults (`\"to\":\"faults\"`): `id, model, fault, class, seen, handled, evidence`.",
+  "shape": {
+   "check": "presence",
+   "strength": "strong",
+   "expected": [
+    {
+     "kind": "content",
+     "text": "\"to\":\"faults\"",
+     "pattern": "\"to\": ?\"faults\""
+    }
+   ],
+   "forbidden": [],
+   "result": "a fault line is written in a tool call argument"
+  },
+  "gaps": "the seven fields",
+  "witnesses": [
+   {
+    "kind": "content",
+    "text": "{\"to\":\"faults\",\"id\":\"abcdef\"}"
+   },
+   {
+    "kind": "content",
+    "text": "\"to\": \"faults\""
+   }
+  ],
+  "decoys": [
+   {
+    "kind": "content",
+    "text": "\"to\":\"concepts\""
+   }
+  ]
+ },
+ {
+  "line": 37,
+  "section": "Records",
+  "text_hash": "utp1kqk398",
+  "text": "Publish the table as `docs/case-studies/<name>-<date>.md`. The steward merges inboxes; never write `",
+  "shape": {
+   "check": "presence",
+   "strength": "strong",
+   "expected": [
+    {
+     "kind": "path",
+     "text": "docs/case-studies/<name>-<date>.md",
+     "pattern": "docs/case-studies/[^/\\s]+-[0-9]{4}-[0-9]{2}-[0-9]{2}\\.md"
+    }
+   ],
+   "forbidden": [
+    {
+     "kind": "path",
+     "text": "catalog/*.jsonl",
+     "pattern": "(^|/)catalog/[^/\\s]*\\.jsonl$"
+    }
+   ],
+   "result": "the case-study table file is written and no catalog index file is"
+  },
+  "gaps": "the steward merges (another agent); a read of catalog/*.jsonl is also seen by an argument pattern (shape cannot tell a read from a write)",
+  "witnesses": [
+   {
+    "kind": "path",
+    "text": "docs/case-studies/a1-baseline-2026-11-21.md"
+   },
+   {
+    "kind": "path",
+    "text": "catalog/concepts.jsonl"
+   }
+  ],
+  "decoys": [
+   {
+    "kind": "path",
+    "text": "catalog/inbox/context-abcdef.jsonl"
+   },
+   {
+    "kind": "path",
+    "text": "docs/concepts/x.md"
+   }
+  ]
+ }
+]
