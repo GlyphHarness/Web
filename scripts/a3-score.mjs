@@ -71,11 +71,11 @@ for (const r of rows) {
 const HS = shaped.length;
 console.log('\n## models (hand: yield ' + HS + '/' + N + ')');
 for (const [model, ms] of Object.entries(per)) {
-  const ok = ms.filter(m => m.parsed), cost = ms.reduce((a, m) => a + (m.cost || 0), 0);
-  const s = out.models[model] = { n_runs: ms.length, parsed: ok.length, cost: +cost.toFixed(6), cost_per_run: +(cost / ms.length).toFixed(6),
-    yield_median: med(ok.map(m => m.yield)), yield_range: rng(ok.map(m => m.yield)), recall_shaped_median: med(ok.map(m => m.shaped_on_hand_shaped)), equivalent_median: med(ok.map(m => m.equivalent)), equivalent_range: rng(ok.map(m => m.equivalent)),
+  const ok = ms, parsedN = ms.filter(m => m.parsed).length, cost = ms.reduce((a, m) => a + (m.cost || 0), 0);
+  const s = out.models[model] = { n_runs: ms.length, parsed: parsedN, cost: +cost.toFixed(6), cost_per_run: +(cost / ms.length).toFixed(6),
+    yield_median: med(ok.map(m => m.yield)), yield_parsed_median: med(ms.filter(m => m.parsed).map(m => m.yield)), yield_range: rng(ok.map(m => m.yield)), recall_shaped_median: med(ok.map(m => m.shaped_on_hand_shaped)), equivalent_median: med(ok.map(m => m.equivalent)), equivalent_range: rng(ok.map(m => m.equivalent)),
     extra_on_hand_none_median: med(ok.map(m => m.shaped_on_hand_none)), resolvable_median: med(ok.map(m => m.resolvable)), valid_median: med(ok.map(m => m.valid)), runs: ms };
-  console.log(`${model}: n ${s.n_runs} parsed ${s.parsed}; yield median ${s.yield_median}/${N} (range ${s.yield_range}) vs hand ${HS}; on the ${HS} hand-shaped: shaped ${s.recall_shaped_median}, equivalent ${s.equivalent_median} (range ${s.equivalent_range}); on the ${N - HS} hand-none: shaped ${s.extra_on_hand_none_median}; resolvable ${s.resolvable_median}; valid items ${s.valid_median}; cost $${s.cost.toFixed(5)} ($${s.cost_per_run.toFixed(5)}/run)`);
+  console.log(`${model}: n ${s.n_runs} parsed ${s.parsed}; yield median ${s.yield_median}/${N} (range ${s.yield_range}; parsed runs only ${s.yield_parsed_median}) vs hand ${HS}; on the ${HS} hand-shaped: shaped ${s.recall_shaped_median}, equivalent ${s.equivalent_median} (range ${s.equivalent_range}); on the ${N - HS} hand-none: shaped ${s.extra_on_hand_none_median}; resolvable ${s.resolvable_median}; valid items ${s.valid_median}; cost $${s.cost.toFixed(5)} ($${s.cost_per_run.toFixed(5)}/run)`);
 }
 if (!rows.length) console.log('(no model rows at ' + ROWS + ')');
 if (opt('json', null)) fs.writeFileSync(path.resolve(opt('json')), JSON.stringify(out, null, 1) + '\n');

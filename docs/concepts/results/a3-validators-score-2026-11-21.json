@@ -1,0 +1,471 @@
+{
+ "corpus": {
+  "profile": 7,
+  "profile+args": 8,
+  "trace": 2,
+  "a1row": 84
+ },
+ "hand": [
+  {
+   "line": 10,
+   "section": "Steps",
+   "shaped": true,
+   "strength": "strong",
+   "check": "presence",
+   "none_reason": null,
+   "self": "ok",
+   "pass": 0,
+   "fail": 10,
+   "unresolved": 91,
+   "resolvable": true,
+   "applicable": false,
+   "reasons": {
+    "no:args.path": 91
+   }
+  },
+  {
+   "line": 11,
+   "section": "Steps",
+   "shaped": true,
+   "strength": "strong",
+   "check": "presence",
+   "none_reason": null,
+   "self": "ok",
+   "pass": 93,
+   "fail": 0,
+   "unresolved": 8,
+   "resolvable": true,
+   "applicable": true,
+   "reasons": {
+    "no:ledger.strat": 8
+   }
+  },
+  {
+   "line": 12,
+   "section": "Steps",
+   "shaped": true,
+   "strength": "strong",
+   "check": "order",
+   "none_reason": null,
+   "self": "ok",
+   "pass": 0,
+   "fail": 10,
+   "unresolved": 91,
+   "resolvable": true,
+   "applicable": false,
+   "reasons": {
+    "no:args.command": 91
+   }
+  },
+  {
+   "line": 13,
+   "section": "Steps",
+   "shaped": true,
+   "strength": "weak",
+   "check": "presence",
+   "none_reason": null,
+   "self": "ok",
+   "pass": 0,
+   "fail": 10,
+   "unresolved": 91,
+   "resolvable": true,
+   "applicable": false,
+   "reasons": {
+    "no:args.path": 91
+   }
+  },
+  {
+   "line": 14,
+   "section": "Steps",
+   "shaped": true,
+   "strength": "strong",
+   "check": "presence",
+   "none_reason": null,
+   "self": "ok",
+   "pass": 0,
+   "fail": 10,
+   "unresolved": 91,
+   "resolvable": true,
+   "applicable": false,
+   "reasons": {
+    "no:args.command": 91
+   }
+  },
+  {
+   "line": 15,
+   "section": "Steps",
+   "shaped": false,
+   "strength": null,
+   "check": null,
+   "none_reason": "judgement"
+  },
+  {
+   "line": 16,
+   "section": "Steps",
+   "shaped": false,
+   "strength": null,
+   "check": null,
+   "none_reason": "cross-session"
+  },
+  {
+   "line": 17,
+   "section": "Steps",
+   "shaped": true,
+   "strength": "strong",
+   "check": "presence",
+   "none_reason": null,
+   "self": "ok",
+   "pass": 0,
+   "fail": 10,
+   "unresolved": 91,
+   "resolvable": true,
+   "applicable": false,
+   "reasons": {
+    "no:args.path": 91
+   }
+  },
+  {
+   "line": 20,
+   "section": "Rules",
+   "shaped": false,
+   "strength": null,
+   "check": null,
+   "none_reason": "turn-text"
+  },
+  {
+   "line": 21,
+   "section": "Rules",
+   "shaped": false,
+   "strength": null,
+   "check": null,
+   "none_reason": "cross-session"
+  },
+  {
+   "line": 22,
+   "section": "Rules",
+   "shaped": false,
+   "strength": null,
+   "check": null,
+   "none_reason": "cross-session"
+  },
+  {
+   "line": 23,
+   "section": "Rules",
+   "shaped": false,
+   "strength": null,
+   "check": null,
+   "none_reason": "turn-text"
+  },
+  {
+   "line": 24,
+   "section": "Rules",
+   "shaped": true,
+   "strength": "weak",
+   "check": "presence",
+   "none_reason": null,
+   "self": "ok",
+   "pass": 0,
+   "fail": 93,
+   "unresolved": 8,
+   "resolvable": true,
+   "applicable": false,
+   "reasons": {
+    "no:ledger.rows": 8
+   }
+  },
+  {
+   "line": 25,
+   "section": "Rules",
+   "shaped": true,
+   "strength": "strong",
+   "check": "presence",
+   "none_reason": null,
+   "self": "ok",
+   "pass": 0,
+   "fail": 0,
+   "unresolved": 101,
+   "resolvable": false,
+   "applicable": false,
+   "reasons": {
+    "field-not-recorded": 101
+   }
+  },
+  {
+   "line": 26,
+   "section": "Rules",
+   "shaped": false,
+   "strength": null,
+   "check": null,
+   "none_reason": "not-built"
+  },
+  {
+   "line": 27,
+   "section": "Rules",
+   "shaped": false,
+   "strength": null,
+   "check": null,
+   "none_reason": "cross-session"
+  },
+  {
+   "line": 28,
+   "section": "Rules",
+   "shaped": true,
+   "strength": "strong",
+   "check": "presence",
+   "none_reason": null,
+   "self": "ok",
+   "pass": 2,
+   "fail": 0,
+   "unresolved": 99,
+   "resolvable": true,
+   "applicable": true,
+   "reasons": {
+    "no:args.content": 99
+   }
+  },
+  {
+   "line": 29,
+   "section": "Rules",
+   "shaped": false,
+   "strength": null,
+   "check": null,
+   "none_reason": "bytes"
+  },
+  {
+   "line": 30,
+   "section": "Rules",
+   "shaped": true,
+   "strength": "strong",
+   "check": "presence",
+   "none_reason": null,
+   "self": "ok",
+   "pass": 2,
+   "fail": 0,
+   "unresolved": 99,
+   "resolvable": true,
+   "applicable": true,
+   "reasons": {
+    "no:args.content": 99
+   }
+  },
+  {
+   "line": 31,
+   "section": "Rules",
+   "shaped": true,
+   "strength": "strong",
+   "check": "presence",
+   "none_reason": null,
+   "self": "ok",
+   "pass": 0,
+   "fail": 2,
+   "unresolved": 99,
+   "resolvable": true,
+   "applicable": false,
+   "reasons": {
+    "no:args.content": 99
+   }
+  },
+  {
+   "line": 32,
+   "section": "Rules",
+   "shaped": false,
+   "strength": null,
+   "check": null,
+   "none_reason": "cross-session"
+  },
+  {
+   "line": 35,
+   "section": "Records",
+   "shaped": true,
+   "strength": "strong",
+   "check": "presence",
+   "none_reason": null,
+   "self": "ok",
+   "pass": 0,
+   "fail": 2,
+   "unresolved": 99,
+   "resolvable": true,
+   "applicable": false,
+   "reasons": {
+    "no:args.content": 99
+   }
+  },
+  {
+   "line": 36,
+   "section": "Records",
+   "shaped": true,
+   "strength": "strong",
+   "check": "presence",
+   "none_reason": null,
+   "self": "ok",
+   "pass": 0,
+   "fail": 2,
+   "unresolved": 99,
+   "resolvable": true,
+   "applicable": false,
+   "reasons": {
+    "no:args.content": 99
+   }
+  },
+  {
+   "line": 37,
+   "section": "Records",
+   "shaped": true,
+   "strength": "strong",
+   "check": "presence",
+   "none_reason": null,
+   "self": "ok",
+   "pass": 0,
+   "fail": 10,
+   "unresolved": 91,
+   "resolvable": true,
+   "applicable": false,
+   "reasons": {
+    "no:args.path": 91
+   }
+  }
+ ],
+ "models": {
+  "qwen/qwen3.7-flash": {
+   "n_runs": 3,
+   "parsed": 2,
+   "cost": 0.007199,
+   "cost_per_run": 0.0024,
+   "yield_median": 11,
+   "yield_parsed_median": 12,
+   "yield_range": "0..13",
+   "recall_shaped_median": 11,
+   "equivalent_median": 3,
+   "equivalent_range": "0..4",
+   "extra_on_hand_none_median": 0,
+   "resolvable_median": 11,
+   "valid_median": 24,
+   "runs": [
+    {
+     "run": 1,
+     "parsed": true,
+     "cost": 0.000717,
+     "hand_shaped": 14,
+     "yield": 13,
+     "valid": 24,
+     "items": 24,
+     "shaped_on_hand_shaped": 11,
+     "equivalent": 4,
+     "shaped_on_hand_none": 2,
+     "resolvable": 11,
+     "faults": {},
+     "lines_missing": 0,
+     "unknown_lines": 0
+    },
+    {
+     "run": 2,
+     "parsed": false,
+     "cost": 0.005244,
+     "hand_shaped": 0,
+     "yield": 0,
+     "valid": 0,
+     "items": 0,
+     "shaped_on_hand_shaped": 0,
+     "equivalent": 0,
+     "shaped_on_hand_none": 0,
+     "resolvable": 0,
+     "faults": {},
+     "lines_missing": 0
+    },
+    {
+     "run": 3,
+     "parsed": true,
+     "cost": 0.001238,
+     "hand_shaped": 14,
+     "yield": 11,
+     "valid": 24,
+     "items": 24,
+     "shaped_on_hand_shaped": 11,
+     "equivalent": 3,
+     "shaped_on_hand_none": 0,
+     "resolvable": 11,
+     "faults": {},
+     "lines_missing": 0,
+     "unknown_lines": 0
+    }
+   ]
+  },
+  "tencent/hy4-flash": {
+   "n_runs": 3,
+   "parsed": 3,
+   "cost": 0.010874,
+   "cost_per_run": 0.003625,
+   "yield_median": 11,
+   "yield_parsed_median": 11,
+   "yield_range": "11..12",
+   "recall_shaped_median": 11,
+   "equivalent_median": 6,
+   "equivalent_range": "4..7",
+   "extra_on_hand_none_median": 0,
+   "resolvable_median": 9,
+   "valid_median": 24,
+   "runs": [
+    {
+     "run": 1,
+     "parsed": true,
+     "cost": 0.0033,
+     "hand_shaped": 14,
+     "yield": 12,
+     "valid": 24,
+     "items": 24,
+     "shaped_on_hand_shaped": 11,
+     "equivalent": 4,
+     "shaped_on_hand_none": 1,
+     "resolvable": 9,
+     "faults": {},
+     "lines_missing": 0,
+     "unknown_lines": 0
+    },
+    {
+     "run": 2,
+     "parsed": true,
+     "cost": 0.004286,
+     "hand_shaped": 14,
+     "yield": 11,
+     "valid": 24,
+     "items": 24,
+     "shaped_on_hand_shaped": 11,
+     "equivalent": 7,
+     "shaped_on_hand_none": 0,
+     "resolvable": 11,
+     "faults": {},
+     "lines_missing": 0,
+     "unknown_lines": 0
+    },
+    {
+     "run": 3,
+     "parsed": true,
+     "cost": 0.003288,
+     "hand_shaped": 14,
+     "yield": 11,
+     "valid": 24,
+     "items": 24,
+     "shaped_on_hand_shaped": 11,
+     "equivalent": 6,
+     "shaped_on_hand_none": 0,
+     "resolvable": 9,
+     "faults": {},
+     "lines_missing": 0,
+     "unknown_lines": 0
+    }
+   ]
+  }
+ },
+ "hand_summary": {
+  "bullets": 24,
+  "shaped": 14,
+  "strong": 12,
+  "weak": 2,
+  "self_bad": 0,
+  "resolvable": 13,
+  "resolvable_strong": 11,
+  "applicable": 3,
+  "records_resolved": 256,
+  "records_total": 1414
+ }
+}
