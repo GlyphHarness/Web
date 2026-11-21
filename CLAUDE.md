@@ -47,3 +47,8 @@ Work on `dev`; every piece of work follows the rigid order below.
 - Limits of the session you happen to run in (a cloud session's repository scope, its network proxy) are not product requirements. Do not mirror them in the harness. The control for GitHub access is the token's own repository list.
 - Specs before code; a spec change during implementation is its own commit with a reason.
 - Catalog via inbox files only (`.claude/skills/catalog/SKILL.md`): agents write `catalog/inbox/<agent>-<shortid>.jsonl`; the steward alone merges into `catalog/*.jsonl`. Records are append-only, one JSON per line.
+
+## Terse lookups (user directive)
+- When asked for a terse readout, keep each tool call input under 80 characters and its output under 200. Hide bulk output and extract only the target, using a hint or a terse enumeration token.
+- Do not follow up with extra calls that fan out input or output to get around the cap. Splitting a dump across turns counts as bypassing it.
+- If a tool cannot be capped (for example MCP session tools return full records), say so and ask instead of querying.
