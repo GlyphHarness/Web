@@ -1,9 +1,9 @@
 # Protocol catalog (A3)
 
-Status: hypothesis. Built: nothing. Evidence: docs/platform/survey-A3-A5.md and docs/platform/explored-A3-A5.jsonl (coarse, 2026-11-21: RFC 10024, RFC 9111 4.4, DPV); names below not covered there are from memory and marked unverified.
+Status: hypothesis. Built: nothing. Threat model (PH18, operator answer 2026-11-21): RSI-grade adversary. Evidence: docs/platform/survey-A3-A5.md and docs/platform/explored-A3-A5.jsonl (coarse, 2026-11-21: RFC 10024, RFC 9111 4.4, DPV); names below not covered there are from memory and marked unverified.
 
 ## Terms
-platform protocol, protocol catalog, protocol layer, default protocol, enumerated invalidation, enumerable result set, regulatory protocol, security suite.
+platform protocol, protocol catalog, protocol layer, default protocol, enumerated invalidation, enumerable result set, regulatory protocol, security suite, RSI-grade adversary.
 "protocol" in catalog/ otherwise means docs/PROTOCOL.md (harness) or flow protocol; here always "platform protocol".
 
 ## Shape (hypothesis)
@@ -42,10 +42,23 @@ Claim: TLS versions, key exchange and signature suites (including post-quantum o
 Record sketch: id, tls_version, kex[], sig[], cipher[], pq_mode (none | hybrid | pq-only), ca_policy (trust store source, pinning, revocation, transparency), min_version.
 Holds if: enabling a hybrid post-quantum suite or tightening the CA policy is a catalog change only, and downgrade is refused by the record's min values.
 Replaces: library defaults hidden in a runtime.
-Cost: the crypto implementation still lives in the platform; records choose, they do not implement. Wrong records weaken security, so catalog write rights matter (Q1, Q8).
+Cost: the crypto implementation still lives in the platform; records choose, they do not implement. Wrong records weaken security, so catalog write rights matter (Q8). Threat model: RSI-grade adversary (PH18); agility and hybrid modes follow from it.
 
-## Q1 self-improvement-resistant surfaces
-Unresolved meaning (README Q1). Reading (a): protocol, trust and delegation records are not writable by anything the app ingests or by the app's own learned behavior at runtime; changes arrive only through a separate authoring path. Stated as a property to test under trust.md, not as a protocol.
+## PH18 RSI-resistant surfaces (wkpcau; Q1 answered 2026-11-21)
+Meaning (operator): resistant to a recursively self-improving (RSI) intelligent agent with high-level cryptographic solving and exploiting ability that breaks or exploits our system easily (RSI-grade adversary, hnqzly). Not "records the app cannot edit".
+Claim: if every protocol, trust and look surface is designed assuming that adversary, no single broken primitive or leaked secret defeats the platform alone.
+Consequences (hypothesis):
+- Do not rely on one primitive's secrecy or hardness: records may name more than one kex and sig (hybrid), so one break does not decide.
+- Agility: swapping a suite is a record change (PH8); the platform assumes any suite may be broken later.
+- Post-quantum: hybrid or pq-only modes are first-class records, not later additions; downgrade is refused by min values.
+- No security through obscurity: nothing depends on hidden formats, unpublished records or a secret design; secrets are keys only.
+- Restrictions stay options, off by default (CLAUDE.md): the baseline is cryptographic design and provenance (trust.md); gates, allowlists and deny rules are added when wanted as features.
+Holds if: with any one suite record in a hybrid pair marked broken, the exchange still meets its record's security claim or refuses with a named error; no design note or contract depends on a secret other than keys.
+Replaces: a single-library, single-suite, trust-the-runtime stance.
+Cost: more records and larger handshakes; each added primitive is more implementation to keep correct; options (gates) wait for a feature wish. Unproven: what a cryptographically strong RSI adversary can still do to implementation bugs (side channels, memory safety) that suite records do not cover; the platform's own code stays an attack surface.
+
+## Kept (Q1)
+- Reading (a), "records the app cannot edit": not the meaning. Its property (changes to catalog, delegation and provenance rules only through a separate authoring path under the principal, Q8) stays as one consequence to test in trust.md, not as the definition.
 
 ## Kept (rejected, reasoning only)
 - Defaults in code "for safety": rejected by directive; fail closed with a named error instead.
@@ -56,5 +69,5 @@ Unresolved meaning (README Q1). Reading (a): protocol, trust and delegation reco
 S3.1 Post-quantum transport status in 2026: which hybrid key exchange (candidates from memory, unverified: X25519 with ML-KEM-768) is default in major browsers and servers; are PQ certificate signatures (ML-DSA) deployed or only planned (CA/Browser Forum, root program stance)? Answer: name, status, date, source.
 S3.2 Closest existing prior art for partial invalidation by enumeration and enumerable result sets (candidates, unverified: HTTP cache RFC 9111 and Cache-Status, CDN purge by tag or surrogate key, the HTTP QUERY method, cursor connections in JSON:API or GraphQL). Which actually invalidate by listing members, and what do they need from the server?
 S3.3 Machine-readable privacy rules: is there a settled vocabulary (candidates, unverified: W3C DPV, ODRL, Global Privacy Control) and how far does it go for GDPR and US state laws? Answer: exists / partial / none, with source.
-S3.4 One source only: does any literature define "self-improvement-resistant" or equivalent (tamper-resistant policy for AI agents)? Report meaning found or "none".
+S3.4 Closed: Q1 answered 2026-11-21 (RSI-grade adversary, PH18). Optional later, not requested: literature on cryptographic and implementation security against AI-automated attack.
 Defer: QUIC/HTTP3 detail, UDP security, CA transparency internals.

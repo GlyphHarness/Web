@@ -44,21 +44,30 @@ Holds if: a scheduled function replays from its tick list with no hidden state; 
 Replaces: ad hoc timers with captured mutable state.
 Cost: functions must keep outputs and effects declared (effect contract with delegation, trust.md).
 
-## PH15 trace guard knockout (fgsoab, supersedes gdhqxh)
+## PH15 trace guard knockout (vjdkxo, supersedes fgsoab, gdhqxh)
 Claim: a trace guard over a projection of a run trace, when it fails, knocks out the downstream runs that depended on it, bounded by early cutoff (yhmcoe: a re-run with an unchanged output hash stops propagation; survey-A6-A7.md S6.2, rustc red-green). "Exactly" is dropped: cutoff may spare a dependent whose output is unchanged.
 Data:
 - run trace: run id, fn, kind, at or tick, reads[{key, as_of, version}], writes, outputs, verdicts.
 - dependency: run B depends on run A if B read a version A wrote (so dependency is derived from reads, not declared).
 - trace projection: which trace fields and times one guard looks at (a view, not a copy).
-- knockout: dependents are not run if pending, marked void if already run; voided writes are tombstoned in the timeline (not deleted; append-only).
+- knockout: dependents are not run if pending, marked void if already run; voided writes are tombstoned in the timeline (not deleted; append-only). In-app state only; external effects follow the effect declaration below.
 Holds if: a failed guard on run A voids B and C (read A's writes, outputs changed) and leaves D (read other data) intact, and a dependent whose re-run output hash is unchanged is not voided, shown from the traces alone; the guard sees only its projection.
 Replaces: exception unwinding and manual cache invalidation after a bad step.
-Cost: dependency graph from traces; policy for effects already external (Q6): compensation, or non-voidable flag, or hold effects until guards pass (holding is a restriction, so only as an option).
-Open (Q4): "guards project its traces" read as projection = view over trace. Alternate reading: guard projects what should follow and compares to what occurred (gwokxx style). If so, knockout fires on a mismatch of projected versus occurred; both readings fit the same data.
+Cost: dependency graph from traces; effect handling below (Q6).
+Decided (Q4, 2026-11-21, platform's call): a trace guard reads a projection of a run trace, a view over fields and times of one trace. The guard is a predicate on that view; it does not project what should follow.
+Decided (Q6, 2026-11-21, platform's call, operator suggestion adopted): knockout voids only in-app derived state (runs, timeline versions by tombstone, outputs). An effect that already left the app (message sent, payment made) is irreversible and is never voided. An effect record declares one of:
+- guarded: released only after its guard clears, so knockout precedes release;
+- compensated: a compensating action (named in the record, with its delegation) is recorded and runs on knockout;
+- final: declared non-voidable; release has no guard (the author owns that).
+No declaration, no release: the effect contract rejects an undeclared effect with a named error (a required field, not a gate). Holding is the behavior of "guarded" only; there is no global hold. A compensation is its own run with its own trace.
+Check: from traces alone, a failed guard on A leaves a guarded effect unreleased, runs the compensation of a compensated one once, and leaves a final one untouched.
+Cost: authors classify every effect; "guarded" delays effects by guard latency; compensations can fail (unproven that all effects have one; a sent message has none, so it is guarded or final).
 
 ## Kept (rejected, reasoning only)
 - Wall-clock timers per function: rejected; drift, DST and clock steps. Epoch grid is calculable.
 - Mutating state with last-writer-wins: rejected; no as-of reads possible.
+- Q4 alternate reading, a guard projects what should follow and compares it to what occurred (gwokxx style): dropped; one data shape is enough, a mismatch check can still be a predicate over the view.
+- Knockout voiding effects already external (undo a sent message): rejected as impossible; effects are guarded, compensated or final.
 - Declared dependencies between runs: rejected for the base; reads-derived dependencies cannot be forgotten. May add declared ones as an option.
 - Timestamps as floats of local time: rejected; the timestamp rule says unit and origin.
 

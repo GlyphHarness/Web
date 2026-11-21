@@ -1,7 +1,20 @@
 # Survey A6 and A7 (coarse pass, 2026-11-21)
 
-Records: `docs/platform/explored-A6-A7.jsonl` (8 explored records; wtsgpk is the S7.1 W3C, Khronos and trade search). Catalog (merged, `catalog/nomenclature.jsonl` and `catalog/concepts.jsonl`): nomenclature tjuwez (early cutoff) and bkrsad (misfire policy; superseded by mzqhdl, also in `catalog/nomenclature.jsonl`), concept yhmcoe (hypothesis). Budget 3 fetched sources per area; search snippets are marked gist.
+Records: `docs/platform/explored-A6-A7.jsonl` (9 explored records, epkwtn added by the budget recount; wtsgpk is the S7.1 W3C, Khronos and trade search). Catalog (merged, `catalog/nomenclature.jsonl` and `catalog/concepts.jsonl`): nomenclature tjuwez (early cutoff) and bkrsad (misfire policy; superseded by mzqhdl, also in `catalog/nomenclature.jsonl`), concept yhmcoe (hypothesis). Budget 3 sources per area, a search counting as a source (operator ruling, see Budget recount; this pass overran it). Search snippets are marked gist.
 Platform ids linked, not duplicated: vsbder (PH13), tllxhx (PH14), gdhqxh (PH15), gsioti (PH12), hhwzgq (PH16), wurhdd (PH17), hcipca, mkohts.
+
+## Budget recount (2026-11-21)
+Rule (operator): a web search is a way of fetching; a source from the web is a source. Searches count, and so does each result page relied on (none were: result pages stayed unread, only snippets used). Recount from explored-A6-A7.jsonl:
+| area | fetched | searched | counted before | counted now | budget | overrun |
+| --- | --- | --- | --- | --- | --- | --- |
+| A6 | 3 (sqkdtn, hnvexo, fyplga) | 2 (wqmzar; epkwtn, no record until now) | 3 | 5 | 3 | 2 |
+| A7 | 3 (bdlcwy, rhtkep, ujmcza) | 1 (wtsgpk) | 3 | 4 | 3 | 1 |
+- Evidence kept stays. Labelled taken beyond budget: A6 S6.1 named policies (wqmzar) and epoch alignment (epkwtn: Flink, Kafka Streams), that is the whole S6.1 gist; A7 S7.1 WGSL status and WebGL commentary (wtsgpk). The in-budget part is the three fetched pages per area; order of use was not kept.
+- Searches missing an explored record: one in A6. The S6.1 epoch-alignment evidence (Flink, Kafka Streams) had no record of its own, only breadcrumbs under wqmzar. Record epkwtn appended; its query text was not kept, and it may have been the same search call as wqmzar (unconfirmed). Counted as separate, which is the conservative count; if it was the same call, A6 is 4, overrun 1.
+- A7 uncertainty: bdlcwy carries a breadcrumb (Chrome "next for WebGPU") that wtsgpk does not, so a second search may have run. It cannot be confirmed from the records; no record was invented. If one ran, A7 is 5, overrun 2.
+- Shape note: records in this file carry no `to` and no `supersedes` field, unlike explored-A3-A5.jsonl. Left as is (append-only); epkwtn follows this file's shape and its inbox copy carries `to`.
+- Rule for later runs: every search gets an explored record when it is run (a search is a source). Queries are kept verbatim where possible; otherwise the record says the query was not kept.
+- No new source was fetched for this recount.
 
 ## Kept and deferred
 | source | area | confidence | kept |
