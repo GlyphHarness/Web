@@ -1,0 +1,2979 @@
+{
+ "date": "2026-11-21",
+ "script": "scripts/measure-query.mjs",
+ "node": "v24.1.0",
+ "tokenEstimate": "ceil(chars/4)",
+ "headSha": null,
+ "sources": {
+  "sessions": [
+   {
+    "id": "sfixA",
+    "turns": 11,
+    "from": "scripts/fixtures/metrics-sessions.json"
+   },
+   {
+    "id": "sfixB",
+    "turns": 4,
+    "from": "scripts/fixtures/metrics-sessions.json"
+   },
+   {
+    "id": "s_fix_a",
+    "turns": 5,
+    "from": "scripts/fixtures/render-sessions.json"
+   },
+   {
+    "id": "s_fix_b",
+    "turns": 3,
+    "from": "scripts/fixtures/render-sessions.json"
+   },
+   {
+    "id": "slong",
+    "turns": 40,
+    "from": "synthetic (in-script, deterministic)"
+   }
+  ],
+  "catalog": {
+   "concepts": 171,
+   "faults": 34,
+   "terms": 229,
+   "read": "catalog/*.jsonl at run time"
+  },
+  "trailRows": 25,
+  "handles": "synthetic (km7q2x stem, ab3dd9 checkpoint)",
+  "extraAdapter": "scratch: settable note, failing note, materialized turn-text (in-script)"
+ },
+ "summary": {
+  "queries": 59,
+  "ok": 44,
+  "failed": 15,
+  "headerShareOkAll": 0.436,
+  "headerShareWithData": 0.417,
+  "queriesUnder25pct": 6,
+  "okQueries": 44,
+  "headerTokensOk": 7533,
+  "resultTokensOk": 17235,
+  "headerPartShares": {
+   "attrs": 0.282,
+   "kinds": 0.318,
+   "refs": 0.196,
+   "pages": 0.089,
+   "reducers": 0.043,
+   "dropped": 0.004,
+   "base": 0.068
+  },
+  "medianMs": 0.218,
+  "maxMs": 0.851,
+  "determinism": {
+   "checks": 118,
+   "identical": 116,
+   "freshSurfaceIdentical": "59/59",
+   "rerunDiffers": [
+    "handle-audit",
+    "mat-turn-text-first"
+   ],
+   "rerunReason": "expected state: a second run on one surface sees changed state (the once-only kind descriptor is not resent; the first handle payload read appended an audit row, so the audit total grows); a fresh surface is byte-identical"
+  },
+  "headerShareHeaderAttrsChanged": 0.379
+ },
+ "byGroup": {
+  "flow": {
+   "n": 14,
+   "headerTok": 2337,
+   "resultTok": 6016,
+   "share": 0.388,
+   "under25": 3
+  },
+  "harness": {
+   "n": 5,
+   "headerTok": 816,
+   "resultTok": 2009,
+   "share": 0.405,
+   "under25": 1
+  },
+  "catalog": {
+   "n": 13,
+   "headerTok": 2443,
+   "resultTok": 5773,
+   "share": 0.422,
+   "under25": 1
+  },
+  "handle": {
+   "n": 3,
+   "headerTok": 420,
+   "resultTok": 541,
+   "share": 0.776,
+   "under25": 0
+  },
+  "scratch": {
+   "n": 1,
+   "headerTok": 140,
+   "resultTok": 183,
+   "share": 0.768,
+   "under25": 0
+  },
+  "meta": {
+   "n": 1,
+   "headerTok": 62,
+   "resultTok": 634,
+   "share": 0.098,
+   "under25": 1
+  },
+  "materialized": {
+   "n": 4,
+   "headerTok": 823,
+   "resultTok": 1159,
+   "share": 0.708,
+   "under25": 0
+  },
+  "policy": {
+   "n": 3,
+   "headerTok": 492,
+   "resultTok": 920,
+   "share": 0.533,
+   "under25": 0
+  },
+  "error": {
+   "n": 15,
+   "headerTok": 161,
+   "resultTok": 923,
+   "share": 0.171,
+   "under25": 14
+  }
+ },
+ "examples": {
+  "ex1-flow-turns": {
+   "headerTok": 182,
+   "dataTok": 83,
+   "share": 0.687
+  },
+  "ex2-concepts": {
+   "headerTok": 157,
+   "dataTok": 37,
+   "share": 0.812
+  },
+  "ex3-handles": {
+   "headerTok": 164,
+   "dataTok": 83,
+   "share": 0.664
+  }
+ },
+ "descriptor": {
+  "synopsis": {
+   "chars": 2240,
+   "tokens": 560,
+   "note": "the preface bytes (surface.synopsis()), sent once per session, not part of any header"
+  },
+  "descriptorText": {
+   "chars": 155,
+   "tokens": 39
+  },
+  "first": {
+   "perQueryHeaderTokens": [
+    224,
+    182,
+    182,
+    182,
+    182,
+    182,
+    182,
+    182,
+    182,
+    182
+   ],
+   "total": 1862,
+   "first": 224,
+   "later": 182
+  },
+  "always": {
+   "perQueryHeaderTokens": [
+    230,
+    230,
+    230,
+    230,
+    230,
+    230,
+    230,
+    230,
+    230,
+    230
+   ],
+   "total": 2300,
+   "first": 230,
+   "later": 230
+  },
+  "off": {
+   "perQueryHeaderTokens": [
+    186,
+    186,
+    186,
+    186,
+    186,
+    186,
+    186,
+    186,
+    186,
+    186
+   ],
+   "total": 1860,
+   "first": 186,
+   "later": 186
+  },
+  "prefaced": {
+   "perQueryHeaderTokens": [
+    183,
+    183,
+    183,
+    183,
+    183,
+    183,
+    183,
+    183,
+    183,
+    183
+   ],
+   "total": 1830,
+   "first": 183,
+   "later": 183
+  },
+  "forkReSends": "a new surface instance re-sends the descriptor (OQ7 decision); measured: the first run of a fresh surface carries it again (see \"first\" row of each mk())",
+  "savingFirstVsAlways": 438,
+  "laterVsFirstDelta": 42
+ },
+ "refBattery": [
+  {
+   "step": "get declared (I2 clipped label t14)",
+   "ok": true,
+   "code": null,
+   "stage": null,
+   "message": null,
+   "dataChars": 12222,
+   "reducer": false,
+   "adapterFnCalls": 1,
+   "adapterSetCalls": 0,
+   "headerTok": 13,
+   "resultTok": 3073
+  },
+  {
+   "step": "get not declared (t3 fit, no expansion)",
+   "ok": true,
+   "code": null,
+   "stage": null,
+   "message": null,
+   "dataChars": 262,
+   "reducer": false,
+   "adapterFnCalls": 1,
+   "adapterSetCalls": 0,
+   "headerTok": 13,
+   "resultTok": 83
+  },
+  {
+   "step": "property not selected -> declared (I3) calls",
+   "ok": true,
+   "code": null,
+   "stage": null,
+   "message": null,
+   "dataChars": 13,
+   "reducer": false,
+   "adapterFnCalls": 1,
+   "adapterSetCalls": 0,
+   "headerTok": 14,
+   "resultTok": 22
+  },
+  {
+   "step": "property selected (not declared)",
+   "ok": false,
+   "code": "REF_BAD_NAME",
+   "stage": "ref",
+   "message": "q1/t1: property \"role\" is not declared (declared: calls, tool, ok)",
+   "dataChars": 0,
+   "reducer": false,
+   "adapterFnCalls": 0,
+   "adapterSetCalls": 0,
+   "headerTok": 14,
+   "resultTok": 53
+  },
+  {
+   "step": "property bad name",
+   "ok": false,
+   "code": "REF_BAD_NAME",
+   "stage": "ref",
+   "message": "q1/t1: property \"foo\" is not declared (declared: calls, tool, ok)",
+   "dataChars": 0,
+   "reducer": false,
+   "adapterFnCalls": 0,
+   "adapterSetCalls": 0,
+   "headerTok": 14,
+   "resultTok": 53
+  },
+  {
+   "step": "property no name",
+   "ok": false,
+   "code": "REF_BAD_NAME",
+   "stage": "ref",
+   "message": "q1/t1: property needs a name (declared: calls, tool, ok)",
+   "dataChars": 0,
+   "reducer": false,
+   "adapterFnCalls": 0,
+   "adapterSetCalls": 0,
+   "headerTok": 14,
+   "resultTok": 50
+  },
+  {
+   "step": "set on a non-settable kind",
+   "ok": false,
+   "code": "REF_NOT_DECLARED",
+   "stage": "ref",
+   "message": "q1/t1: op \"set\" is not declared by this query (declared: property[calls,tool,ok])",
+   "dataChars": 0,
+   "reducer": false,
+   "adapterFnCalls": 0,
+   "adapterSetCalls": 0,
+   "headerTok": 13,
+   "resultTok": 57
+  },
+  {
+   "step": "unknown op",
+   "ok": false,
+   "code": "REF_NOT_DECLARED",
+   "stage": "ref",
+   "message": "q1/t1: op \"delete\" is not declared by this query (declared: property[calls,tool,ok])",
+   "dataChars": 0,
+   "reducer": false,
+   "adapterFnCalls": 0,
+   "adapterSetCalls": 0,
+   "headerTok": 14,
+   "resultTok": 58
+  },
+  {
+   "step": "format: no slash",
+   "ok": false,
+   "code": "REF_FORMAT",
+   "stage": "ref",
+   "message": "ref must be <query>/<label>, for example q1/t0",
+   "dataChars": 0,
+   "reducer": false,
+   "adapterFnCalls": 0,
+   "adapterSetCalls": 0,
+   "headerTok": 8,
+   "resultTok": 41
+  },
+  {
+   "step": "format: empty",
+   "ok": false,
+   "code": "REF_FORMAT",
+   "stage": "ref",
+   "message": "ref must be <query>/<label>, for example q1/t0",
+   "dataChars": 0,
+   "reducer": false,
+   "adapterFnCalls": 0,
+   "adapterSetCalls": 0,
+   "headerTok": 8,
+   "resultTok": 41
+  },
+  {
+   "step": "unknown query",
+   "ok": false,
+   "code": "REF_UNKNOWN_QUERY",
+   "stage": "ref",
+   "message": "unknown query q9",
+   "dataChars": 0,
+   "reducer": false,
+   "adapterFnCalls": 0,
+   "adapterSetCalls": 0,
+   "headerTok": 13,
+   "resultTok": 40
+  },
+  {
+   "step": "unknown label",
+   "ok": false,
+   "code": "REF_UNKNOWN_LABEL",
+   "stage": "ref",
+   "message": "q1 has no label t99",
+   "dataChars": 0,
+   "reducer": false,
+   "adapterFnCalls": 0,
+   "adapterSetCalls": 0,
+   "headerTok": 13,
+   "resultTok": 41
+  },
+  {
+   "step": "set declared (I4) ok",
+   "ok": true,
+   "code": null,
+   "stage": null,
+   "message": null,
+   "dataChars": 18,
+   "reducer": false,
+   "adapterFnCalls": 0,
+   "adapterSetCalls": 2,
+   "headerTok": 13,
+   "resultTok": 22
+  },
+  {
+   "step": "set without value",
+   "ok": false,
+   "code": "REF_BAD_VALUE",
+   "stage": "ref",
+   "message": "q1/n1: set status needs a value",
+   "dataChars": 0,
+   "reducer": false,
+   "adapterFnCalls": 0,
+   "adapterSetCalls": 0,
+   "headerTok": 13,
+   "resultTok": 43
+  },
+  {
+   "step": "set a prop not declared",
+   "ok": false,
+   "code": "REF_BAD_NAME",
+   "stage": "ref",
+   "message": "q1/n1: set \"title\" is not declared (declared: status)",
+   "dataChars": 0,
+   "reducer": false,
+   "adapterFnCalls": 0,
+   "adapterSetCalls": 0,
+   "headerTok": 13,
+   "resultTok": 49
+  },
+  {
+   "step": "get on a failing source (REF_SOURCE)",
+   "ok": false,
+   "code": "REF_SOURCE",
+   "stage": "ref",
+   "message": "q1/boom: source offline",
+   "dataChars": 0,
+   "reducer": false,
+   "adapterFnCalls": 2,
+   "adapterSetCalls": 0,
+   "headerTok": 14,
+   "resultTok": 41
+  },
+  {
+   "step": "get declared (I1) note body",
+   "ok": true,
+   "code": null,
+   "stage": null,
+   "message": null,
+   "dataChars": 713,
+   "reducer": false,
+   "adapterFnCalls": 2,
+   "adapterSetCalls": 0,
+   "headerTok": 13,
+   "resultTok": 196
+  },
+  {
+   "step": "set after policy deny (REF_POLICY)",
+   "ok": false,
+   "code": "REF_POLICY",
+   "stage": "ref",
+   "message": "q1/n1: op \"set\" is refused by policy",
+   "dataChars": 0,
+   "reducer": false,
+   "adapterFnCalls": 0,
+   "adapterSetCalls": 0,
+   "headerTok": 13,
+   "resultTok": 44
+  },
+  {
+   "step": "requireWhy: get without why",
+   "ok": false,
+   "code": "REF_BAD_VALUE",
+   "stage": "ref",
+   "message": "q1/n1: op \"get\" needs a why (policy requireWhy)",
+   "dataChars": 0,
+   "reducer": false,
+   "adapterFnCalls": 0,
+   "adapterSetCalls": 0,
+   "headerTok": 13,
+   "resultTok": 48
+  },
+  {
+   "step": "requireWhy: get with why",
+   "ok": true,
+   "code": null,
+   "stage": null,
+   "message": null,
+   "dataChars": 713,
+   "reducer": false,
+   "adapterFnCalls": 2,
+   "adapterSetCalls": 0,
+   "headerTok": 13,
+   "resultTok": 196
+  },
+  {
+   "step": "get 30000-char turn (cap getMax 12000)",
+   "ok": true,
+   "code": null,
+   "stage": null,
+   "message": null,
+   "dataChars": 12222,
+   "reducer": false,
+   "adapterFnCalls": 1,
+   "adapterSetCalls": 0,
+   "headerTok": 13,
+   "resultTok": 3073
+  },
+  {
+   "step": "get under verbose:false (cap = summary max 200)",
+   "ok": true,
+   "code": null,
+   "stage": null,
+   "message": null,
+   "dataChars": 215,
+   "reducer": false,
+   "adapterFnCalls": 1,
+   "adapterSetCalls": 0,
+   "headerTok": 13,
+   "resultTok": 72
+  },
+  {
+   "step": "get handle payload (audited)",
+   "ok": true,
+   "code": null,
+   "stage": null,
+   "message": null,
+   "dataChars": 104,
+   "reducer": false,
+   "adapterFnCalls": 1,
+   "adapterSetCalls": 0,
+   "headerTok": 14,
+   "resultTok": 45,
+   "handleAuditRowsAdded": 1
+  },
+  {
+   "step": "queries scope: q1 after 8 later queries still valid",
+   "ok": true,
+   "code": null,
+   "stage": null,
+   "message": null,
+   "dataChars": 3,
+   "reducer": false,
+   "adapterFnCalls": 1,
+   "adapterSetCalls": 0,
+   "headerTok": 14,
+   "resultTok": 20
+  },
+  {
+   "step": "queries scope: q1 after 9 later queries expired",
+   "ok": false,
+   "code": "REF_EXPIRED",
+   "stage": "ref",
+   "message": "query q1 expired (scope: 8 queries); run the query again",
+   "dataChars": 0,
+   "reducer": false,
+   "adapterFnCalls": 0,
+   "adapterSetCalls": 0,
+   "headerTok": 14,
+   "resultTok": 50
+  },
+  {
+   "step": "queries scope: q10 still valid",
+   "ok": false,
+   "code": "REF_UNKNOWN_LABEL",
+   "stage": "ref",
+   "message": "q10 has no label s0",
+   "dataChars": 0,
+   "reducer": false,
+   "adapterFnCalls": 0,
+   "adapterSetCalls": 0,
+   "headerTok": 15,
+   "resultTok": 43
+  },
+  {
+   "step": "ticks scope: 2 ticks valid",
+   "ok": true,
+   "code": null,
+   "stage": null,
+   "message": null,
+   "dataChars": 3,
+   "reducer": false,
+   "adapterFnCalls": 1,
+   "adapterSetCalls": 0,
+   "headerTok": 14,
+   "resultTok": 20
+  },
+  {
+   "step": "ticks scope: 3 ticks expired",
+   "ok": false,
+   "code": "REF_EXPIRED",
+   "stage": "ref",
+   "message": "query q1 expired (scope: 2 ticks); run the query again",
+   "dataChars": 0,
+   "reducer": false,
+   "adapterFnCalls": 0,
+   "adapterSetCalls": 0,
+   "headerTok": 14,
+   "resultTok": 50
+  },
+  {
+   "step": "surface scope: valid after 30 queries and ticks",
+   "ok": true,
+   "code": null,
+   "stage": null,
+   "message": null,
+   "dataChars": 3,
+   "reducer": false,
+   "adapterFnCalls": 1,
+   "adapterSetCalls": 0,
+   "headerTok": 14,
+   "resultTok": 20
+  },
+  {
+   "step": "another surface instance: unknown query",
+   "ok": false,
+   "code": "REF_UNKNOWN_QUERY",
+   "stage": "ref",
+   "message": "unknown query q1",
+   "dataChars": 0,
+   "reducer": false,
+   "adapterFnCalls": 0,
+   "adapterSetCalls": 0,
+   "headerTok": 13,
+   "resultTok": 40
+  }
+ ],
+ "refSummary": {
+  "steps": 30,
+  "codes": {
+   "REF_BAD_NAME": 4,
+   "REF_BAD_VALUE": 2,
+   "REF_EXPIRED": 2,
+   "REF_FORMAT": 2,
+   "REF_NOT_DECLARED": 2,
+   "REF_POLICY": 1,
+   "REF_SOURCE": 1,
+   "REF_UNKNOWN_LABEL": 2,
+   "REF_UNKNOWN_QUERY": 2
+  },
+  "allCodesOfSpec": [
+   "REF_FORMAT",
+   "REF_UNKNOWN_QUERY",
+   "REF_EXPIRED",
+   "REF_UNKNOWN_LABEL",
+   "REF_NOT_DECLARED",
+   "REF_BAD_NAME",
+   "REF_BAD_VALUE",
+   "REF_POLICY",
+   "REF_SOURCE"
+  ],
+  "refusalsCalledAdapter": 0,
+  "oks": 12,
+  "exercised": [
+   "REF_FORMAT",
+   "REF_UNKNOWN_QUERY",
+   "REF_EXPIRED",
+   "REF_UNKNOWN_LABEL",
+   "REF_NOT_DECLARED",
+   "REF_BAD_NAME",
+   "REF_BAD_VALUE",
+   "REF_POLICY",
+   "REF_SOURCE"
+  ],
+  "notExercised": []
+ },
+ "comparison": {
+  "items": [
+   {
+    "need": "C1 ids and names of 10 hypothesis concepts",
+    "old": {
+     "bytes": 11546,
+     "tokens": 2887,
+     "calls": 1,
+     "argChars": 60,
+     "via": "output_read find \"status\": \"hypothesis\" on concepts.jsonl (all matching lines, up to 60, cut at 300 chars; includes superseded records)"
+    },
+    "new": {
+     "bytes": 1413,
+     "tokens": 354,
+     "calls": 1,
+     "argChars": 63,
+     "via": "query first:10 {id name since}"
+    },
+    "note": "old returns 40 hits of 80 matching lines (some superseded); new returns the 10 asked, current view only",
+    "ratioNewToOld": 0.12,
+    "newTokensSaved": 2533
+   },
+   {
+    "need": "C2 the claim of one concept (id dyknfq)",
+    "old": {
+     "bytes": 212,
+     "tokens": 53,
+     "calls": 1,
+     "argChars": 60,
+     "via": "output_read find \"id\":\"<id>\" (one line cut at 300 chars)"
+    },
+    "new": {
+     "bytes": 981,
+     "tokens": 246,
+     "calls": 2,
+     "argChars": 94,
+     "via": "query listing then ref get"
+    },
+    "note": "old line is 209 chars in the file, returned 212",
+    "oldCutsClaim": false,
+    "ratioNewToOld": 4.63,
+    "newTokensSaved": -193
+   },
+   {
+    "need": "C3 the text of turn 6 of slong (439 chars as a stored line)",
+    "old": {
+     "bytes": 3046,
+     "tokens": 762,
+     "calls": 1,
+     "argChars": 60,
+     "via": "output_read slice, default length 3000, oracle offset"
+    },
+    "oldTight": {
+     "bytes": 485,
+     "tokens": 122,
+     "calls": 1,
+     "argChars": 60,
+     "via": "output_read slice with exact length (needs the model to know it)"
+    },
+    "new": {
+     "bytes": 1406,
+     "tokens": 352,
+     "calls": 2,
+     "argChars": 88,
+     "via": "turns listing (i role chars, 8 turns) then ref get"
+    },
+    "note": "the old route needs a character offset it does not have; new route finds the turn by label",
+    "ratioNewToOld": 0.46,
+    "newTokensSaved": 410
+   },
+   {
+    "need": "C4 which tool calls in sfixA failed or were held",
+    "old": {
+     "bytes": 159,
+     "tokens": 40,
+     "calls": 2,
+     "argChars": 120,
+     "via": "two output_read finds (\"Not run\", \"Tool error\") on the stored transcript"
+    },
+    "new": {
+     "bytes": 826,
+     "tokens": 207,
+     "calls": 1,
+     "argChars": 55,
+     "via": "one query turns(role: \"tool\") {i tool ok}"
+    },
+    "note": "old returns whole turn lines (cut at 300), new returns the ok flag per tool turn, which carries both cases",
+    "ratioNewToOld": 5.19,
+    "newTokensSaved": -167
+   },
+   {
+    "need": "C5 shell trail rows with ok and why",
+    "old": {
+     "bytes": 487,
+     "tokens": 122,
+     "calls": 1,
+     "argChars": 60,
+     "via": "output_read find \"tool\":\"shell\" on the trail text"
+    },
+    "new": {
+     "bytes": 859,
+     "tokens": 215,
+     "calls": 1,
+     "argChars": 43,
+     "via": "query trail(tool) {n ok chars why}"
+    },
+    "ratioNewToOld": 1.76,
+    "newTokensSaved": -93
+   },
+   {
+    "need": "C6 prompt, cached, completion, cost for 12 ledger rows",
+    "old": {
+     "bytes": 2367,
+     "tokens": 592,
+     "calls": 1,
+     "argChars": 60,
+     "via": "output_read find \"model\" on the ledger text (whole rows)"
+    },
+    "new": {
+     "bytes": 1571,
+     "tokens": 393,
+     "calls": 1,
+     "argChars": 75,
+     "via": "query ledger {n prompt cached completion cost}"
+    },
+    "ratioNewToOld": 0.66,
+    "newTokensSaved": 199
+   },
+   {
+    "need": "C7 faults of qwen/qwen3.7-flash with the fault text",
+    "old": {
+     "bytes": 2097,
+     "tokens": 525,
+     "calls": 1,
+     "argChars": 60,
+     "via": "output_read find on faults.jsonl"
+    },
+    "new": {
+     "bytes": 1585,
+     "tokens": 397,
+     "calls": 1,
+     "argChars": 65,
+     "via": "query faults(model) {id class seen payload} (summary clip 200)"
+    },
+    "ratioNewToOld": 0.76,
+    "newTokensSaved": 128
+   },
+   {
+    "need": "C8 the whole of one 30000-char turn",
+    "old": {
+     "bytes": 23325,
+     "tokens": 5832,
+     "calls": 8,
+     "argChars": 480,
+     "via": "output_read slices of 4000 chars until the end (8 calls)"
+    },
+    "oldEntryRead": {
+     "bytes": 4019,
+     "tokens": 1005,
+     "calls": 1,
+     "via": "entry_read part transcript (4000 chars then a remainder note)"
+    },
+    "new": {
+     "bytes": 13203,
+     "tokens": 3301,
+     "calls": 2,
+     "argChars": 79,
+     "via": "listing then ref get (cap getMax 12000, no continuation op)"
+    },
+    "note": "new route cannot reach chars past getMax: returned 12222 of 30000 (reaches the whole: no; old route reaches the whole: yes)",
+    "newReachesWhole": false,
+    "ratioNewToOld": 0.57,
+    "newTokensSaved": 2531
+   }
+  ],
+  "total": {
+   "oldTok": 10813,
+   "newTok": 5465
+  }
+ },
+ "errorMessages": {
+  "err-parse-brace": [
+   {
+    "message": "expected a name, found end of input",
+    "code": "PARSE",
+    "stage": "parse",
+    "loc": {
+     "line": 1,
+     "column": 47
+    }
+   }
+  ],
+  "err-parse-mutation": [
+   {
+    "message": "unsupported: mutation",
+    "code": "PARSE",
+    "stage": "parse",
+    "loc": {
+     "line": 1,
+     "column": 1
+    }
+   }
+  ],
+  "err-parse-inline-fragment": [
+   {
+    "message": "unsupported: inline fragment",
+    "code": "PARSE",
+    "stage": "parse",
+    "loc": {
+     "line": 1,
+     "column": 29
+    }
+   }
+  ],
+  "err-parse-empty-selection": [
+   {
+    "message": "expected a name, found \"}\"",
+    "code": "PARSE",
+    "stage": "parse",
+    "loc": {
+     "line": 1,
+     "column": 29
+    }
+   }
+  ],
+  "err-unknown-field": [
+   {
+    "message": "unknown field \"rol\" on FlowTurn (fields: i, role, chars, calls, tool, ok, payload, label)",
+    "code": "UNKNOWN_FIELD",
+    "stage": "validate",
+    "loc": {
+     "line": 1,
+     "column": 41
+    }
+   }
+  ],
+  "err-three-faults": [
+   {
+    "message": "unknown argument \"frist\" on turns (arguments: session, role, first, after)",
+    "code": "UNKNOWN_ARG",
+    "stage": "validate",
+    "loc": {
+     "line": 1,
+     "column": 27
+    }
+   },
+   {
+    "message": "unknown field \"rol\" on FlowTurn (fields: i, role, chars, calls, tool, ok, payload, label)",
+    "code": "UNKNOWN_FIELD",
+    "stage": "validate",
+    "loc": {
+     "line": 1,
+     "column": 41
+    }
+   },
+   {
+    "message": "unknown field \"nope\" on Query (fields: turns, ledger, sessions, session, trail, checkpoints, handle, audit, concepts, faults, terms, notes, rendered, __synopsis)",
+    "code": "UNKNOWN_FIELD",
+    "stage": "validate",
+    "loc": {
+     "line": 1,
+     "column": 47
+    }
+   }
+  ],
+  "err-missing-variable": [
+   {
+    "message": "variable $s is required and was not supplied",
+    "code": "MISSING_VARIABLE",
+    "stage": "validate",
+    "loc": {
+     "line": 1,
+     "column": 9
+    }
+   },
+   {
+    "message": "turns needs argument \"session\" (ID!)",
+    "code": "MISSING_ARG",
+    "stage": "validate",
+    "loc": {
+     "line": 1,
+     "column": 20
+    }
+   }
+  ],
+  "err-limit-first": [
+   {
+    "message": "first 500 is above the limit 100",
+    "code": "LIMIT_FIRST",
+    "stage": "validate",
+    "loc": {
+     "line": 1,
+     "column": 12
+    }
+   }
+  ],
+  "err-payload-denied": [
+   {
+    "message": "payload is denied: the effective payload mode is none",
+    "code": "PAYLOAD_DENIED",
+    "stage": "validate",
+    "loc": {
+     "line": 1,
+     "column": 50
+    }
+   }
+  ],
+  "err-unknown-reducer": [
+   {
+    "message": "unknown reducer \"stripe\" (reducers: none, clip, lines, omit)",
+    "code": "UNKNOWN_REDUCER",
+    "stage": "validate",
+    "loc": {
+     "line": 1,
+     "column": 22
+    }
+   }
+  ],
+  "err-type-mismatch": [
+   {
+    "message": "argument \"first\" of turns does not fit Int",
+    "code": "TYPE_MISMATCH",
+    "stage": "validate",
+    "loc": {
+     "line": 1,
+     "column": 21
+    }
+   }
+  ],
+  "err-unknown-session": [
+   {
+    "message": "turns failed: unknown session nope",
+    "code": "RESOLVE_FAILED",
+    "stage": "execute",
+    "loc": null
+   }
+  ],
+  "err-payload-not-gettable": [
+   {
+    "message": "payload is not available: kind ledger-row is not gettable",
+    "code": "BAD_SELECTION",
+    "stage": "validate",
+    "loc": {
+     "line": 1,
+     "column": 32
+    }
+   }
+  ],
+  "err-multiple-operations": [
+   {
+    "message": "only one operation per query text is supported",
+    "code": "MULTIPLE_OPERATIONS",
+    "stage": "validate",
+    "loc": {
+     "line": 1,
+     "column": 29
+    }
+   }
+  ],
+  "err-introspection": [
+   {
+    "message": "unknown field \"__schema\" on Query (fields: turns, ledger, sessions, session, trail, checkpoints, handle, audit, concepts, faults, terms, notes, rendered, __synopsis)",
+    "code": "UNKNOWN_FIELD",
+    "stage": "validate",
+    "loc": {
+     "line": 1,
+     "column": 3
+    }
+   }
+  ]
+ },
+ "battery": [
+  {
+   "id": "flow-example1",
+   "group": "flow",
+   "queryChars": 134,
+   "ok": true,
+   "errors": [],
+   "count": 2,
+   "header": 728,
+   "data": 331,
+   "errChars": 0,
+   "total": 1059,
+   "hTok": 182,
+   "dTok": 83,
+   "eTok": 0,
+   "tTok": 265,
+   "share": 0.6874409820585458,
+   "parts": {
+    "attrs": 191,
+    "kinds": 153,
+    "refs": 158,
+    "pages": 58,
+    "reducers": 117,
+    "dropped": 0,
+    "base": 51
+   },
+   "refs": {
+    "rows": 2,
+    "ops": "get(1) property[3]",
+    "explicitLabels": 1,
+    "chars": 150
+   },
+   "ms": 0.851,
+   "hash": "4tfnyi8cwa9w",
+   "detFresh": true,
+   "detRerun": true
+  },
+  {
+   "id": "flow-all-noPayload",
+   "group": "flow",
+   "queryChars": 69,
+   "ok": true,
+   "errors": [],
+   "count": 11,
+   "header": 564,
+   "data": 849,
+   "errChars": 0,
+   "total": 1413,
+   "hTok": 141,
+   "dTok": 213,
+   "eTok": 0,
+   "tTok": 354,
+   "share": 0.3991507430997877,
+   "parts": {
+    "attrs": 191,
+    "kinds": 201,
+    "refs": 64,
+    "pages": 61,
+    "reducers": 0,
+    "dropped": 0,
+    "base": 47
+   },
+   "refs": {
+    "rows": 1,
+    "ops": "get(all)",
+    "explicitLabels": 0,
+    "chars": 56
+   },
+   "ms": 0.352,
+   "hash": "1v91csr1kdl6hj",
+   "detFresh": true,
+   "detRerun": true
+  },
+  {
+   "id": "flow-render-fixture-full",
+   "group": "flow",
+   "queryChars": 82,
+   "ok": true,
+   "errors": [],
+   "count": 5,
+   "header": 575,
+   "data": 2649,
+   "errChars": 0,
+   "total": 3224,
+   "hTok": 144,
+   "dTok": 663,
+   "eTok": 0,
+   "tTok": 806,
+   "share": 0.1783498759305211,
+   "parts": {
+    "attrs": 205,
+    "kinds": 169,
+    "refs": 95,
+    "pages": 60,
+    "reducers": 0,
+    "dropped": 0,
+    "base": 46
+   },
+   "refs": {
+    "rows": 1,
+    "ops": "property[4]",
+    "explicitLabels": 0,
+    "chars": 87
+   },
+   "ms": 0.414,
+   "hash": "1yialrdwg7bq7",
+   "detFresh": true,
+   "detRerun": true
+  },
+  {
+   "id": "flow-tool-turns",
+   "group": "flow",
+   "queryChars": 55,
+   "ok": true,
+   "errors": [],
+   "count": 5,
+   "header": 611,
+   "data": 196,
+   "errChars": 0,
+   "total": 807,
+   "hTok": 153,
+   "dTok": 49,
+   "eTok": 0,
+   "tTok": 202,
+   "share": 0.7571251548946716,
+   "parts": {
+    "attrs": 191,
+    "kinds": 169,
+    "refs": 145,
+    "pages": 60,
+    "reducers": 0,
+    "dropped": 0,
+    "base": 46
+   },
+   "refs": {
+    "rows": 2,
+    "ops": "get(all) property[3]",
+    "explicitLabels": 0,
+    "chars": 137
+   },
+   "ms": 0.269,
+   "hash": "1gvn80112vxzj",
+   "detFresh": true,
+   "detRerun": true
+  },
+  {
+   "id": "flow-long-summary",
+   "group": "flow",
+   "queryChars": 63,
+   "ok": true,
+   "errors": [],
+   "count": 20,
+   "header": 904,
+   "data": 5001,
+   "errChars": 0,
+   "total": 5905,
+   "hTok": 226,
+   "dTok": 1251,
+   "eTok": 0,
+   "tTok": 1477,
+   "share": 0.15309060118543608,
+   "parts": {
+    "attrs": 191,
+    "kinds": 255,
+    "refs": 229,
+    "pages": 61,
+    "reducers": 121,
+    "dropped": 0,
+    "base": 47
+   },
+   "refs": {
+    "rows": 2,
+    "ops": "get(14) property[3]",
+    "explicitLabels": 14,
+    "chars": 221
+   },
+   "ms": 0.65,
+   "hash": "jn41ofykqwmb",
+   "detFresh": true,
+   "detRerun": true
+  },
+  {
+   "id": "flow-long-ids",
+   "group": "flow",
+   "queryChars": 55,
+   "ok": true,
+   "errors": [],
+   "count": 40,
+   "header": 816,
+   "data": 1503,
+   "errChars": 0,
+   "total": 2319,
+   "hTok": 204,
+   "dTok": 376,
+   "eTok": 0,
+   "tTok": 580,
+   "share": 0.351875808538163,
+   "parts": {
+    "attrs": 191,
+    "kinds": 375,
+    "refs": 142,
+    "pages": 61,
+    "reducers": 0,
+    "dropped": 0,
+    "base": 47
+   },
+   "refs": {
+    "rows": 2,
+    "ops": "get(all) property[3]",
+    "explicitLabels": 0,
+    "chars": 134
+   },
+   "ms": 0.592,
+   "hash": "12kvhhkol7vm4",
+   "detFresh": true,
+   "detRerun": true
+  },
+  {
+   "id": "flow-long-page1",
+   "group": "flow",
+   "queryChars": 55,
+   "ok": true,
+   "errors": [],
+   "count": 10,
+   "header": 636,
+   "data": 376,
+   "errChars": 0,
+   "total": 1012,
+   "hTok": 159,
+   "dTok": 94,
+   "eTok": 0,
+   "tTok": 253,
+   "share": 0.6284584980237155,
+   "parts": {
+    "attrs": 191,
+    "kinds": 195,
+    "refs": 142,
+    "pages": 61,
+    "reducers": 0,
+    "dropped": 0,
+    "base": 47
+   },
+   "refs": {
+    "rows": 2,
+    "ops": "get(all) property[3]",
+    "explicitLabels": 0,
+    "chars": 134
+   },
+   "ms": 0.234,
+   "hash": "1ots3jmml73qo",
+   "detFresh": true,
+   "detRerun": true
+  },
+  {
+   "id": "flow-long-full-bounded",
+   "group": "flow",
+   "queryChars": 90,
+   "ok": true,
+   "errors": [],
+   "count": 6,
+   "header": 580,
+   "data": 1959,
+   "errChars": 0,
+   "total": 2539,
+   "hTok": 145,
+   "dTok": 490,
+   "eTok": 0,
+   "tTok": 635,
+   "share": 0.22843639228042537,
+   "parts": {
+    "attrs": 206,
+    "kinds": 174,
+    "refs": 95,
+    "pages": 59,
+    "reducers": 0,
+    "dropped": 0,
+    "base": 46
+   },
+   "refs": {
+    "rows": 1,
+    "ops": "property[4]",
+    "explicitLabels": 0,
+    "chars": 87
+   },
+   "ms": 0.314,
+   "hash": "uws7wtqgjuqb",
+   "detFresh": true,
+   "detRerun": true
+  },
+  {
+   "id": "flow-aliases",
+   "group": "flow",
+   "queryChars": 99,
+   "ok": true,
+   "errors": [],
+   "count": 4,
+   "header": 650,
+   "data": 111,
+   "errChars": 0,
+   "total": 761,
+   "hTok": 163,
+   "dTok": 28,
+   "eTok": 0,
+   "tTok": 191,
+   "share": 0.8541392904073587,
+   "parts": {
+    "attrs": 191,
+    "kinds": 164,
+    "refs": 150,
+    "pages": 99,
+    "reducers": 0,
+    "dropped": 0,
+    "base": 46
+   },
+   "refs": {
+    "rows": 2,
+    "ops": "get(all) property[4]",
+    "explicitLabels": 0,
+    "chars": 142
+   },
+   "ms": 0.189,
+   "hash": "1dqx44ite032g",
+   "detFresh": true,
+   "detRerun": true
+  },
+  {
+   "id": "flow-fragment-vars",
+   "group": "flow",
+   "queryChars": 135,
+   "ok": true,
+   "errors": [],
+   "count": 5,
+   "header": 605,
+   "data": 195,
+   "errChars": 0,
+   "total": 800,
+   "hTok": 152,
+   "dTok": 49,
+   "eTok": 0,
+   "tTok": 200,
+   "share": 0.75625,
+   "parts": {
+    "attrs": 191,
+    "kinds": 169,
+    "refs": 141,
+    "pages": 59,
+    "reducers": 0,
+    "dropped": 0,
+    "base": 45
+   },
+   "refs": {
+    "rows": 2,
+    "ops": "get(all) property[3]",
+    "explicitLabels": 0,
+    "chars": 133
+   },
+   "ms": 0.294,
+   "hash": "phj5noyj3adc",
+   "detFresh": true,
+   "detRerun": true
+  },
+  {
+   "id": "flow-skip-include",
+   "group": "flow",
+   "queryChars": 115,
+   "ok": true,
+   "errors": [],
+   "count": 3,
+   "header": 596,
+   "data": 116,
+   "errChars": 0,
+   "total": 712,
+   "hTok": 149,
+   "dTok": 29,
+   "eTok": 0,
+   "tTok": 178,
+   "share": 0.8370786516853933,
+   "parts": {
+    "attrs": 191,
+    "kinds": 159,
+    "refs": 142,
+    "pages": 59,
+    "reducers": 0,
+    "dropped": 0,
+    "base": 45
+   },
+   "refs": {
+    "rows": 2,
+    "ops": "get(all) property[3]",
+    "explicitLabels": 0,
+    "chars": 134
+   },
+   "ms": 0.185,
+   "hash": "1i875ys1y0fmcc",
+   "detFresh": true,
+   "detRerun": true
+  },
+  {
+   "id": "flow-reduce-lines",
+   "group": "flow",
+   "queryChars": 115,
+   "ok": true,
+   "errors": [],
+   "count": 4,
+   "header": 800,
+   "data": 752,
+   "errChars": 0,
+   "total": 1552,
+   "hTok": 200,
+   "dTok": 188,
+   "eTok": 0,
+   "tTok": 388,
+   "share": 0.5154639175257731,
+   "parts": {
+    "attrs": 224,
+    "kinds": 164,
+    "refs": 183,
+    "pages": 59,
+    "reducers": 124,
+    "dropped": 0,
+    "base": 46
+   },
+   "refs": {
+    "rows": 2,
+    "ops": "get(3) property[5]",
+    "explicitLabels": 3,
+    "chars": 175
+   },
+   "ms": 0.435,
+   "hash": "i3mlwt124uynn",
+   "detFresh": true,
+   "detRerun": true
+  },
+  {
+   "id": "session-one",
+   "group": "flow",
+   "queryChars": 59,
+   "ok": true,
+   "errors": [],
+   "count": 1,
+   "header": 654,
+   "data": 306,
+   "errChars": 0,
+   "total": 960,
+   "hTok": 164,
+   "dTok": 77,
+   "eTok": 0,
+   "tTok": 240,
+   "share": 0.68125,
+   "parts": {
+    "attrs": 191,
+    "kinds": 154,
+    "refs": 147,
+    "pages": 0,
+    "reducers": 116,
+    "dropped": 0,
+    "base": 46
+   },
+   "refs": {
+    "rows": 2,
+    "ops": "get(1) property[1]",
+    "explicitLabels": 1,
+    "chars": 139
+   },
+   "ms": 0.265,
+   "hash": "kjcvxp1n0yc39",
+   "detFresh": true,
+   "detRerun": true
+  },
+  {
+   "id": "sessions-list",
+   "group": "flow",
+   "queryChars": 39,
+   "ok": true,
+   "errors": [],
+   "count": 5,
+   "header": 619,
+   "data": 369,
+   "errChars": 0,
+   "total": 988,
+   "hTok": 155,
+   "dTok": 93,
+   "eTok": 0,
+   "tTok": 247,
+   "share": 0.6265182186234818,
+   "parts": {
+    "attrs": 191,
+    "kinds": 191,
+    "refs": 128,
+    "pages": 63,
+    "reducers": 0,
+    "dropped": 0,
+    "base": 46
+   },
+   "refs": {
+    "rows": 2,
+    "ops": "get(all) property[1]",
+    "explicitLabels": 0,
+    "chars": 120
+   },
+   "ms": 0.198,
+   "hash": "1qmnwrqu21boy",
+   "detFresh": true,
+   "detRerun": true
+  },
+  {
+   "id": "ledger-sfixA",
+   "group": "harness",
+   "queryChars": 87,
+   "ok": true,
+   "errors": [],
+   "count": 7,
+   "header": 674,
+   "data": 913,
+   "errChars": 0,
+   "total": 1587,
+   "hTok": 169,
+   "dTok": 229,
+   "eTok": 0,
+   "tTok": 397,
+   "share": 0.424700693131695,
+   "parts": {
+    "attrs": 191,
+    "kinds": 261,
+    "refs": 115,
+    "pages": 61,
+    "reducers": 0,
+    "dropped": 0,
+    "base": 46
+   },
+   "refs": {
+    "rows": 1,
+    "ops": "property[6]",
+    "explicitLabels": 0,
+    "chars": 107
+   },
+   "ms": 0.216,
+   "hash": "1mgr2h01jradtc",
+   "detFresh": true,
+   "detRerun": true
+  },
+  {
+   "id": "ledger-long",
+   "group": "harness",
+   "queryChars": 85,
+   "ok": true,
+   "errors": [],
+   "count": 12,
+   "header": 722,
+   "data": 1006,
+   "errChars": 0,
+   "total": 1728,
+   "hTok": 181,
+   "dTok": 252,
+   "eTok": 0,
+   "tTok": 432,
+   "share": 0.41782407407407407,
+   "parts": {
+    "attrs": 191,
+    "kinds": 290,
+    "refs": 132,
+    "pages": 62,
+    "reducers": 0,
+    "dropped": 0,
+    "base": 47
+   },
+   "refs": {
+    "rows": 1,
+    "ops": "property[8]",
+    "explicitLabels": 0,
+    "chars": 124
+   },
+   "ms": 0.347,
+   "hash": "1n1yuuzhv0yel",
+   "detFresh": true,
+   "detRerun": true
+  },
+  {
+   "id": "checkpoints",
+   "group": "harness",
+   "queryChars": 85,
+   "ok": true,
+   "errors": [],
+   "count": 3,
+   "header": 589,
+   "data": 298,
+   "errChars": 0,
+   "total": 887,
+   "hTok": 148,
+   "dTok": 75,
+   "eTok": 0,
+   "tTok": 222,
+   "share": 0.6640360766629086,
+   "parts": {
+    "attrs": 191,
+    "kinds": 204,
+    "refs": 82,
+    "pages": 66,
+    "reducers": 0,
+    "dropped": 0,
+    "base": 46
+   },
+   "refs": {
+    "rows": 1,
+    "ops": "property[2]",
+    "explicitLabels": 0,
+    "chars": 74
+   },
+   "ms": 0.192,
+   "hash": "17n6w6o12ppc1y",
+   "detFresh": true,
+   "detRerun": true
+  },
+  {
+   "id": "trail-shell",
+   "group": "harness",
+   "queryChars": 48,
+   "ok": true,
+   "errors": [],
+   "count": 5,
+   "header": 582,
+   "data": 326,
+   "errChars": 0,
+   "total": 908,
+   "hTok": 146,
+   "dTok": 82,
+   "eTok": 0,
+   "tTok": 227,
+   "share": 0.6409691629955947,
+   "parts": {
+    "attrs": 191,
+    "kinds": 191,
+    "refs": 94,
+    "pages": 60,
+    "reducers": 0,
+    "dropped": 0,
+    "base": 46
+   },
+   "refs": {
+    "rows": 1,
+    "ops": "property[5]",
+    "explicitLabels": 0,
+    "chars": 86
+   },
+   "ms": 0.165,
+   "hash": "1518s7h1ug5jex",
+   "detFresh": true,
+   "detRerun": true
+  },
+  {
+   "id": "trail-all",
+   "group": "harness",
+   "queryChars": 51,
+   "ok": true,
+   "errors": [],
+   "count": 25,
+   "header": 687,
+   "data": 2236,
+   "errChars": 0,
+   "total": 2923,
+   "hTok": 172,
+   "dTok": 559,
+   "eTok": 0,
+   "tTok": 731,
+   "share": 0.23503250085528565,
+   "parts": {
+    "attrs": 191,
+    "kinds": 305,
+    "refs": 83,
+    "pages": 61,
+    "reducers": 0,
+    "dropped": 0,
+    "base": 47
+   },
+   "refs": {
+    "rows": 1,
+    "ops": "property[3]",
+    "explicitLabels": 0,
+    "chars": 75
+   },
+   "ms": 0.398,
+   "hash": "ara9s51yp85gb",
+   "detFresh": true,
+   "detRerun": true
+  },
+  {
+   "id": "concepts-hyp-idname",
+   "group": "catalog",
+   "queryChars": 63,
+   "ok": true,
+   "errors": [],
+   "count": 10,
+   "header": 701,
+   "data": 693,
+   "errChars": 0,
+   "total": 1394,
+   "hTok": 176,
+   "dTok": 174,
+   "eTok": 0,
+   "tTok": 349,
+   "share": 0.5028694404591105,
+   "parts": {
+    "attrs": 191,
+    "kinds": 249,
+    "refs": 150,
+    "pages": 64,
+    "reducers": 0,
+    "dropped": 0,
+    "base": 47
+   },
+   "refs": {
+    "rows": 2,
+    "ops": "get(all) property[3]",
+    "explicitLabels": 0,
+    "chars": 142
+   },
+   "ms": 0.381,
+   "hash": "pie26144tb4k",
+   "detFresh": true,
+   "detRerun": true
+  },
+  {
+   "id": "concepts-hyp-payload",
+   "group": "catalog",
+   "queryChars": 65,
+   "ok": true,
+   "errors": [],
+   "count": 10,
+   "header": 844,
+   "data": 2161,
+   "errChars": 0,
+   "total": 3005,
+   "hTok": 211,
+   "dTok": 541,
+   "eTok": 0,
+   "tTok": 752,
+   "share": 0.28086522462562397,
+   "parts": {
+    "attrs": 191,
+    "kinds": 249,
+    "refs": 178,
+    "pages": 64,
+    "reducers": 115,
+    "dropped": 0,
+    "base": 47
+   },
+   "refs": {
+    "rows": 2,
+    "ops": "get(1) property[4]",
+    "explicitLabels": 1,
+    "chars": 170
+   },
+   "ms": 0.771,
+   "hash": "nkx1bf1oyzoad",
+   "detFresh": true,
+   "detRerun": true
+  },
+  {
+   "id": "concepts-full-5",
+   "group": "catalog",
+   "queryChars": 67,
+   "ok": true,
+   "errors": [],
+   "count": 5,
+   "header": 619,
+   "data": 668,
+   "errChars": 0,
+   "total": 1287,
+   "hTok": 155,
+   "dTok": 167,
+   "eTok": 0,
+   "tTok": 322,
+   "share": 0.48096348096348096,
+   "parts": {
+    "attrs": 205,
+    "kinds": 203,
+    "refs": 103,
+    "pages": 62,
+    "reducers": 0,
+    "dropped": 0,
+    "base": 46
+   },
+   "refs": {
+    "rows": 1,
+    "ops": "property[4]",
+    "explicitLabels": 0,
+    "chars": 95
+   },
+   "ms": 0.303,
+   "hash": "p8m2au1hafqis",
+   "detFresh": true,
+   "detRerun": true
+  },
+  {
+   "id": "concepts-by-model",
+   "group": "catalog",
+   "queryChars": 71,
+   "ok": true,
+   "errors": [],
+   "count": 6,
+   "header": 661,
+   "data": 462,
+   "errChars": 0,
+   "total": 1123,
+   "hTok": 166,
+   "dTok": 116,
+   "eTok": 0,
+   "tTok": 281,
+   "share": 0.5886019590382903,
+   "parts": {
+    "attrs": 191,
+    "kinds": 212,
+    "refs": 149,
+    "pages": 63,
+    "reducers": 0,
+    "dropped": 0,
+    "base": 46
+   },
+   "refs": {
+    "rows": 2,
+    "ops": "get(all) property[3]",
+    "explicitLabels": 0,
+    "chars": 141
+   },
+   "ms": 0.214,
+   "hash": "1s23utwj1l21",
+   "detFresh": true,
+   "detRerun": true
+  },
+  {
+   "id": "concepts-first100",
+   "group": "catalog",
+   "queryChars": 31,
+   "ok": true,
+   "errors": [],
+   "count": 98,
+   "header": 667,
+   "data": 2856,
+   "errChars": 0,
+   "total": 3523,
+   "hTok": 167,
+   "dTok": 714,
+   "eTok": 0,
+   "tTok": 881,
+   "share": 0.1893272778881635,
+   "parts": {
+    "attrs": 191,
+    "kinds": 199,
+    "refs": 165,
+    "pages": 65,
+    "reducers": 0,
+    "dropped": 0,
+    "base": 47
+   },
+   "refs": {
+    "rows": 2,
+    "ops": "get(all) property[5]",
+    "explicitLabels": 0,
+    "chars": 157
+   },
+   "ms": 0.529,
+   "hash": "1ms3ebmje665k",
+   "detFresh": true,
+   "detRerun": true
+  },
+  {
+   "id": "concepts-range-labels",
+   "group": "catalog",
+   "queryChars": 51,
+   "ok": true,
+   "errors": [],
+   "count": 20,
+   "header": 823,
+   "data": 334,
+   "errChars": 0,
+   "total": 1157,
+   "hTok": 206,
+   "dTok": 84,
+   "eTok": 0,
+   "tTok": 290,
+   "share": 0.7113223854796888,
+   "parts": {
+    "attrs": 208,
+    "kinds": 339,
+    "refs": 165,
+    "pages": 64,
+    "reducers": 0,
+    "dropped": 0,
+    "base": 47
+   },
+   "refs": {
+    "rows": 2,
+    "ops": "get(all) property[5]",
+    "explicitLabels": 0,
+    "chars": 157
+   },
+   "ms": 0.256,
+   "hash": "1hca0n914d71wb",
+   "detFresh": true,
+   "detRerun": true
+  },
+  {
+   "id": "concepts-inline-labels",
+   "group": "catalog",
+   "queryChars": 56,
+   "ok": true,
+   "errors": [],
+   "count": 8,
+   "header": 653,
+   "data": 583,
+   "errChars": 0,
+   "total": 1236,
+   "hTok": 164,
+   "dTok": 146,
+   "eTok": 0,
+   "tTok": 309,
+   "share": 0.5283171521035599,
+   "parts": {
+    "attrs": 209,
+    "kinds": 178,
+    "refs": 158,
+    "pages": 62,
+    "reducers": 0,
+    "dropped": 0,
+    "base": 46
+   },
+   "refs": {
+    "rows": 2,
+    "ops": "get(all) property[4]",
+    "explicitLabels": 0,
+    "chars": 150
+   },
+   "ms": 0.218,
+   "hash": "1qk6mjq11bk7rg",
+   "detFresh": true,
+   "detRerun": true
+  },
+  {
+   "id": "concepts-reduce-clip",
+   "group": "catalog",
+   "queryChars": 69,
+   "ok": true,
+   "errors": [],
+   "count": 10,
+   "header": 910,
+   "data": 965,
+   "errChars": 0,
+   "total": 1875,
+   "hTok": 228,
+   "dTok": 242,
+   "eTok": 0,
+   "tTok": 469,
+   "share": 0.48533333333333334,
+   "parts": {
+    "attrs": 208,
+    "kinds": 249,
+    "refs": 230,
+    "pages": 64,
+    "reducers": 112,
+    "dropped": 0,
+    "base": 47
+   },
+   "refs": {
+    "rows": 2,
+    "ops": "get(6) property[5]",
+    "explicitLabels": 6,
+    "chars": 222
+   },
+   "ms": 0.321,
+   "hash": "kbwf2gxl29j0",
+   "detFresh": true,
+   "detRerun": true
+  },
+  {
+   "id": "concepts-norefs",
+   "group": "catalog",
+   "queryChars": 82,
+   "ok": true,
+   "errors": [],
+   "count": 10,
+   "header": 568,
+   "data": 1319,
+   "errChars": 0,
+   "total": 1887,
+   "hTok": 142,
+   "dTok": 330,
+   "eTok": 0,
+   "tTok": 472,
+   "share": 0.3010068892421834,
+   "parts": {
+    "attrs": 208,
+    "kinds": 249,
+    "refs": 0,
+    "pages": 64,
+    "reducers": 0,
+    "dropped": 0,
+    "base": 47
+   },
+   "refs": {
+    "rows": 0,
+    "ops": "",
+    "explicitLabels": 0,
+    "chars": 0
+   },
+   "ms": 0.314,
+   "hash": "1jek0oi3tb1yc",
+   "detFresh": true,
+   "detRerun": true
+  },
+  {
+   "id": "faults-common",
+   "group": "catalog",
+   "queryChars": 65,
+   "ok": true,
+   "errors": [],
+   "count": 9,
+   "header": 601,
+   "data": 1462,
+   "errChars": 0,
+   "total": 2063,
+   "hTok": 151,
+   "dTok": 366,
+   "eTok": 0,
+   "tTok": 516,
+   "share": 0.2913233155598643,
+   "parts": {
+    "attrs": 191,
+    "kinds": 222,
+    "refs": 81,
+    "pages": 61,
+    "reducers": 0,
+    "dropped": 0,
+    "base": 46
+   },
+   "refs": {
+    "rows": 1,
+    "ops": "property[2]",
+    "explicitLabels": 0,
+    "chars": 73
+   },
+   "ms": 0.19,
+   "hash": "10mbwmalh4pde",
+   "detFresh": true,
+   "detRerun": true
+  },
+  {
+   "id": "faults-by-model",
+   "group": "catalog",
+   "queryChars": 65,
+   "ok": true,
+   "errors": [],
+   "count": 8,
+   "header": 593,
+   "data": 973,
+   "errChars": 0,
+   "total": 1566,
+   "hTok": 149,
+   "dTok": 244,
+   "eTok": 0,
+   "tTok": 392,
+   "share": 0.3786717752234994,
+   "parts": {
+    "attrs": 191,
+    "kinds": 213,
+    "refs": 82,
+    "pages": 61,
+    "reducers": 0,
+    "dropped": 0,
+    "base": 46
+   },
+   "refs": {
+    "rows": 1,
+    "ops": "property[2]",
+    "explicitLabels": 0,
+    "chars": 74
+   },
+   "ms": 0.176,
+   "hash": "xtpzoe1f4p8te",
+   "detFresh": true,
+   "detRerun": true
+  },
+  {
+   "id": "terms-handle",
+   "group": "catalog",
+   "queryChars": 52,
+   "ok": true,
+   "errors": [],
+   "count": 2,
+   "header": 509,
+   "data": 325,
+   "errChars": 0,
+   "total": 834,
+   "hTok": 128,
+   "dTok": 82,
+   "eTok": 0,
+   "tTok": 209,
+   "share": 0.6103117505995204,
+   "parts": {
+    "attrs": 191,
+    "kinds": 144,
+    "refs": 68,
+    "pages": 60,
+    "reducers": 0,
+    "dropped": 0,
+    "base": 46
+   },
+   "refs": {
+    "rows": 1,
+    "ops": "property[1]",
+    "explicitLabels": 0,
+    "chars": 60
+   },
+   "ms": 0.291,
+   "hash": "460teto5bcy3",
+   "detFresh": true,
+   "detRerun": true
+  },
+  {
+   "id": "multi-root",
+   "group": "catalog",
+   "queryChars": 159,
+   "ok": true,
+   "errors": [],
+   "count": 13,
+   "header": 1597,
+   "data": 526,
+   "errChars": 0,
+   "total": 2123,
+   "hTok": 400,
+   "dTok": 132,
+   "eTok": 0,
+   "tTok": 531,
+   "share": 0.7522373999057936,
+   "parts": {
+    "attrs": 191,
+    "kinds": 620,
+    "refs": 547,
+    "pages": 192,
+    "reducers": 0,
+    "dropped": 0,
+    "base": 47
+   },
+   "refs": {
+    "rows": 8,
+    "ops": "get(all) property[4] get(all) property[3] get(all) property[2] get(all) property[4]",
+    "explicitLabels": 0,
+    "chars": 539
+   },
+   "ms": 0.439,
+   "hash": "lfqrrx1tp726v",
+   "detFresh": true,
+   "detRerun": true
+  },
+  {
+   "id": "handle-audit",
+   "group": "handle",
+   "queryChars": 110,
+   "ok": true,
+   "errors": [],
+   "count": 3,
+   "header": 654,
+   "data": 331,
+   "errChars": 0,
+   "total": 985,
+   "hTok": 164,
+   "dTok": 83,
+   "eTok": 0,
+   "tTok": 247,
+   "share": 0.6639593908629442,
+   "parts": {
+    "attrs": 191,
+    "kinds": 281,
+    "refs": 79,
+    "pages": 58,
+    "reducers": 0,
+    "dropped": 0,
+    "base": 45
+   },
+   "refs": {
+    "rows": 1,
+    "ops": "property[2]",
+    "explicitLabels": 0,
+    "chars": 71
+   },
+   "ms": 0.316,
+   "hash": "1nfsgycvapel0",
+   "detFresh": true,
+   "detRerun": false
+  },
+  {
+   "id": "handle-meta-only",
+   "group": "handle",
+   "queryChars": 44,
+   "ok": true,
+   "errors": [],
+   "count": 1,
+   "header": 509,
+   "data": 80,
+   "errChars": 0,
+   "total": 589,
+   "hTok": 128,
+   "dTok": 20,
+   "eTok": 0,
+   "tTok": 148,
+   "share": 0.8641765704584041,
+   "parts": {
+    "attrs": 191,
+    "kinds": 146,
+    "refs": 126,
+    "pages": 0,
+    "reducers": 0,
+    "dropped": 0,
+    "base": 46
+   },
+   "refs": {
+    "rows": 2,
+    "ops": "get(all) property[1]",
+    "explicitLabels": 0,
+    "chars": 118
+   },
+   "ms": 0.153,
+   "hash": "v5hjk3rogz2d",
+   "detFresh": true,
+   "detRerun": true
+  },
+  {
+   "id": "audit-page",
+   "group": "handle",
+   "queryChars": 50,
+   "ok": true,
+   "errors": [],
+   "count": 1,
+   "header": 510,
+   "data": 71,
+   "errChars": 0,
+   "total": 581,
+   "hTok": 128,
+   "dTok": 18,
+   "eTok": 0,
+   "tTok": 146,
+   "share": 0.8777969018932874,
+   "parts": {
+    "attrs": 191,
+    "kinds": 140,
+    "refs": 75,
+    "pages": 58,
+    "reducers": 0,
+    "dropped": 0,
+    "base": 46
+   },
+   "refs": {
+    "rows": 1,
+    "ops": "property[1]",
+    "explicitLabels": 0,
+    "chars": 67
+   },
+   "ms": 0.144,
+   "hash": "1j91bmo6snx9g",
+   "detFresh": true,
+   "detRerun": true
+  },
+  {
+   "id": "note-settable",
+   "group": "scratch",
+   "queryChars": 29,
+   "ok": true,
+   "errors": [],
+   "count": 3,
+   "header": 560,
+   "data": 169,
+   "errChars": 0,
+   "total": 729,
+   "hTok": 140,
+   "dTok": 43,
+   "eTok": 0,
+   "tTok": 183,
+   "share": 0.7681755829903978,
+   "parts": {
+    "attrs": 191,
+    "kinds": 147,
+    "refs": 116,
+    "pages": 60,
+    "reducers": 0,
+    "dropped": 0,
+    "base": 46
+   },
+   "refs": {
+    "rows": 2,
+    "ops": "get(all) set[1]",
+    "explicitLabels": 0,
+    "chars": 108
+   },
+   "ms": 0.139,
+   "hash": "1itnu7j14nadjr",
+   "detFresh": true,
+   "detRerun": true
+  },
+  {
+   "id": "synopsis",
+   "group": "meta",
+   "queryChars": 14,
+   "ok": true,
+   "errors": [],
+   "count": 0,
+   "header": 248,
+   "data": 2286,
+   "errChars": 0,
+   "total": 2534,
+   "hTok": 62,
+   "dTok": 572,
+   "eTok": 0,
+   "tTok": 634,
+   "share": 0.0978689818468824,
+   "parts": {
+    "attrs": 191,
+    "kinds": 11,
+    "refs": 0,
+    "pages": 0,
+    "reducers": 0,
+    "dropped": 0,
+    "base": 46
+   },
+   "refs": {
+    "rows": 0,
+    "ops": "",
+    "explicitLabels": 0,
+    "chars": 0
+   },
+   "ms": 0.163,
+   "hash": "qeksid17m7kvx",
+   "detFresh": true,
+   "detRerun": true
+  },
+  {
+   "id": "mat-turn-text-first",
+   "group": "materialized",
+   "queryChars": 54,
+   "ok": true,
+   "errors": [],
+   "count": 3,
+   "header": 894,
+   "data": 338,
+   "errChars": 0,
+   "total": 1232,
+   "hTok": 224,
+   "dTok": 85,
+   "eTok": 0,
+   "tTok": 308,
+   "share": 0.7256493506493507,
+   "parts": {
+    "attrs": 191,
+    "kinds": 335,
+    "refs": 143,
+    "pages": 62,
+    "reducers": 117,
+    "dropped": 0,
+    "base": 46
+   },
+   "refs": {
+    "rows": 2,
+    "ops": "get(1) property[1]",
+    "explicitLabels": 1,
+    "chars": 135
+   },
+   "ms": 0.266,
+   "hash": "1l1b0i7cnq9ct",
+   "detFresh": true,
+   "detRerun": false
+  },
+  {
+   "id": "mat-turn-text-always",
+   "group": "materialized",
+   "queryChars": 82,
+   "ok": true,
+   "errors": [],
+   "count": 3,
+   "header": 917,
+   "data": 338,
+   "errChars": 0,
+   "total": 1255,
+   "hTok": 230,
+   "dTok": 85,
+   "eTok": 0,
+   "tTok": 314,
+   "share": 0.7306772908366533,
+   "parts": {
+    "attrs": 212,
+    "kinds": 337,
+    "refs": 143,
+    "pages": 62,
+    "reducers": 117,
+    "dropped": 0,
+    "base": 46
+   },
+   "refs": {
+    "rows": 2,
+    "ops": "get(1) property[1]",
+    "explicitLabels": 1,
+    "chars": 135
+   },
+   "ms": 0.252,
+   "hash": "19ey4vu1lpf2m8",
+   "detFresh": true,
+   "detRerun": true
+  },
+  {
+   "id": "mat-turn-text-off",
+   "group": "materialized",
+   "queryChars": 79,
+   "ok": true,
+   "errors": [],
+   "count": 3,
+   "header": 742,
+   "data": 338,
+   "errChars": 0,
+   "total": 1080,
+   "hTok": 186,
+   "dTok": 85,
+   "eTok": 0,
+   "tTok": 270,
+   "share": 0.687037037037037,
+   "parts": {
+    "attrs": 209,
+    "kinds": 165,
+    "refs": 143,
+    "pages": 62,
+    "reducers": 117,
+    "dropped": 0,
+    "base": 46
+   },
+   "refs": {
+    "rows": 2,
+    "ops": "get(1) property[1]",
+    "explicitLabels": 1,
+    "chars": 135
+   },
+   "ms": 0.159,
+   "hash": "gal2xm2ca4a2",
+   "detFresh": true,
+   "detRerun": true
+  },
+  {
+   "id": "mat-turn-text-prefaced",
+   "group": "materialized",
+   "queryChars": 54,
+   "ok": true,
+   "errors": [],
+   "count": 3,
+   "header": 729,
+   "data": 338,
+   "errChars": 0,
+   "total": 1067,
+   "hTok": 183,
+   "dTok": 85,
+   "eTok": 0,
+   "tTok": 267,
+   "share": 0.683223992502343,
+   "parts": {
+    "attrs": 191,
+    "kinds": 170,
+    "refs": 143,
+    "pages": 62,
+    "reducers": 117,
+    "dropped": 0,
+    "base": 46
+   },
+   "refs": {
+    "rows": 2,
+    "ops": "get(1) property[1]",
+    "explicitLabels": 1,
+    "chars": 135
+   },
+   "ms": 0.138,
+   "hash": "2plcjl132os1h",
+   "detFresh": true,
+   "detRerun": true
+  },
+  {
+   "id": "policy-verbose-false",
+   "group": "policy",
+   "queryChars": 74,
+   "ok": true,
+   "errors": [],
+   "count": 4,
+   "header": 837,
+   "data": 854,
+   "errChars": 0,
+   "total": 1691,
+   "hTok": 210,
+   "dTok": 214,
+   "eTok": 0,
+   "tTok": 423,
+   "share": 0.4949733885274985,
+   "parts": {
+    "attrs": 205,
+    "kinds": 164,
+    "refs": 176,
+    "pages": 59,
+    "reducers": 117,
+    "dropped": 70,
+    "base": 46
+   },
+   "refs": {
+    "rows": 2,
+    "ops": "get(2) property[5]",
+    "explicitLabels": 2,
+    "chars": 168
+   },
+   "ms": 0.308,
+   "hash": "17hc25tb2y8qj",
+   "detFresh": true,
+   "detRerun": true
+  },
+  {
+   "id": "policy-headerAttrs-changed",
+   "group": "policy",
+   "queryChars": 63,
+   "ok": true,
+   "errors": [],
+   "count": 10,
+   "header": 570,
+   "data": 693,
+   "errChars": 0,
+   "total": 1263,
+   "hTok": 143,
+   "dTok": 174,
+   "eTok": 0,
+   "tTok": 316,
+   "share": 0.4513064133016627,
+   "parts": {
+    "attrs": 60,
+    "kinds": 249,
+    "refs": 150,
+    "pages": 64,
+    "reducers": 0,
+    "dropped": 0,
+    "base": 47
+   },
+   "refs": {
+    "rows": 2,
+    "ops": "get(all) property[3]",
+    "explicitLabels": 0,
+    "chars": 142
+   },
+   "ms": 0.242,
+   "hash": "b0zfltjo8p3b",
+   "detFresh": true,
+   "detRerun": true
+  },
+  {
+   "id": "policy-deny-set",
+   "group": "policy",
+   "queryChars": 29,
+   "ok": true,
+   "errors": [],
+   "count": 3,
+   "header": 554,
+   "data": 169,
+   "errChars": 0,
+   "total": 723,
+   "hTok": 139,
+   "dTok": 43,
+   "eTok": 0,
+   "tTok": 181,
+   "share": 0.7662517289073306,
+   "parts": {
+    "attrs": 186,
+    "kinds": 147,
+    "refs": 59,
+    "pages": 60,
+    "reducers": 0,
+    "dropped": 56,
+    "base": 46
+   },
+   "refs": {
+    "rows": 1,
+    "ops": "get(all)",
+    "explicitLabels": 0,
+    "chars": 51
+   },
+   "ms": 0.245,
+   "hash": "9jalpte576wx",
+   "detFresh": true,
+   "detRerun": true
+  },
+  {
+   "id": "err-parse-brace",
+   "group": "error",
+   "queryChars": 46,
+   "ok": false,
+   "errors": [
+    "PARSE/parse"
+   ],
+   "count": null,
+   "header": 27,
+   "data": 0,
+   "errChars": 134,
+   "total": 161,
+   "hTok": 7,
+   "dTok": 0,
+   "eTok": 34,
+   "tTok": 41,
+   "share": 0.16770186335403728,
+   "ms": 0.06,
+   "hash": "1g17bhm1qujlbo",
+   "detFresh": true,
+   "detRerun": true
+  },
+  {
+   "id": "err-parse-mutation",
+   "group": "error",
+   "queryChars": 24,
+   "ok": false,
+   "errors": [
+    "PARSE/parse"
+   ],
+   "count": null,
+   "header": 27,
+   "data": 0,
+   "errChars": 119,
+   "total": 146,
+   "hTok": 7,
+   "dTok": 0,
+   "eTok": 30,
+   "tTok": 37,
+   "share": 0.18493150684931506,
+   "ms": 0.037,
+   "hash": "x7z9hw12er9ne",
+   "detFresh": true,
+   "detRerun": true
+  },
+  {
+   "id": "err-parse-inline-fragment",
+   "group": "error",
+   "queryChars": 53,
+   "ok": false,
+   "errors": [
+    "PARSE/parse"
+   ],
+   "count": null,
+   "header": 27,
+   "data": 0,
+   "errChars": 127,
+   "total": 154,
+   "hTok": 7,
+   "dTok": 0,
+   "eTok": 32,
+   "tTok": 39,
+   "share": 0.17532467532467533,
+   "ms": 0.04,
+   "hash": "1px75g6mei8ii",
+   "detFresh": true,
+   "detRerun": true
+  },
+  {
+   "id": "err-parse-empty-selection",
+   "group": "error",
+   "queryChars": 31,
+   "ok": false,
+   "errors": [
+    "PARSE/parse"
+   ],
+   "count": null,
+   "header": 27,
+   "data": 0,
+   "errChars": 127,
+   "total": 154,
+   "hTok": 7,
+   "dTok": 0,
+   "eTok": 32,
+   "tTok": 39,
+   "share": 0.17532467532467533,
+   "ms": 0.038,
+   "hash": "1s2b9hr1e7oyl",
+   "detFresh": true,
+   "detRerun": true
+  },
+  {
+   "id": "err-unknown-field",
+   "group": "error",
+   "queryChars": 47,
+   "ok": false,
+   "errors": [
+    "UNKNOWN_FIELD/validate"
+   ],
+   "count": null,
+   "header": 27,
+   "data": 0,
+   "errChars": 201,
+   "total": 228,
+   "hTok": 7,
+   "dTok": 0,
+   "eTok": 51,
+   "tTok": 57,
+   "share": 0.11842105263157894,
+   "ms": 0.087,
+   "hash": "16m9nd91bxhgff",
+   "detFresh": true,
+   "detRerun": true
+  },
+  {
+   "id": "err-three-faults",
+   "group": "error",
+   "queryChars": 59,
+   "ok": false,
+   "errors": [
+    "UNKNOWN_ARG/validate",
+    "UNKNOWN_FIELD/validate",
+    "UNKNOWN_FIELD/validate"
+   ],
+   "count": null,
+   "header": 27,
+   "data": 0,
+   "errChars": 656,
+   "total": 683,
+   "hTok": 7,
+   "dTok": 0,
+   "eTok": 164,
+   "tTok": 171,
+   "share": 0.03953147877013177,
+   "ms": 0.102,
+   "hash": "kh1mxeupjfhu",
+   "detFresh": true,
+   "detRerun": true
+  },
+  {
+   "id": "err-missing-variable",
+   "group": "error",
+   "queryChars": 45,
+   "ok": false,
+   "errors": [
+    "MISSING_VARIABLE/validate",
+    "MISSING_ARG/validate"
+   ],
+   "count": null,
+   "header": 27,
+   "data": 0,
+   "errChars": 301,
+   "total": 328,
+   "hTok": 7,
+   "dTok": 0,
+   "eTok": 76,
+   "tTok": 82,
+   "share": 0.08231707317073171,
+   "ms": 0.065,
+   "hash": "1hnuuhz6l091f",
+   "detFresh": true,
+   "detRerun": true
+  },
+  {
+   "id": "err-limit-first",
+   "group": "error",
+   "queryChars": 31,
+   "ok": false,
+   "errors": [
+    "LIMIT_FIRST/validate"
+   ],
+   "count": null,
+   "header": 27,
+   "data": 0,
+   "errChars": 140,
+   "total": 167,
+   "hTok": 7,
+   "dTok": 0,
+   "eTok": 35,
+   "tTok": 42,
+   "share": 0.16167664670658682,
+   "ms": 0.059,
+   "hash": "t26yxla5odpz",
+   "detFresh": true,
+   "detRerun": true
+  },
+  {
+   "id": "err-payload-denied",
+   "group": "error",
+   "queryChars": 60,
+   "ok": false,
+   "errors": [
+    "PAYLOAD_DENIED/validate"
+   ],
+   "count": null,
+   "header": 27,
+   "data": 0,
+   "errChars": 164,
+   "total": 191,
+   "hTok": 7,
+   "dTok": 0,
+   "eTok": 41,
+   "tTok": 48,
+   "share": 0.14136125654450263,
+   "ms": 0.063,
+   "hash": "48nqmm52nzre",
+   "detFresh": true,
+   "detRerun": true
+  },
+  {
+   "id": "err-unknown-reducer",
+   "group": "error",
+   "queryChars": 61,
+   "ok": false,
+   "errors": [
+    "UNKNOWN_REDUCER/validate"
+   ],
+   "count": null,
+   "header": 27,
+   "data": 0,
+   "errChars": 174,
+   "total": 201,
+   "hTok": 7,
+   "dTok": 0,
+   "eTok": 44,
+   "tTok": 51,
+   "share": 0.13432835820895522,
+   "ms": 0.068,
+   "hash": "1kry1wj1b3wa8n",
+   "detFresh": true,
+   "detRerun": true
+  },
+  {
+   "id": "err-type-mismatch",
+   "group": "error",
+   "queryChars": 41,
+   "ok": false,
+   "errors": [
+    "TYPE_MISMATCH/validate"
+   ],
+   "count": null,
+   "header": 27,
+   "data": 0,
+   "errChars": 154,
+   "total": 181,
+   "hTok": 7,
+   "dTok": 0,
+   "eTok": 39,
+   "tTok": 46,
+   "share": 0.14917127071823205,
+   "ms": 0.053,
+   "hash": "n6e74j1h0ffmx",
+   "detFresh": true,
+   "detRerun": true
+  },
+  {
+   "id": "err-unknown-session",
+   "group": "error",
+   "queryChars": 32,
+   "ok": false,
+   "errors": [
+    "RESOLVE_FAILED/execute"
+   ],
+   "count": 0,
+   "header": 249,
+   "data": 14,
+   "errChars": 124,
+   "total": 387,
+   "hTok": 63,
+   "dTok": 4,
+   "eTok": 31,
+   "tTok": 97,
+   "share": 0.6434108527131783,
+   "ms": 0.233,
+   "hash": "uj06gkocv1ko",
+   "detFresh": true,
+   "detRerun": true
+  },
+  {
+   "id": "err-payload-not-gettable",
+   "group": "error",
+   "queryChars": 42,
+   "ok": false,
+   "errors": [
+    "BAD_SELECTION/validate"
+   ],
+   "count": null,
+   "header": 27,
+   "data": 0,
+   "errChars": 167,
+   "total": 194,
+   "hTok": 7,
+   "dTok": 0,
+   "eTok": 42,
+   "tTok": 49,
+   "share": 0.13917525773195877,
+   "ms": 0.059,
+   "hash": "1htuf836bprpz",
+   "detFresh": true,
+   "detRerun": true
+  },
+  {
+   "id": "err-multiple-operations",
+   "group": "error",
+   "queryChars": 55,
+   "ok": false,
+   "errors": [
+    "MULTIPLE_OPERATIONS/validate"
+   ],
+   "count": null,
+   "header": 27,
+   "data": 0,
+   "errChars": 162,
+   "total": 189,
+   "hTok": 7,
+   "dTok": 0,
+   "eTok": 41,
+   "tTok": 48,
+   "share": 0.14285714285714285,
+   "ms": 0.041,
+   "hash": "4ugm61xkt906",
+   "detFresh": true,
+   "detRerun": true
+  },
+  {
+   "id": "err-introspection",
+   "group": "error",
+   "queryChars": 31,
+   "ok": false,
+   "errors": [
+    "UNKNOWN_FIELD/validate"
+   ],
+   "count": null,
+   "header": 27,
+   "data": 0,
+   "errChars": 276,
+   "total": 303,
+   "hTok": 7,
+   "dTok": 0,
+   "eTok": 69,
+   "tTok": 76,
+   "share": 0.0891089108910891,
+   "ms": 0.076,
+   "hash": "way01o6fxww2",
+   "detFresh": true,
+   "detRerun": true
+  }
+ ]
+}
