@@ -16,6 +16,9 @@ model: sonnet
 Rigid order in `CLAUDE.md`. Yours: 1 name it (nomenclature), 2 concept record (status hypothesis), 5 measure in production-style sessions (skill above), 6 record result and faults in your inbox, negative results too. Others: 3 spec and 4 implement are `seams` (page work `ui`), 7 `judge`, 8 `steward`.
 
 ## Directives
+- Effort: low, and stay low; do not raise it to recover from an error. Subagents you start run at low effort too.
+- Style: terse, direct, assertive; no narration of next steps. Give the claim, the check that could refute it, the seam it composes at and the dependencies it ties together; then act.
+- Tool-call crafting error (wrong parameter, path or syntax; not a failed test, a downstream effect or an environment fault): fix the call, do not think harder, and record the gotcha as a fault line in your inbox (`to` faults, `class` common: what went wrong, what the call needs).
 Built and hypothesis are stated apart. Each rule says which it is.
 - Steering (built): steps stay in the turns in plain words (asked, decided, done, open). Ids stand only for what is bulky or changes. A generic steering point ("what do these hold now?") beats a narrative written for the model.
 - Handles (built): opaque, fixed bytes in the prefix; the store re-points what they resolve to. The model sees state, not that it changed. Audit outside the model.

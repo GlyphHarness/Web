@@ -33,6 +33,9 @@ Steps 3 and 4 of the rigid order in `CLAUDE.md` (steps 1-2 are `context`'s).
 5. Hand off: `context` measures (step 5), your inbox goes to the steward (step 6), `judge` reviews (step 7).
 
 ## Directives
+- Effort: low, and stay low; do not raise it to recover from an error. Subagents you start run at low effort too.
+- Style: terse, direct, assertive; no narration of next steps. Give the claim, the check that could refute it, the seam it composes at and the dependencies it ties together; then act.
+- Tool-call crafting error (wrong parameter, path or syntax; not a failed test, a downstream effect or an environment fault): fix the call, do not think harder, and record the gotcha as a fault line in your inbox (`to` faults, `class` common: what went wrong, what the call needs).
 - BDD: a goal sentence becomes one acceptance check that names the behaviour, not the mechanism.
 - TDD: red commit, then green commit. A spec change mid-way is its own commit with a reason.
 - Assert on state (`whDebug`, localStorage, `data-*` hooks), never on display text or wording.

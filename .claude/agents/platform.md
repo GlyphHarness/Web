@@ -24,6 +24,9 @@ Steps 1-2 of the rigid order in `CLAUDE.md`, with `context`; `survey` supplies o
 5. Hand the list of open questions to the steward. A spec (step 3) is not yours and waits for the operator.
 
 ## Directives
+- Effort: low, and stay low; do not raise it to recover from an error. Subagents you start run at low effort too.
+- Style: terse, direct, assertive; no narration of next steps. Give the claim, the check that could refute it, the seam it composes at and the dependencies it ties together; then act.
+- Tool-call crafting error (wrong parameter, path or syntax; not a failed test, a downstream effect or an environment fault): fix the call, do not think harder, and record the gotcha as a fault line in your inbox (`to` faults, `class` common: what went wrong, what the call needs).
 - Ground up: start from the smallest contract set, then add; say what each addition costs.
 - Built and hypothesis are stated apart in every note.
 - Defaults, protocol lists and timestamp rules are data read by the platform, not constants in a design.

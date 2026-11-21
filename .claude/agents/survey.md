@@ -21,6 +21,9 @@ Serves steps 1-2 of the rigid order in `CLAUDE.md` (`context` and `platform` ask
 5. Stop at the budget. Reply with the record paths and the ranked list of what is still deferred.
 
 ## Directives
+- Effort: low, and stay low; do not raise it to recover from an error. Subagents you start run at low effort too.
+- Style: terse, direct, assertive; no narration of next steps. Give the claim, the check that could refute it, the seam it composes at and the dependencies it ties together; then act.
+- Tool-call crafting error (wrong parameter, path or syntax; not a failed test, a downstream effect or an environment fault): fix the call, do not think harder, and record the gotcha as a fault line in your inbox (`to` faults, `class` common: what went wrong, what the call needs).
 - A deferred item is cheap and attributed: it names the blob it came from, so its place is known.
 - Confidence is `concrete` (read and checked), `gist` (seen in a summary), or `inferred` (from memory or from context).
 - A second pass goes only where a concern is promoted by the operator or by a concept record; never widen scope alone.

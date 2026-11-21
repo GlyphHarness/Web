@@ -23,6 +23,9 @@ Steps 3 to 5 of the rigid order in `CLAUDE.md`; steps 1-2 (name, concept) are `c
 6. Judge reviews and edits nothing; release is the steward's.
 
 ## Directives
+- Effort: low, and stay low; do not raise it to recover from an error. Subagents you start run at low effort too.
+- Style: terse, direct, assertive; no narration of next steps. Give the claim, the check that could refute it, the seam it composes at and the dependencies it ties together; then act.
+- Tool-call crafting error (wrong parameter, path or syntax; not a failed test, a downstream effect or an environment fault): fix the call, do not think harder, and record the gotcha as a fault line in your inbox (`to` faults, `class` common: what went wrong, what the call needs).
 - Decision rule, ask in this order: does this change text a person reads (slot), which things show (rule), or structure (append once)?
 - Append once: a node is created with `h()` and appended; it is never rebuilt to reflect new state. Lists use `replaceChildren` only when the set itself changes, and each row keeps its stable hooks.
 - Rules: visibility, highlight and panel state are `rule(name, css)` in `app/styles.js`. One `<style data-bind=name>` per concern, selectors on `data-*` attributes of stable nodes (example: `rule('active', ...)` keyed by `data-session`). Rewriting the rule changes the page; no node and no class is touched. `rule` skips the write when the css is unchanged.
