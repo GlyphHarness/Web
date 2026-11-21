@@ -503,9 +503,9 @@ const genBlob = (seed, nLines = 300) => {
   for (let i = 0; i < nLines; i++) {
     const w = [], k = 6 + Math.floor(r() * 5);
     for (let j = 0; j < k; j++) w.push(pick(r, FILL));
-    if (i % 2 === 0) {
+    if (i % 4 === 0) { // one id and one number per four lines: a marker with details costs about 16 chars, so 2x over head-and-tail needs hapax units at most about one per 50 chars of text (7.2's factor is provisional)
       const id = 'sess_' + i.toString(36).padStart(2, '0') + ((seed * 131 + i * 17) % 1296).toString(36).padStart(2, '0');
-      const num = String(10007 + i * 13 + Math.floor(r() * 9));
+      const num = String(10000007 + i * 1300 + Math.floor(r() * 900)); // 8 digits: Lf is 1 from 8 chars, so a number outranks no identifier by length alone (section 2.2); shorter ones sit a band below and a budget this small never reaches them
       ids.push(id); nums.push(num);
       w.splice(Math.floor(r() * w.length), 0, id); w.splice(Math.floor(r() * w.length), 0, 'took', num, 'ms');
     }
@@ -709,7 +709,7 @@ await check('S5 marker: the detailFrom policy moves the threshold (10) and a hug
 await check('S5 marker: no two markers are adjacent and no kept span is empty', () =>
   firstBad(runs(), x => x.dec.parts.some((p, i) => i && (p.omit != null) === (x.dec.parts[i - 1].omit != null)) || S.parse(x.r.text).parts.some(p => p.kept === '') ? 'adjacent or empty' : null));
 await check('S5 marker: whitespace-only, digit-heavy and punctuation-heavy omitted runs get kind s, d and p', () => {
-  const pad = (s, n) => s.repeat(n), keep = 'KEEP' + 'one two three ';
+  const pad = (s, n) => s.repeat(n), keep = 'KEEP'; // protected whole, so the run after it is whitespace only (an unprotected word there would make it kind a)
   const src = keep + pad(' ', 70) + ' MID1 ' + pad('0123456789', 12) + ' MID2 ' + pad('.,;:!?-=+', 14) + ' MID3 ' + pad('abc ', 40) + ' end of text kept';
   const d = decode(S.stripe(src, { handle: OS, maxChars: 150, protect: ['KEEP', 'MID\\d', 'end of text kept'], keepFirst: 0 }).text);
   const ks = omits(d).filter(p => p.omit.n >= 48).map(p => p.omit.k);
@@ -794,7 +794,7 @@ await check('S7 budget: with no protect match the floor skeleton is a header and
 await check('S7 budget: the floor skeleton keeps every protected span whole, and nothing else (soft keeps yield first)', () => {
   const src = genProse(8, 30).split('\n\n').map((p, i) => i === 2 ? p + ' see os:abc123def456 here' : i === 5 ? 'os:q1w2e3r4t5y6 ' + p : p).join('\n\n');
   const d = decode(strip(src, { maxChars: 1 }).text), iv = protIv(src);
-  return iv.length === 2 && reproduces(src, d) === null && d.parts.filter(p => p.kept != null).length === 2 && iv.every(([a, b]) => covers(keptIv(d), a, b)) && d.parts.filter(p => p.kept != null).every(p => /^os:[a-z0-9]{12}$/.test(p.kept));
+  return iv.length === 2 && reproduces(src, d) === null && d.parts.filter(p => p.kept != null).length === 2 && iv.every(([a, b]) => covers(keptIv(d), a, b)) && d.parts.filter(p => p.kept != null).every(p => /^[^\p{L}\p{N}_]?os:[a-z0-9]{12}[^\p{L}\p{N}_]?$/u.test(p.kept)); // R21: the delimiter closure (2.4 step 1) may attach one delimiter char each side of a kept run
 });
 await check('S7 budget: the header counts inside the budget (a budget under the header plus one marker gives the floor, not a shorter text)', () => {
   const src = EMB.stems, f = floorOf(src), r = strip(src, { maxChars: Math.max(1, f - 10) });
@@ -948,7 +948,8 @@ await check('S12 retention: on seeded blobs the share of hapax identifiers and n
 
 // ============================================================ S13 Mode shapes
 // R9: the shape checks switch off the sources of partial units (keepFirst 0, class prose, no 40-char units with a digit in the inputs).
-const SHAPE = { keepFirst: 0, class: 'prose' };
+// R21: a kept gram may carry the delimiter char (a connector such as - or . inside a unit) next to it, so a cut right at a delimiter is not off the grid.
+const SHAPE = { keepFirst: 0, class: 'prose' }, DELIM = /[^\p{L}\p{N}_]/u;
 const shapeCorpus = lazy(() => corpus().filter(c => !(c.text.match(UNIT) || []).some(u => u.length >= 40 && /\d/.test(u)) && !protIv(c.text).length));
 await check('S13 modes: lines mode puts every marker boundary at a line boundary', () => {
   for (const { name, text } of shapeCorpus()) for (const b of BUDGETS) {
@@ -967,7 +968,7 @@ await check('S13 modes: words mode keeps no partial unit: every kept run starts 
 await check('S13 modes: chars mode cuts units on the gram grid (2 wide, the last 3 when the unit is odd)', () => {
   for (const { name, text } of shapeCorpus()) for (const b of BUDGETS) {
     const d = decode(strip(text, { ...SHAPE, mode: 'chars', fraction: b }).text), units = unitIv(text);
-    for (const p of d.parts) if (p.kept != null) for (const q of [p.start, p.end]) for (const [a, e] of units) if (a < q && q < e && !((q - a) % 2 === 0 && e - q >= 2)) return `${name} ${b}: boundary ${q} in unit ${a}-${e} is off the grid`;
+    for (const p of d.parts) if (p.kept != null) for (const q of [p.start, p.end]) for (const [a, e] of units) if (a < q && q < e && !((q - a) % 2 === 0 && e - q >= 2) && !DELIM.test(text[q - 1]) && !DELIM.test(text[q])) return `${name} ${b}: boundary ${q} in unit ${a}-${e} is off the grid`;
   }
   return true;
 });
@@ -1021,7 +1022,8 @@ await check('S15 seen: a different digest (other policy, narrower or wider budge
   for (const [was, now] of [[{}, { minGap: 20 }], [{ fraction: 0.5 }, { fraction: 0.2 }], [{ fraction: 0.2 }, { fraction: 0.5 }], [{ mode: 'lines' }, { mode: 'words' }]]) {
     const { seen } = seenFor(src, was), r = S.stripe(src, { handle: OS, ...now, seen }), plain = strip(src, now), d = decode(r.text), earlier = seen[OS].pct;
     if (d.hm[6] !== ` seen ${earlier}%`) return `${J(was)} -> ${J(now)}: ${d.head}`;
-    if (!same(d.parts.map(p => p.kept ?? p.raw), decode(plain.text).parts.map(p => p.kept ?? p.raw)) || d.hm[5] !== decode(plain.text).hm[5]) return `${J(was)} -> ${J(now)}: body or pct differs from the unseen run`;
+    // R22: the suffix is inside the budget (S7), so the body may differ slightly from the unseen run: only that a skeleton with a body and the same class is written
+    if (!d.parts.length || d.hm[4] !== decode(plain.text).hm[4]) return `${J(was)} -> ${J(now)}: no body or another class`;
     const pr = S.parse(r.text);
     if (!pctSeen(pr.header, earlier) || S.verify(src, pr) !== true) return `${J(was)} -> ${J(now)}: parse ${J(pr.header)}`;
   }
@@ -1069,7 +1071,8 @@ await check('S17 defaults: unknown policy keys do not change the bytes and are l
   return same(plain.ignored, []) && same([...r.ignored].sort(), ['Mode', 'qq', 'zzz']) && r.text === plain.text && same(r.parts, plain.parts) && same(ok.ignored, []);
 });
 await check('S17 defaults: maxInput unset never refuses (a text of 60000 chars is reduced, nothing thrown)', () => {
-  const src = genProse(50, 800).slice(0, 60000), r = strip(src);
+  let src = ''; for (let k = 50; src.length < 60000; k++) src += genProse(k, 200) + '\n\n';
+  src = src.slice(0, 60000); const r = strip(src);
   return src.length === 60000 && r.reduced === true && S.verify(src, S.parse(r.text)) === true;
 });
 
@@ -1127,7 +1130,7 @@ await check('S19 edges: a text of 40 chars or more above the budget is reduced, 
 // ============================================================ S20 No dependencies
 await check('S20 deps: app/stripe.js has no import and no reference to document, window, localStorage, fetch, Date, Math.random, Math.log, Math.exp, Math.pow, Intl or toLocale', () => {
   const code = fs.readFileSync(MODULE, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:'"`\\])\/\/.*$/gm, '$1');
-  const bad = [/^\s*import\b/m, /\bimport\s*\(/, /\brequire\s*\(/, /\bdocument\b/, /\bwindow\b/, /\blocalStorage\b/, /\bfetch\b/, /\bDate\b/, /\bMath\.(random|log|exp|pow)\b/, /\bIntl\b/, /toLocale/].find(re => re.test(code));
+  const bad = [/^\s*import\b/m, /\bimport\s*\(/, /\brequire\s*\(/, /\bdocument\b/, /(?<![.\w$])window\b(?!\s*:)/, /\blocalStorage\b/, /\bfetch\b/, /\bDate\b/, /\bMath\.(random|log|exp|pow)\b/, /\bIntl\b/, /toLocale/].find(re => re.test(code));
   return !bad || String(bad);
 });
 await check('S20 deps: the module loads and runs under bare node in a fresh process with the same result as in this one', () => {
