@@ -2,7 +2,7 @@
 // folder data through the local bridge (read-only), scored by scripts/a1-corpus.mjs. Own playwright browser (a fresh context per session), own ports, own salt.
 // Why not scripts/wh.mjs: wh has no per-session switch for the local tools (its `new` makes a session with tools ask,values only);
 // this driver clicks the page's own #localtools box. Everything else follows wh.mjs (same selectors, same settle rule).
-// The OpenRouter key is read from a secrets file inside this process, written to the browser profile's key store, and never
+// (secrets file: --secrets, else env WH_SECRETS_FILE, else the local default.) The OpenRouter key is read from a secrets file inside this process, written to the browser profile's key store, and never
 // printed or stored in a result. Tests use the mock provider; this is a live run and is only ever started by hand.
 //   node scripts/a1-baseline.mjs --secrets C:\wh\secrets.env --models tencent/hy4-flash,qwen/qwen3.7-flash --runs 1 --cap 1.00
 //        [--questions q01,q02] [--strategy strat-stem-1.0] [--dir C:\wh\a1-wh-stem1] [--data C:\wh\a1data-stem1] [--out file.jsonl]
@@ -27,7 +27,7 @@ const only = opt('questions', '') ? opt('questions').split(',') : null;
 const HEADED = argv.includes('--headed'), NUDGES = Number(opt('nudges', 3));
 
 // the key: read here, held in memory only
-const secrets = Object.fromEntries(fs.readFileSync(opt('secrets', 'C:\\wh\\secrets.env'), 'utf8').split(/\r?\n/).map(l => l.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*?)\s*$/)).filter(Boolean).map(m => [m[1], m[2].replace(/^["']|["']$/g, '')]));
+const secrets = Object.fromEntries(fs.readFileSync(opt('secrets', process.env.WH_SECRETS_FILE || 'C:\\wh\\secrets.env'), 'utf8').split(/\r?\n/).map(l => l.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*?)\s*$/)).filter(Boolean).map(m => [m[1], m[2].replace(/^["']|["']$/g, '')]));
 const KEY = secrets.OPENROUTER_API_KEY; if (!KEY) throw new Error('no OPENROUTER_API_KEY in the secrets file');
 const mask = t => String(t ?? '').split(KEY).join('(masked)').replace(/\bsk-[A-Za-z0-9_-]{16,}/g, 'sk-...(masked)');
 
