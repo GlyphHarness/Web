@@ -535,6 +535,20 @@ await page.click('.modal button:not(.primary)');
 await page.evaluate(() => document.querySelector('[data-act=cfgpaste]').click());
 await page.fill('.modal textarea', JSON.stringify({ settings: { provider: 'mock', model: 'mock-1' } }));
 await page.click('.modal .primary');
+// provider dropdown: claude (container gateway, nothing listens yet) is not offered; a saved or imported claude leaves a valid selection
+{
+  const opts = () => page.evaluate(() => [...document.querySelectorAll('#provider option')].map(o => o.value));
+  const o1 = await opts();
+  check('provider list: openrouter is offered and claude is not', o1.includes('openrouter') && !o1.includes('claude'), o1.join());
+  await page.evaluate(() => document.querySelector('[data-act=cfgpaste]').click());
+  await page.fill('.modal textarea', JSON.stringify({ settings: { provider: 'claude' } }));
+  await page.click('.modal .primary');
+  const st = await page.evaluate(() => ({ saved: JSON.parse(localStorage['wh:meta']).settings.provider, sel: document.querySelector('#provider').value }));
+  check('provider list: an imported claude is accepted and the select still holds a listed provider', st.saved === 'claude' && st.sel !== '' && (await opts()).includes(st.sel), JSON.stringify(st));
+  await page.evaluate(() => document.querySelector('[data-act=cfgpaste]').click());
+  await page.fill('.modal textarea', JSON.stringify({ settings: { provider: 'mock', model: 'mock-1' } }));
+  await page.click('.modal .primary');
+}
 await page.evaluate(() => { const m = document.querySelector('#newprofile'); m.value = ''; m.dispatchEvent(new Event('change')); });
 
 // ---- targets per steering version ----
