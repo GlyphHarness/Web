@@ -54,6 +54,31 @@ A stem's continue point is a checkpoint that looks like any other turn but is ke
 - **A graph, not a pair:** any two checkpoints can confer (an earlier self checks a later one; a later self revisits an earlier goal). Edges are recorded as handles; nothing enters the core line unless the consult changes the plan, and then as one step line.
 - **Cost:** B is a cache read of a prefix that already exists plus a small delta; confers are side requests with their own ledger rows, measured like everything else.
 
+## 5c. Policy-based steering and probe checkpoints (design, not built)
+
+Steering is policy, not nudges. An operator (person or agent) states a goal once; the strategy decides when to remind, what to materialize, and when to checkpoint. A nudge typed mid-run is a missing directive, so each one is worth recording as a concern.
+
+- **Directives live in the strategy**: a system-prompt base plus hooked turn wrappers, versioned with the strategy id (§8), so a change to steering is a new strategy and is measured like any other.
+- **Probe turn**: at the end of a *group* (a run of turns that belong together), the harness sends the context so far plus a closing marker `[label · tag, tag, tag]`, asks for a minimal reply (one word), and **throws the reply away**. It is not stored in the log, not shown, and not billed to the core line; it has its own ledger row (kind `probe`). Its only product is a provider cache entry for the prefix up to that boundary.
+- **Ambiguous on purpose**: the label and tags are short and do not say what to do. They sit in the cached prefix as opaque markers, like handles (§1). Meaning is supplied later: when a request is built, a resolver (step warp / crafting, §6) may materialize a label or tag into whatever the policy wants (a reasoning hint, goal framing, which handles to open) *after* the cached prefix. The cached bytes never carry a concrete steer, so the conversation can be shaped differently per request without losing the cache or baking in a steer that cannot be undone.
+- **Why**: on models with automatic caching and no explicit breakpoints, a probe puts an entry where we choose instead of where the provider happens to (live, qwen3.7-flash got no cache hits on its first six requests: `docs/live-evidence/2026-11-19-windows-chrome.md`); on explicit-breakpoint models a probe is a breakpoint written once; and the ambiguity keeps room to steer.
+- **Accounting**: a probe pays when later reads of its prefix save more than its write cost (its output is one token); kinds that never pay are dropped by the steering review (§3). The probe must share the real requests' exact prefix bytes and upstream (`provider.order`), or it warms nothing.
+- **Seams**: strategy fields `directive`, `probes` (where a group ends: turn count, token threshold, stem anchor, bulky tool result) and `tags`; a resolver hook that maps markers to materialized context.
+- **Open, to settle by a live run first**: whether a small `max_tokens` request writes a cache entry on each provider; how many tokens a group needs before a probe pays; the tag vocabulary; whether resolver output is appended after the prefix or rewrites the tail.
+- **Measurement**: variant G in §7 (F plus probes) against serial and C on the same scenarios: uncached input per request, cache-read rate, and the probes' added cost. Live first: one probe at about 4k tokens on qwen3.7-flash, then compare `cached_tokens` on the next three requests.
+
+## 5d. Ephemeral nudge turns and grafting (design, not built)
+
+A nudge is a turn the harness adds, not a message the operator types. It is how policy (§5c) reaches a model that is wandering.
+
+- **The nudge turn**: one ephemeral turn carrying a *judged payload* (terse data about the past turns: step lines, handles, flags, counts, not their bulk) and an instruction that names what to do ("judge these; say the next action and the way you will do it; then do it; no deliberation"). The assistant answers with one commitment line and keeps to it.
+- **Lightweight turns follow.** After a few turns (a count, or when the commitment is met or broken) the nudge and its payload are dropped from the context going forward. What stays is the commitment line and the pertinent turns' step lines, behind a checkpoint `[label, tag, tag]` (§5c) that a later request can resume from.
+- **Cache, said plainly.** Turns after the nudge sit after its bytes, so dropping it changes their prefix. The resume therefore continues from the checkpoint *before* the nudge and tacks on the step lines; the prefix up to the checkpoint stays cached, the new tail is written fresh. The nudge belongs at the leading edge for the same reason: nothing cached sits behind it.
+- **Grafting is a helper's job.** A small model builds the payload from data, not content (the ledger, flags, step lines, ids and hashes), under a budget (default 10k tokens, tighter for most). A frontier model (for example Sonnet or Opus) then operates on that terse set. The frontier model never gets the bulk and the small one never has to judge it.
+- **Cost rule: under one cent per operation, enforced.** `max_tokens` and the payload budget are set from it, each nudge and graft has its own ledger row (kinds `nudge`, `graft`), and an operation over the cap is a smell and stops to ask. Live reference: one 17k-token Sonnet request cost 3.5 cents (11k tokens written to cache), so a frontier operation fits under a cent only with a small payload and a cached prefix, or on a cheaper tier. Measured, not assumed.
+- **Compare models.** The payload builders (`tencent/hy4-flash`, `qwen/qwen3.7-flash`, others) against each other and against no nudge, and the operators (Sonnet, Opus, a cheap model) the same way. Per run: cost per operation, whether the model committed and kept to it, repeated reads and drift, thinking tokens.
+- **Why**: the nudges typed by hand in this project's live sessions (stop reading, copy the find string exactly, write now) are the cases to turn into policy, one directive each (§5c).
+
 ## 6. Micro-context resolver (after 1–5)
 
 A small helper model takes hints (the core's next question, its recent turns, the handles in view) and chooses, case by case, which handles to materialize at the leading edge of the request and to what. The leading edge reveals the pertinent context; new handles are embedded along the way, so the same approach continues into stems and their own resolution. Its picks are logged with the audit, and it can be switched off per case to compare.
@@ -71,6 +96,8 @@ Each case is a scripted scenario (for example: a CI break fixed while the core k
 | D, + stems | C with work in stems, progress and folds behind handles |
 | E, + micro resolver | D with the helper choosing what to materialize |
 | F, + confer | E with A/B confers at stem checkpoints (cost against drift caught) |
+| G, + probes | F with probe checkpoints (§5c) |
+| H, + nudge and graft | G with ephemeral nudge turns whose payload a small model builds (§5d) |
 
 Per variant, from the ledger: uncached input, cache write, cache read, output tokens, cost, turns, final core size, and **coherence** (scenario assertions that the core acted on the right state: a cheaper variant that loses track fails). Mock provider first (it models a prefix cache), then one cheap and one frontier model. Results as one table per scenario plus totals, published as a page and kept as a regression baseline.
 
