@@ -123,6 +123,8 @@ const lastTrail = () => PAT.trail().at(-1);
 const errMsg = out => bodyOf(out)?.errors?.[0]?.message;
 
 const Q_SMALL = '{ turns(session: "sq1", first: 3) { i role chars calls tool ok } }';
+// a query that selects fewer props than the kind has, so the surface declares a property ref (QUERY.md 4.3 I3, names calls, tool, ok)
+const Q_REF = '{ turns(session: "sq1", first: 3) { i role chars } }';
 const Q_BIG = '{ turns(session: "sq1", first: 100) { i role chars calls tool ok } ledger(session: "sq1") { n model strat prompt cached } trail(first: 50) { n tool ok chars } sessions { id title msgs } }';
 
 // ================================================================ strategies (seam: strategies.js register)
@@ -252,7 +254,7 @@ await check('QI16 tool: query_ref get is bounded by the declared max (12000) plu
 });
 await check('QI17 tool: refused refs give the exact refusal messages of QUERY.md 4.5, as the error message after a header with ok false', async () => {
   const env = await mkEnv();
-  await run(env, 'query', { q: Q_SMALL });
+  await run(env, 'query', { q: Q_REF });
   const got = {
     format: errMsg(await run(env, 'query_ref', { ref: 'nope', op: 'get' })),
     unknown: errMsg(await run(env, 'query_ref', { ref: 'q9/t0', op: 'get' })),
@@ -267,7 +269,7 @@ await check('QI17 tool: refused refs give the exact refusal messages of QUERY.md
 });
 await check('QI18 tool: a refused ref calls nothing of the adapter (no kind fn, no resolve) and leaves the audit row with the code', async () => {
   const env = await mkEnv({ spy: true });
-  await run(env, 'query', { q: Q_SMALL });
+  await run(env, 'query', { q: Q_REF });
   const before = { ...env.calls };
   for (const a of [{ ref: 'q9/t0', op: 'get' }, { ref: 'bad', op: 'get' }, { ref: 'q1/t9999', op: 'get' }, { ref: 'q1/t0', op: 'set', name: 'ok', value: 1 }, { ref: 'q1/t0', op: 'property', name: 'zzz' }]) await run(env, 'query_ref', a);
   const codes = env.surface.audit().filter(r => r.ok === false).map(r => r.code);
@@ -291,7 +293,7 @@ await check('QI21 tool: with no surface in the context the tools answer a plain 
 });
 await check('QI22 trail: a query_ref call leaves a trail row with the ref, the why (cut to 200) and the outcome; the row is the harness\'s own record, not the model\'s', async () => {
   const env = await mkEnv();
-  await run(env, 'query', { q: Q_SMALL });
+  await run(env, 'query', { q: Q_REF });
   const why = 'looking for the failing tool call. '.repeat(10);
   await run(env, 'query_ref', { ref: 'q1/t0', op: 'property', name: 'calls', why });
   const row = lastTrail();
