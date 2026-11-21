@@ -27,7 +27,9 @@ const need = (m, name) => { if (m.missing) throw new Error(name + ': ' + m.missi
 
 // ---------------------------------------------------------------- find the registry, wherever it lives
 // A registry is an exported plain object or Map with a function under the name stripe-1.0. main.js is not loaded
-// (it needs the page); a module that does not load in node is skipped.
+// (it needs the page); a module that does not load in node is skipped. If no module exports one, the surface may
+// still hold its own: createSurface() with no reducers option that resolves the name (an internal registry) counts,
+// as {internal: true}. Either way the contract is the same: the name resolves at the hook.
 async function findRegistry() {
   need(ST, 'app/stripe.js');
   const files = fs.readdirSync(path.join(ROOT, 'app')).filter(f => f.endsWith('.js') && f !== 'main.js' && !f.startsWith('vendor'));
@@ -38,6 +40,8 @@ async function findRegistry() {
       if (v && typeof v === 'object' && !(v instanceof Map) && typeof v[ST.ID] === 'function' && v !== ST) return { fn: v[ST.ID], where: f + ':' + k };
     }
   }
+  const probe = await Q.createSurface({ adapters: [QH.createHarnessAdapter(src)], now: clock() }).run(Q_STRIPE);
+  if (probe.header?.ok && probe.header.reducers?.some(x => x.with === ST.ID)) return { internal: true, where: 'createSurface() without reducers' };
   return null;
 }
 
@@ -50,7 +54,7 @@ const session = { id: 'ss1', title: 'Stripe fixture', created: 1700000000000, sy
   { role: 'assistant', content: 'done' }] };
 const src = { sessions: () => [session], ckpt: () => ({}), trail: () => [], handles: { info: () => null, resolve: async () => '', audit: () => [] }, catalog: () => ({ concepts: [], faults: [], terms: [] }) };
 const clock = () => { let t = 1700000000000; return () => (t += 10); };
-const surface = reg => Q.createSurface({ adapters: [QH.createHarnessAdapter(src)], now: clock(), ...(reg ? { reducers: { [ST.ID]: reg.fn } } : {}) });
+const surface = reg => Q.createSurface({ adapters: [QH.createHarnessAdapter(src)], now: clock(), ...(reg?.fn ? { reducers: { [ST.ID]: reg.fn } } : {}) });
 const Q_STRIPE = '{ turns(session: "ss1", role: "tool", first: 1) @reduce(with: "stripe-1.0", maxChars: 400) { i payload } }';
 const Q_FULL = '{ turns(session: "ss1", role: "tool", first: 1) @payload(mode: "full") { i payload } }';
 const Q_PLAIN = '{ turns(session: "ss1", role: "tool", first: 1) { i payload } }';
