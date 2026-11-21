@@ -150,6 +150,7 @@ const checkReduce = r => {
 const DELTA = { text_delta: { kind: 'text', field: 'text' }, thinking_delta: { kind: 'thinking', field: 'thinking' }, input_json_delta: { kind: 'tool_use', field: 'partial_json' } };
 const USAGE_KEYS = ['input_tokens', 'output_tokens', 'cache_read_input_tokens', 'cache_creation_input_tokens'];
 const isNum = v => typeof v === 'number' && Number.isFinite(v);
+const isObj = v => v !== null && typeof v === 'object' && !Array.isArray(v);
 
 export function streamInit(listener, policy, ctx) {
   needListener(listener);
@@ -214,7 +215,8 @@ function finish(s, out) {
 // -> { state, out, verdict, abort }: out is the list of events to send on; abort is true on the one step that ends the stream
 export function streamStep(state, event) {
   if (state.halt) return { state, out: [], verdict: haltVerdict(state.halt.reason), abort: false };
-  const t = event?.type;
+  if (!isObj(event)) return { state, out: [event], verdict: { verdict: 'allow' }, abort: false }; // not an event: passed on as given
+  const t = event.type;
   if (t === 'ping' || t === 'error') return { state: t === 'error' ? { ...state, done: true } : state, out: [event], verdict: { verdict: 'allow' }, abort: false };
   const altered = t === 'content_block_delta' ? reduceDelta(state, event) : null;
   let s = observe(state, event);
@@ -228,14 +230,14 @@ export function streamStep(state, event) {
 export const sseFormat = e => `event: ${e.type}\ndata: ${JSON.stringify(e)}\n\n`;
 
 const dataOf = frame => frame.split('\n').filter(l => l.startsWith('data:')).map(l => l.slice(5).replace(/^ /, '')).join('\n');
-// -> { events, rest, bad }: rest is the cut frame (wait for more); bad holds data that is not JSON, as received
+// -> { events, rest, bad }: rest is the cut frame (wait for more); bad holds frames whose data is not a JSON object, as received
 export function sseSplit(buffer) {
   const parts = String(buffer).replace(/\r\n/g, '\n').split('\n\n');
   const rest = parts.pop(), events = [], bad = [];
   for (const frame of parts) {
     const data = dataOf(frame);
     if (!data) continue;
-    try { events.push(JSON.parse(data)); } catch { bad.push(frame); }
+    try { const e = JSON.parse(data); if (isObj(e)) events.push(e); else bad.push(frame); } catch { bad.push(frame); }
   }
   return { events, rest, bad };
 }
