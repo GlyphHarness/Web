@@ -158,10 +158,40 @@ const thresholds = {
   overBudgetRows: red2k.filter(r => r.outOverBudget > 1).length,
 };
 const headerClassMismatch = rows.filter(r => r.reduced && r.headerClass !== r.label).length;
+
+// ---------------------------------------------------------------- class profile ablation (concept axkihp): the labelled profile against a class-neutral one (class override 'neutral' = default profile), same budget
+function leadsKeys(text, mask) { // share of line-lead units retained, and of JSON-key units (followed by ": ) retained
+  const l = [0, 0], k = [0, 0]; let off = 0;
+  for (const line of text.split('\n')) {
+    if (line.trim()) { UNIT.lastIndex = 0; const m = UNIT.exec(line); if (m) { l[1]++; if (recog(mask, off + m.index, off + m.index + m[0].length)) l[0]++; } }
+    off += line.length + 1;
+  }
+  for (const m of text.matchAll(UNIT)) if (text.slice(m.index + m[0].length, m.index + m[0].length + 2) === '":') { k[1]++; if (recog(mask, m.index, m.index + m[0].length)) k[0]++; }
+  return { lead: l, key: k };
+}
+const ablation = [];
+for (const b of blobs) {
+  if (!/log|tabular|json/.test(b.label)) continue;
+  for (const fraction of [0.1, 0.25]) {
+    const ref = 'os:' + b.fp, a = stripe(b.text, { fraction, handle: ref }), z = stripe(b.text, { fraction, handle: ref, class: 'neutral' });
+    if (!a.reduced || !z.reduced) continue;
+    const ma = maskOfParts(parse(a.text).parts, b.text.length), mz = maskOfParts(parse(z.text).parts, b.text.length);
+    ablation.push({ blob: b.id, label: b.label, n: b.text.length, fraction, out: [a.text.length, z.text.length], profile: { ...leadsKeys(b.text, ma), r: retention(b.types, ma) }, neutral: { ...leadsKeys(b.text, mz), r: retention(b.types, mz) } });
+  }
+}
+const ablGroup = (pred, fraction) => {
+  const rs = ablation.filter(r => pred(r.label) && r.fraction === fraction), o = { runs: rs.length };
+  const sum = (side, f, i) => rs.reduce((s, r) => s + r[side][f][i], 0), rsum = (side, c, i) => rs.reduce((s, r) => s + r[side].r[c][i], 0);
+  for (const side of ['profile', 'neutral']) o[side] = { lead: sum(side, 'lead', 1) ? r4(sum(side, 'lead', 0) / sum(side, 'lead', 1)) : null, key: sum(side, 'key', 1) ? r4(sum(side, 'key', 0) / sum(side, 'key', 1)) : null,
+    rare: r4(rsum(side, 'rare', 0) / (rsum(side, 'rare', 2) || 1)), ident: r4(rsum(side, 'ident', 0) / (rsum(side, 'ident', 2) || 1)), num: r4(rsum(side, 'num', 0) / (rsum(side, 'num', 2) || 1)) };
+  return o;
+};
+const ablationSummary = {};
+for (const f of [0.1, 0.25]) { ablationSummary[`json@${f}`] = ablGroup(l => l.includes('json'), f); ablationSummary[`log-or-tabular@${f}`] = ablGroup(l => /log|tabular/.test(l) && !l.includes('json'), f); }
 const meta = { rid: ID, date: DATE, script: 'scripts/measure-stripe.mjs', pinnedCommit: PIN, node: process.version, baseline: "head and tail 'ends' (outstore.present: 900 head : 400 tail) sized to the same output chars as the skeleton, tag line counted",
   definitions: { retained: 'kept source chars / n', rare: 'lowercased unit types in exactly one line', common: 'types in the top decile by line df (df >= 2)', ident: 'unit contains _ . / : \\ @ # or a lower-upper step or letters and digits', num: 'unit matches ^\\d[\\d.,:]*$',
     retention: 'type counts as retained when any occurrence has >= min(len, 6) chars inside kept spans; whole = any occurrence fully kept; pooled over blobs (sum retained / sum types)', ms: 'wall time of the first stripe call per row, warm process, not part of determinism' } };
-const result = { meta, corpus: blobs.map(b => ({ id: b.id, kind: b.kind, n: b.text.length, label: b.label, fp: b.fp })), labelDistribution: labels, failures, headerClassMismatch, thresholds, groupsAll: groups, groupsN2000: groups2k, autoByClass: byClass, rows };
+const result = { meta, corpus: blobs.map(b => ({ id: b.id, kind: b.kind, n: b.text.length, label: b.label, fp: b.fp })), labelDistribution: labels, failures, headerClassMismatch, thresholds, groupsAll: groups, groupsN2000: groups2k, autoByClass: byClass, classAblation: { summary: ablationSummary, rows: ablation }, rows };
 mkdirSync(OUT, { recursive: true });
 writeFileSync(join(OUT, `stripe-det-${DATE}.json`), JSON.stringify(result));
 
@@ -179,6 +209,14 @@ for (const [k, v] of Object.entries(labels).sort((a, b) => b[1] - a[1])) md += `
 md += `\n## auto at 0.25 by class (all sizes, pooled)\n\n| class | runs | rare s/e | ident s/e | num s/e |\n| --- | --- | --- | --- | --- |\n`;
 for (const [lab, o] of Object.entries(byClass)) { const g = o[0.25]; if (g && g.reduced) md += `| ${lab} | ${g.reduced} | ${pc(g.rare.stripe)}/${pc(g.rare.ends)} | ${pc(g.ident.stripe)}/${pc(g.ident.ends)} | ${pc(g.num.stripe)}/${pc(g.num.ends)} |\n`; }
 md += `\nProvisional thresholds (auto, n >= 2000): budget within 10%: ${thresholds.budgetWithin10pct.auto}; marker overhead under 30%: ${thresholds.markerOverheadUnder30pct.auto}; rows over budget (all modes): ${thresholds.overBudgetRows}. Failures (parse-back, determinism, idempotence): ${failures.length}. Header class equal to classify() on all reduced rows: ${headerClassMismatch === 0}.\n`;
+md += `
+## Class profile against class-neutral (concept axkihp; same budget, pooled; lead = first unit of each line, key = JSON key units)
+
+| group | frac | runs | lead profile/neutral | key profile/neutral | rare | ident | num |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+`;
+for (const [k, g] of Object.entries(ablationSummary)) { const [grp, f] = k.split('@'); if (!g.runs) continue; md += `| ${grp} | ${f} | ${g.runs} | ${pc(g.profile.lead)}/${pc(g.neutral.lead)} | ${pc(g.profile.key)}/${pc(g.neutral.key)} | ${pc(g.profile.rare)}/${pc(g.neutral.rare)} | ${pc(g.profile.ident)}/${pc(g.neutral.ident)} | ${pc(g.profile.num)}/${pc(g.neutral.num)} |
+`; }
 writeFileSync(join(OUT, `stripe-det-${DATE}.md`), md);
 console.log(`blobs ${blobs.length}, rows ${rows.length}, failures ${failures.length}, headerClassMismatch ${headerClassMismatch}`);
 console.log(md.split('\n').slice(4, 20).join('\n'));
