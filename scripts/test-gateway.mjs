@@ -522,6 +522,25 @@ check('G10.4', 'comment lines (keep-alives) between frames are skipped and frame
   const u = (FRAME(GOLD[1]) + FRAME(GOLD[2])).replace(/\n/g, '\r\n');
   return eq(G.sseSplit(t).events, [GOLD[1], GOLD[2]]) && eq(G.sseSplit(u).events, [GOLD[1], GOLD[2]]) || J([G.sseSplit(t), G.sseSplit(u)]);
 });
+check('G10.5', 'data that is JSON but not an object (null, number, string, boolean, array) is not an event: it is in bad as received, events are always objects (fault fhkyrn)', () => {
+  const frames = ['data: null\n\n', 'data: 5\n\n', 'data: "x"\n\n', 'data: true\n\n', 'data: [1,2]\n\n'];
+  for (const f of frames) {
+    const r = G.sseSplit(f + FRAME(GOLD[1]));
+    if (!eq(r.events, [GOLD[1]]) || r.bad.length !== 1 || r.bad[0] !== f.slice(0, -2)) return J([f, r]);
+  }
+  return true;
+});
+check('G10.6', 'streamStep never throws on an event of the wrong shape: it passes it on as given, verdict allow, no abort (fault fhkyrn)', () => {
+  const odd = [null, undefined, 5, 'x', true, [1], [], {}, { type: 5 }, { type: 'content_block_delta' }, { type: 'content_block_delta', delta: null }, { type: 'content_block_delta', delta: 'x', index: 0 },
+    { type: 'content_block_start' }, { type: 'content_block_start', content_block: null }, { type: 'content_block_stop' }, { type: 'message_start', message: 5 }, { type: 'message_start', message: { usage: 'x' } }, { type: 'message_delta', usage: null }, { type: 'message_delta' }];
+  for (const l of LISTENERS) for (const e of odd) {
+    const s = G.streamInit(l, { budget: { total: 1000 } }, {});
+    let r;
+    try { r = G.streamStep(s, e); } catch (err) { return J([l, e, String(err.message)]); }
+    if (!Array.isArray(r.out) || r.out.length !== 1 || r.out[0] !== e || r.abort !== false || r.verdict?.verdict !== 'allow') return J([l, e, r]);
+  }
+  return true;
+});
 
 // ---------------------------------------------------------------- G11 the provider entry (seam: providers; R2)
 const entry = P.providers.claude;
