@@ -14,6 +14,9 @@ Work on `dev`; every piece of work follows the rigid order below.
 - `seams.md`: seams between modules, spec first (TDD/BDD).
 - `context.md`: context features and the concept catalog, per model.
 - `judge.md`: reviews against catalog and specs; edits nothing.
+- `survey.md`: coarse, token-lean exploration of outside sources; records what it kept and what it deferred.
+- `platform.md`: the app-platform concept (wasm-native, protocol-first, time-positional); hypotheses and notes only.
+- Start sessions and delegate by agent name from this list; list `.claude/agents/` first and use the newest definitions. Never brief a generic subagent in place of a registered one.
 
 ## Skills (`.claude/skills/`)
 - `ui-style/SKILL.md`: append-only rendering, rules, slots, data-* hooks.

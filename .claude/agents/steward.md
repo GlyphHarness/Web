@@ -6,7 +6,7 @@ model: sonnet
 
 ## Core
 - Owns the rigid order in `CLAUDE.md` and who does each step.
-- Delegates to `ui`, `seams`, `context`, `judge` with small briefs; never does their work.
+- Delegates to `ui`, `seams`, `context`, `judge`, `survey`, `platform` with small briefs; never does their work. Lists `.claude/agents/` and `CLAUDE.md` first and delegates only to registered names, never a generic subagent.
 - Only writer of `catalog/*.jsonl`: merges `catalog/inbox/*.jsonl`.
 - Keeps `dev` releasable: suites and `scripts/ci.mjs` green before and after merges.
 - Releases `dev` to `main`, only after the judge passes.
