@@ -138,7 +138,18 @@ check('G1.5', 'harness listener: client authorization and x-api-key are dropped,
   const own = r.headers.filter(h => h[0].toLowerCase() === 'x-api-key');
   return r.verdict === 'allow' && !keys.includes('authorization') && own.length === 1 && own[0][1] === 'test-not-a-key-OWN' && keys.includes('content-type') && keys.includes('accept') && !J(r.headers).includes('CANARY') || J(r);
 });
-check('G1.6', 'harness listener: no apiKey fails closed, with a reason code and no client credential in the answer', () => {
+check('G1.9', 'harness listener: a forward ALLOWLIST (content-type, accept, anthropic-version); every other client header is dropped, values carried by reference and never read (fault mkqsxn, R16)', () => {
+  const keep = ['Content-Type', 'accept', 'Anthropic-Version'];
+  const drop = ['Authorization', 'x-api-key', 'Cookie', 'Proxy-Authorization', 'anthropic-beta', 'Transfer-Encoding', 'Content-Length', 'Host', 'Connection', 'Origin', 'Referer', 'Accept-Encoding', 'x-forwarded-for', 'x-claude-code-agent-id', 'anthropic-future-header', 'x-some-future-header'];
+  const pairs = [...drop.slice(0, 8), ...keep.map(n => [n, guarded(n)]), ...drop.slice(8)].map(p => (Array.isArray(p) ? p : [p, guarded(p)]));
+  const r = G.harnessHeaders(pairs, { apiKey: 'test-not-a-key-OWN' });
+  if (r.verdict !== 'allow') return J(r);
+  const kept = pairs.filter(p => keep.includes(p[0]));
+  const same = kept.every(p => r.headers.some(h => h[0] === p[0] && h[1] === p[1]));
+  const want = ['content-type', 'accept', 'anthropic-version', 'x-api-key'];
+  return eq(r.headers.map(h => h[0].toLowerCase()), want) && same && r.headers.at(-1)[1] === 'test-not-a-key-OWN' && eq(r.trace.names, want) || J(r.trace);
+});
+check('G1.6','harness listener: no apiKey fails closed, with a reason code and no client credential in the answer', () => {
   const r = G.harnessHeaders([['Authorization', CANARY], ['x-api-key', CANARY2]], {});
   return r.verdict === 'reject' && r.status >= 400 && typeof r.reason === 'string' && r.reason.length > 0 && !('headers' in r) && !J(r).includes('CANARY') || J(r);
 });
