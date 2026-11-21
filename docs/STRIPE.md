@@ -25,8 +25,8 @@ Scope: a standalone pure module. No DOM, no page, no storage, no clock, no rando
 skeleton = header "\n" body
 header   = "[" ref " " lines "L " rid " " class " " pct "%" [ " seen" [ " " pct "%" ] ] "]"
 ref      = handle | "fp:" fingerprint          ; handle = caller's, e.g. os:7k2m9x3q1a
-lines    = 1*DIGIT                              ; text.split("
-").length of the source (a trailing newline counts one more)
+lines    = 1*DIGIT                              ; count of "
+"-separated lines of the source (a trailing newline adds one)
 rid      = "stripe-" 1*DIGIT "." 1*DIGIT       ; reducer id
 class    = 1*(%x21-5C / %x5E-7E)                ; no space, no "]": e.g. list+headed
 pct      = 1*DIGIT                              ; round(100 * kept source units / n)
