@@ -14,11 +14,11 @@ model: sonnet
 
 ## Workflow
 Serves steps 1-2 of the rigid order in `CLAUDE.md` (`context` and `platform` ask; you answer with evidence).
-1. Read the brief: the concerns, the budget (default 5 sources per concern per run), the concept ids.
+1. Read the brief: the concerns, the budget (default 3 sources per area; a web search, a fetch or any web source each counts; state any overrun), the concept ids.
 2. Rank the concerns. Grep `catalog/` and `catalog/inbox/` for ground already covered; reuse it, do not refetch.
 3. Coarse pass per concern in rank order: the web tool, search first (standard mode; extended only when thin), then the one best source. Keep the smallest blob that answers.
 4. For every source seen but not followed, leave a breadcrumb (see Records). Do not follow it now unless it is the top concern.
-5. Stop at the budget. Reply with the record paths and the ranked list of what is still deferred.
+5. Stop at the budget (searches count; every source, a search included, gets an explored record). Reply with the record paths and the ranked list of what is still deferred.
 
 ## Directives
 - Effort: low, and stay low; do not raise it to recover from an error. Subagents you start run at low effort too.

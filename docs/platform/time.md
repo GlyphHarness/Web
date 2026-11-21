@@ -44,7 +44,7 @@ Holds if: a scheduled function replays from its tick list with no hidden state; 
 Replaces: ad hoc timers with captured mutable state.
 Cost: functions must keep outputs and effects declared (effect contract with delegation, trust.md).
 
-## PH15 trace guard knockout (vjdkxo, supersedes fgsoab, gdhqxh)
+## PH15 trace guard knockout (mtcgpe, supersedes vjdkxo, fgsoab, gdhqxh)
 Claim: a trace guard over a projection of a run trace, when it fails, knocks out the downstream runs that depended on it, bounded by early cutoff (yhmcoe: a re-run with an unchanged output hash stops propagation; survey-A6-A7.md S6.2, rustc red-green). "Exactly" is dropped: cutoff may spare a dependent whose output is unchanged.
 Data:
 - run trace: run id, fn, kind, at or tick, reads[{key, as_of, version}], writes, outputs, verdicts.
@@ -55,13 +55,13 @@ Holds if: a failed guard on run A voids B and C (read A's writes, outputs change
 Replaces: exception unwinding and manual cache invalidation after a bad step.
 Cost: dependency graph from traces; effect handling below (Q6).
 Decided (Q4, 2026-11-21, platform's call): a trace guard reads a projection of a run trace, a view over fields and times of one trace. The guard is a predicate on that view; it does not project what should follow.
-Decided (Q6, 2026-11-21, platform's call, operator suggestion adopted): knockout voids only in-app derived state (runs, timeline versions by tombstone, outputs). An effect that already left the app (message sent, payment made) is irreversible and is never voided. An effect record declares one of:
+Decided (Q6, 2026-11-21, platform's call, operator suggestion adopted): knockout voids only in-app derived state (runs, timeline versions by tombstone, outputs). An effect that already left the app (message sent, payment made) is irreversible and is never voided. An effect record may declare one of:
 - guarded: released only after its guard clears, so knockout precedes release;
 - compensated: a compensating action (named in the record, with its delegation) is recorded and runs on knockout;
 - final: declared non-voidable; release has no guard (the author owns that).
-No declaration, no release: the effect contract rejects an undeclared effect with a named error (a required field, not a gate). Holding is the behavior of "guarded" only; there is no global hold. A compensation is its own run with its own trace.
+Hypothesis: the declaration is a field of the effect record. Default: an effect without one is recorded as undeclared and treated as final. Rejecting an undeclared effect with a named error is an option, off by default (CLAUDE.md: restrictions are options). Holding is the behavior of "guarded" only; there is no global hold. A compensation is its own run with its own trace.
 Check: from traces alone, a failed guard on A leaves a guarded effect unreleased, runs the compensation of a compensated one once, and leaves a final one untouched.
-Cost: authors classify every effect; "guarded" delays effects by guard latency; compensations can fail (unproven that all effects have one; a sent message has none, so it is guarded or final).
+Cost: authors classify effects (undeclared means final); "guarded" delays effects by guard latency; compensations can fail (unproven that all effects have one; a sent message has none, so it is guarded or final).
 
 ## Kept (rejected, reasoning only)
 - Wall-clock timers per function: rejected; drift, DST and clock steps. Epoch grid is calculable.
