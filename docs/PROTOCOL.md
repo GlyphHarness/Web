@@ -64,10 +64,10 @@ Every command is appended to `<dir>/log.jsonl` (default `.wh`): time, command, s
 ## Adding a tool
 
 1. Define it in `app/tools.js` with `fn(name, description, properties, required, run)`; the description says what it does, never where it runs.
-2. Put it in a group (`tools`, `repoTools`, `vmTools`, `askTools`, `valueTools`) so sessions carry it only when created with that group; a session's tool list never changes under it (cached prefix).
+2. Put it in a group (`tools`, `repoTools`, `vmTools`, `askTools`, `valueTools`) so sessions carry it only when created with that group; a session's tool list never changes under it (cached prefix). Exception: the query tools (`query`, `query_ref`) are in no group; a strategy spec flag (`query: true`) gives them, appended last to the definitions, and only to strategies registered with it (docs/QUERY.md 6.3).
 3. Map it to a capability in `profiles.js` `allowedTool`, so profiles can withhold it; calls outside the scope are refused.
 4. Writes that leave the browser (GitHub, files) wait for the person: use the approval card (`ctx.git` / `approve`).
-5. Large outputs go through `present()` (squeeze, `want`, helper, handle); say so in the description with `want`.
+5. Large outputs go through `present()` (squeeze, `want`, helper, handle); say so in the description with `want`. Exception: `query` and `query_ref` have no `want`; the surface owns reduction and a second-model squeeze would break the header-describes-data contract (docs/QUERY.md 6.3).
 6. Add a mock trigger in `app/providers.js` and checks in a smoke suite.
 
 ## Concerns and the background loop
