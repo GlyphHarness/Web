@@ -928,6 +928,8 @@ const installIdb = () => {
 };
 const wholeUnits = (text, set) => { const hit = new Set(); for (const m of text.matchAll(UNIT)) if (set.has(m[0])) hit.add(m[0]); return hit.size; };
 const keptText = d => d.parts.filter(p => p.kept != null).map(p => p.kept).join('\n'); // units never join across kept spans
+// Fixture note: genBlob is synthetic and tuned to be feasible; the factors here (2x together, 1.5x each) pin that the algorithm can reach them.
+//   On the real corpus the measured ratios are 1.57x rare and 1.49x num (docs/concepts/results/stripe-det-2026-11-21.md), so S12 is a feasibility property, not the measured claim.
 await check('S12 retention: on seeded blobs the share of hapax identifiers and numbers kept beats head-and-tail at equal output chars (2x together, 1.5x each)', async () => {
   installIdb();
   for (const mode of ['auto', 'words']) for (let seed = 1; seed <= 5; seed++) {
@@ -1053,6 +1055,25 @@ await check('S16 known: a term in known is retained less than the same term not 
     if (K.length < 10) return `seed ${seed}: fixture keeps only ${K.length} identifiers`;
     const kept = new Set(K), after = unitsIn(strip(b.text, { ...p, known: K })).filter(u => kept.has(u)).length;
     if (!(after < K.length)) return `seed ${seed}: ${after} of ${K.length} kept again`;
+  }
+  return true;
+});
+// S16 strict (kotnvx: `after < K.length` passes for any shortening, e.g. one term dropped, or known applied to every term). Split the kept
+// identifiers K in halves, name only the first half in known: of the named half at most a quarter may stay kept, of the unnamed half at
+// least three quarters must stay (known is per term, not a global damping). Fixture: seeds 1..4, fraction 0.12, as above.
+await check('S16 known: only the named terms drop (<= 1/4 of the named half stay, >= 3/4 of the unnamed half stay), by term and case-insensitively', () => {
+  for (let seed = 1; seed <= 4; seed++) {
+    const b = genBlob(seed, 300), ids = new Set(b.ids), p = { fraction: 0.12 };
+    const unitsIn = r => (keptText(decode(r.text)).match(UNIT) || []).filter(u => ids.has(u));
+    const K = [...new Set(unitsIn(strip(b.text, p)))];
+    if (K.length < 10) return `seed ${seed}: fixture keeps only ${K.length} identifiers`;
+    const half = Math.floor(K.length / 2), named = K.slice(0, half), rest = K.slice(half);
+    for (const known of [named, named.map(x => x.toUpperCase())]) {
+      const kept = new Set(unitsIn(strip(b.text, { ...p, known })));
+      const nIn = named.filter(x => kept.has(x)).length, rIn = rest.filter(x => kept.has(x)).length;
+      if (nIn * 4 > named.length) return `seed ${seed}: ${nIn} of ${named.length} named terms still kept`;
+      if (rIn * 4 < rest.length * 3) return `seed ${seed}: only ${rIn} of ${rest.length} unnamed terms kept`;
+    }
   }
   return true;
 });
