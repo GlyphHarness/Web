@@ -1,7 +1,7 @@
 name: Tests
 
 # Every push runs the main and git suites and the plain-node suites (cpu, keys, local,
-# validators, profile, retry, wh); the machine suite runs nightly, on
+# validators, profile, retry, stripe, wh); the machine suite runs nightly, on
 # demand, and on pushes that touch the machine. Passes are silent; a failing suite opens
 # one concern issue with its break window, and the next pass closes it (scripts/ci-report.mjs).
 on:
@@ -36,7 +36,7 @@ jobs:
       - id: pick
         name: Which suites
         run: |
-          s="main git cpu keys local validators profile retry wh"
+          s="main git cpu keys local validators profile retry stripe wh"
           if [ "${{ github.event_name }}" != "push" ] || git diff --name-only HEAD^ HEAD | grep -qE '^(app/vm|app/vmhost\.js|vm/)'; then s="$s vm"; fi
           echo "suites=$s" >> "$GITHUB_OUTPUT"
           echo "suites: $s"
