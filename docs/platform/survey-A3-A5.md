@@ -20,7 +20,7 @@ Names: breadcrumb bfebtg, source confidence rgtztt. Concept: deferred breadcrumb
 ## Coarse run
 Names: coarse run gwwknz, concern rank vbamkc. Concept: ranked coarse run ztjmrd.
 - Rank before any fetch: 1 function and features, 2 security, 3 nomenclature and what a name means for the product. Lower ranks wait.
-- Per concern: grep catalog and inbox for covered ground, search (standard), the one best source, smallest blob; budget default 5 sources per area, here 3. A source counts whether fetched or searched (each search and each result page relied on counts); concept nlwqzd, nomenclature fyhkvc.
+- Per concern: grep catalog and inbox for covered ground, search (standard), the one best source, smallest blob; budget 3 sources per area. A source counts whether fetched or searched (each search and each result page relied on counts); concept nlwqzd, nomenclature fyhkvc.
 - Every source, a search included, gets an explored record (a search is a source). If the query text was not kept, the record says so.
 - Everything seen and not followed becomes a breadcrumb; no second pass without the operator or a concept record promoting the concern.
 - Ranking applied here: A3 by S3.2 (function) and S3.1 (security) before S3.3 and S3.4; A5 S5.1 and S5.2 (function) before S5.3.
