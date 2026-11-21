@@ -214,7 +214,7 @@ async function step(name, surf, fn) {
   await step('queries scope: q1 after 8 later queries still valid', m7, S => S.ref('q1/t0', { op: 'property', name: 'chars' }));
   await m7.S.run('{ sessions { id } }');                                                                       // q10: 9 later
   await step('queries scope: q1 after 9 later queries expired', m7, S => S.ref('q1/t0', { op: 'property', name: 'chars' }));
-  await step('queries scope: q10 still valid', m7, S => S.ref('q10/s0', { op: 'property', name: 'id' }).catch(() => ({ header: { ok: false } })));
+  await step('queries scope: q10 still valid', m7, S => S.ref('q10/sfixA', { op: 'property', name: 'msgs' }));
   const m8 = mk();
   await m8.S.run('{ turns(session: "sfixA", first: 2) @scope(ticks: 2) { i role } }');
   m8.S.tick(); m8.S.tick();
