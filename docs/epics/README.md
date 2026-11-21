@@ -99,7 +99,7 @@ Stated as found; some items are the people's or other sessions' state, not decis
 
 ## 9. Catalog entries from this plan
 
-The steward inbox merged into `catalog/*.jsonl` (ids in this plan) holds: nomenclature for epic, driver stage and epic gate ("gate" alone is already a catalog term, so this plan says epic gate); eight concept records (hypotheses) for the ladder and the central claims of A1, A2, A3, B1 (two) and B2 (two); and two fault lines (tool-call gotchas, class common). The steward merges it after review; it is not merged by this commit.
+The steward inbox merged into `catalog/*.jsonl` (ids in this plan) holds: nomenclature for epic, driver stage and epic gate ("gate" alone is already a catalog term, so this plan says epic gate); eight concept records (hypotheses) for the ladder and the central claims of A1, A2, A3, B1 (two) and B2 (two); and two fault lines (tool-call gotchas, class common). It was merged into `catalog/*.jsonl` on `integrate` (3d764dd), after the judge pass on the epics branch.
 
 ## 10. First week (week of Monday 2026-11-23)
 
@@ -110,7 +110,7 @@ Rules: one owner per file; a story starts only when its needs are met; steps run
 | Mon | judge `query-surface` against QUERY.md Q1..Q22 and the catalog (G1 part) | judge | n/a | none; reads `origin/query-surface` |
 | Mon | judge `claude-route` against its survey, gateway checks and the design constraint (G2 part) | judge | n/a | none; reads `origin/claude-route` |
 | Mon | judge `stripe-surface` against STRIPE.md (G1 part) | judge | n/a | none |
-| Mon | steward: push `dev` and merge the epics inbox after review; `scripts/ci.mjs` green on `dev` (G0) | steward | n/a | the person's go-ahead for the push of `dev` |
+| Mon | steward: push `dev` (the epics inbox is already merged on `integrate`, 3d764dd); `scripts/ci.mjs` green on `dev` (G0) | steward | n/a | the person's go-ahead for the push of `dev` |
 | Mon-Tue | A1.1 name and concept records for the integration; corpus of real large results from this repo's ledgers and profiles | context | 0 | G0 |
 | Mon-Wed | A3.1 validators on a second skill; stage-0 baseline of what the cheap models carry | context | 0 | G0; F1 is built (`test-validators.mjs`) |
 | Tue-Wed | B1.1 resolve platform Q2 and Q3 as written hypotheses with measures; B1.2 contracts data shapes on real harness records | platform | 0 | none (notes only) |
