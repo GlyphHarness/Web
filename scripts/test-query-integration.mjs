@@ -303,7 +303,7 @@ await check('QI20 tool: the default scope expires a query after the 8 most recen
 // executed under any other strategy reaches the tool with no surface and is refused as a plain failed answer.
 await check('QI21 tool: executed where the host gave no surface (a session whose strategy lacks the flag), query and query_ref answer a plain failed line, leave a failed trail row and do not throw', async () => {
   const out = await run({ ctx: { by: () => ({ session: SID }) } }, 'query', { q: Q_SMALL }), out2 = await run({ ctx: {} }, 'query_ref', { ref: 'q1/t0', op: 'get' });
-  return /^(Tool error|No )/.test(out) && /^(Tool error|No )/.test(out2) && lastTrail().ok === false || J({ out, out2 });
+  return /^No /.test(out) && /^No /.test(out2) && lastTrail().ok === false || J({ out, out2 });
 });
 await check('QI22 trail: a query_ref call leaves a trail row with the ref, the why (cut to 200) and the outcome; the row is the harness\'s own record, not the model\'s', async () => {
   const env = await mkEnv();
