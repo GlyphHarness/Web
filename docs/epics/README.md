@@ -84,16 +84,16 @@ None of these exist as code or setting; they are proposed defaults, each an opti
 - Every request has a ledger row (TENET 4); the cost of each story is the sum of its wh dir ledgers and is recorded in the story's result.
 - Nothing is run live against OpenRouter in tests. Tests use the mock provider only.
 
-## 8. What is blocked on what, right now (2026-11-21)
+## 8. What is blocked on what, right now (2026-11-21, after the integrate merge)
 
 Stated as found; some items are the people's or other sessions' state, not decisions here.
-- Judges pending. `query-surface` (ffaea7e) and `claude-route` (8193fe1) are implemented on their branches and unmerged; no judge pass is recorded for either. `stripe-surface` (85ccc5c) is implemented and unintegrated, with no measured live benefit and an overhead above its bar (its own notes). So G1 and G2 are both unmet, and stage 1 and stage 2 do not exist yet.
-- The intake session's 11 commits sit on local `dev` unpushed (`origin/dev` and `origin/main` are both at 6474015; local `dev` is 11 ahead). Pushing `epics` publishes them as its ancestry; that is a side effect to be aware of, not a release. `main` is untouched.
-- The four feature branches all descend from local `dev` 2c6b717 and carry unmerged commits (`git rev-list dev..origin/<branch>`: stripe-surface 22, query-surface 20, claude-route 8, platform-query-notes 2). Each must be merged to `dev` before its integration story, and merge order matters (query-surface and stripe-surface meet at the reducer hook, OQ15).
-- Claude Code sign-in in WSL is a user step. Until done and the live checks R13, R14 (R12), R6a, R17 are recorded, A2 stories 2.7+ and all stage-2 stories wait. The gateway core exists and is green offline; nothing in it has met a real Claude Code request.
-- The platform concept has no build go-ahead (GB). Q2 and Q3 are open. Until the person answers, B1 and B2 stop at their notes stories, which is a stated acceptable outcome.
-- `platform-query-notes` is notes only (P-Q1..P-Q6 mapping to the query surface); it has no code, so B2's query-mapping check needs G1.
-- Open questions that change plans (not decided here): platform Q2 (runtime vs browser layer), Q3 (relation to harness), Q10 (where explored records live), claude-route's open-question list, QUERY.md OQ1..OQ16 measures not yet run, FLOWS QF1..QF8.
+- Judged and integrated on the `integrate` branch (not on `dev`, not released): `query-surface` (judge pass-with-findings, all fixed; ff56c14), `stripe-surface` (same; 85ccc5c), `claude-route` (pass-with-findings, no blocking items; 54eeda9), and the notes branches `platform-query-notes`, `epics` and `b1-notes` (judge pass after fixes). A1.1 is still running and is not in. So G1 and G2 are not met until `integrate` reaches `dev` and passes the release gate; stage 1 and stage 2 do not exist as released features yet.
+- `stripe-surface` has no measured live benefit and an overhead above its bar (its own notes); that is a recorded result, not a block on the merge.
+- The intake session's commits sit on local `dev` unpushed (the `origin/dev` and `origin/main` heads are behind it). `integrate` descends from that local `dev` tip, so pushing it publishes them as ancestry. Their judge re-check status is the intake session's to confirm. `main` is untouched.
+- Claude Code sign-in in WSL is a user step. Until done and the live checks R13, R14 (R12), R6a, R17 are recorded, A2 stories 2.7+ and all stage-2 stories wait. The gateway core exists and is green offline (`scripts/test-gateway.mjs`, `scripts/measure-gateway.mjs`); nothing in it has met a real Claude Code request. `scripts/claude-route/setup-wsl.sh` and `check-wsl.mjs` prepare and check the WSL base only.
+- The platform concept has no build go-ahead (GB). Q2, Q3 and Q9 are open (options and pre-registered measures in docs/platform/q2-q3-q9.md, nothing measured). Until the person answers, B1 and B2 stop at their notes stories, which is a stated acceptable outcome.
+- `platform-query-notes` is notes only (P-Q1..P-Q6 mapping to the query surface); its twin terms now supersede into extensions of the query-surface terms. B2's query-mapping check needs G1.
+- Open questions that change plans (not decided here): platform Q2, Q3, Q9, Q10 (where explored records live; the claude-route ones are kept as docs/platform/explored-claude-route.jsonl like A3 to A7), claude-route's open-question list, QUERY.md OQ1..OQ16 measures not yet run, FLOWS QF1..QF8.
 - Stage-0 weakness is unmeasured. No record says how far the cheap models carry planning and research stories through the harness; A1.1 and A3.1 produce that first measure, and the plan below assumes the answer is "far enough for drafts, not for judgement".
 - The cost figures in section 7 are proposals, not measured budgets.
 
