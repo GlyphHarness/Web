@@ -1,6 +1,6 @@
 # Survey A6 and A7 (coarse pass, 2026-11-21)
 
-Records: `docs/platform/explored-A6-A7.jsonl` (7 explored records). Inbox: `catalog/inbox/survey-ewcxnl.jsonl` (2 nomenclature, 1 concept, hypothesis). Budget 3 fetched sources per area; search snippets are marked gist.
+Records: `docs/platform/explored-A6-A7.jsonl` (8 explored records; wtsgpk is the S7.1 W3C, Khronos and trade search). Catalog (merged, `catalog/nomenclature.jsonl` and `catalog/concepts.jsonl`): nomenclature tjuwez (early cutoff) and bkrsad (misfire policy; superseded by mzqhdl in inbox `catalog/inbox/survey-kwtbpe.jsonl`, pending merge), concept yhmcoe (hypothesis). Budget 3 fetched sources per area; search snippets are marked gist.
 Platform ids linked, not duplicated: vsbder (PH13), tllxhx (PH14), gdhqxh (PH15), gsioti (PH12), hhwzgq (PH16), wurhdd (PH17), hcipca, mkohts.
 
 ## Kept and deferred
@@ -11,11 +11,11 @@ Platform ids linked, not duplicated: vsbder (PH13), tllxhx (PH14), gdhqxh (PH15)
 | rustc dev guide, incremental compilation | S6.2 | concrete | red-green, early cutoff, reads-derived dependencies |
 | Wikipedia FRP | S6.3 | concrete | behavior vs event, system names |
 | web.dev WebGPU support | S7.1 | concrete | shipping table, 2025-11-25 |
-| W3C and Khronos and trade search snippets | S7.1 | gist | WGSL CRD; WebGL not formally deprecated in any source seen |
+| W3C and Khronos and trade search snippets (record wtsgpk) | S7.1 | gist | WGSL CRD; WebGL not formally deprecated in any source seen |
 | wgpu readme | S7.2 | concrete | backends, WGSL, Naga |
 | MDN Houdini | S7.3 | concrete | status per Houdini API |
 
-Deferred breadcrumbs: 19 (8 gist, 11 inferred; per record 1, 5, 3, 1, 4, 2, 3). Not followed: Build Systems a la Carte (PDF fetch failed), sagas, timing wheels, Temporal replay, Dawn/Tint, Baseline status of container queries/nesting/scope.
+Deferred breadcrumbs: 22 listed across 8 records (11 gist, 11 inferred; per record 1, 5, 3, 1, 4, 2, 3, 3). Record wtsgpk repeats three gist targets first noted under bdlcwy (W3C activity page, Khronos SIGGRAPH page, trade commentary), so 19 are distinct. Not followed: Build Systems a la Carte (PDF fetch failed), sagas, timing wheels, Temporal replay, Dawn/Tint, Baseline status of container queries/nesting/scope.
 
 ## Answers
 ### S6.1 Epoch-aligned intervals and catch-up
@@ -34,7 +34,7 @@ Deferred breadcrumbs: 19 (8 gist, 11 inferred; per record 1, 5, 3, 1, 4, 2, 3). 
 ### S7.1 GPU API in browsers (source date 2025-11-25)
 - WebGPU: Chrome/Edge desktop shipping (144 listed; Windows, macOS, ChromeOS; Linux in progress); Chrome Android shipping (121, Android 12+, Qualcomm/ARM only); Firefox partial (141 Windows, 145 macOS ARM64; Linux, Intel Mac, Android in progress); Safari shipping (26 on macOS, iOS, iPadOS, visionOS). All four engines ship it, with platform gaps.
 - WebGL: no formal deprecation or maintenance-mode statement found in a primary source; a May 2026 commentary calls it a legacy fallback (gist, secondary). WebGPU is described as its successor. Level-2 or named successor effort: not found. Unproven: "settled = single answer"; evidence so far says WebGPU is the new-work API and WebGL remains for old content, matching the PH17 "split" caveat.
-- Shader language: WGSL, W3C Candidate Recommendation Draft, published twice in 2026 (gist, W3C activity page not opened).
+- Shader language: WGSL, W3C Candidate Recommendation Draft, published twice in 2026 (gist, record wtsgpk; W3C activity page not opened).
 
 ### S7.2 Native implementations
 - wgpu (Rust): native Vulkan, Metal, D3D12, OpenGL; wasm WebGL2 or WebGPU; shader language WGSL, translated by Naga per backend; its readme notes the WebGPU and WGSL specs are drafts (concrete). Dawn with Tint (Chromium) and SPIR-V as an interchange: inferred only, not read.

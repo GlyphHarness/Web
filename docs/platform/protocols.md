@@ -1,6 +1,6 @@
 # Protocol catalog (A3)
 
-Status: hypothesis. Built: nothing. Evidence: none yet; names below from memory are marked unverified.
+Status: hypothesis. Built: nothing. Evidence: docs/platform/survey-A3-A5.md and docs/platform/explored-A3-A5.jsonl (coarse, 2026-11-21: RFC 10024, RFC 9111 4.4, DPV); names below not covered there are from memory and marked unverified.
 
 ## Terms
 platform protocol, protocol catalog, protocol layer, default protocol, enumerated invalidation, enumerable result set, regulatory protocol, security suite.

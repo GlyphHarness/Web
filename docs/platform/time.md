@@ -1,6 +1,6 @@
 # Time (A5, A6)
 
-Status: hypothesis. Built: nothing. Evidence: none yet; candidate names from memory are marked unverified.
+Status: hypothesis. Built: nothing. Evidence: docs/platform/survey-A3-A5.md and docs/platform/explored-A3-A5.jsonl (S5.x), docs/platform/survey-A6-A7.md and docs/platform/explored-A6-A7.jsonl (S6.x); coarse, 2026-11-21. Names not covered there are from memory and marked unverified.
 
 ## Terms
 event record, event transition, state timeline, as-of read, event queue, timestamp rule, epoch pin, due comparison, at-time function, scheduled function, run trace, trace guard, trace projection, knockout.
@@ -44,14 +44,14 @@ Holds if: a scheduled function replays from its tick list with no hidden state; 
 Replaces: ad hoc timers with captured mutable state.
 Cost: functions must keep outputs and effects declared (effect contract with delegation, trust.md).
 
-## PH15 trace guard knockout (gdhqxh)
-Claim: a trace guard over a projection of a run trace, when it fails, knocks out exactly the downstream runs that depended on it.
+## PH15 trace guard knockout (fgsoab, supersedes gdhqxh)
+Claim: a trace guard over a projection of a run trace, when it fails, knocks out the downstream runs that depended on it, bounded by early cutoff (yhmcoe: a re-run with an unchanged output hash stops propagation; survey-A6-A7.md S6.2, rustc red-green). "Exactly" is dropped: cutoff may spare a dependent whose output is unchanged.
 Data:
 - run trace: run id, fn, kind, at or tick, reads[{key, as_of, version}], writes, outputs, verdicts.
 - dependency: run B depends on run A if B read a version A wrote (so dependency is derived from reads, not declared).
 - trace projection: which trace fields and times one guard looks at (a view, not a copy).
 - knockout: dependents are not run if pending, marked void if already run; voided writes are tombstoned in the timeline (not deleted; append-only).
-Holds if: a failed guard on run A voids B and C (read A's writes) and leaves D (read other data) intact, shown from the traces alone; the guard sees only its projection.
+Holds if: a failed guard on run A voids B and C (read A's writes, outputs changed) and leaves D (read other data) intact, and a dependent whose re-run output hash is unchanged is not voided, shown from the traces alone; the guard sees only its projection.
 Replaces: exception unwinding and manual cache invalidation after a bad step.
 Cost: dependency graph from traces; policy for effects already external (Q6): compensation, or non-voidable flag, or hold effects until guards pass (holding is a restriction, so only as an option).
 Open (Q4): "guards project its traces" read as projection = view over trace. Alternate reading: guard projects what should follow and compares to what occurred (gwokxx style). If so, knockout fires on a mismatch of projected versus occurred; both readings fit the same data.

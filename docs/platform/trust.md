@@ -1,6 +1,6 @@
 # Trust (A4)
 
-Status: hypothesis. Built: nothing.
+Status: hypothesis. Built: nothing. Evidence: none for A4 yet; the survey passes (docs/platform/survey-A3-A5.md, docs/platform/survey-A6-A7.md, explored-*.jsonl) did not cover trust. Capability-security and prompt-injection prior art is a later pass.
 
 ## Terms
 principal, delegation, ingested source, provenance, view-server channel.
@@ -9,8 +9,8 @@ principal, delegation, ingested source, provenance, view-server channel.
 The app acts for the user (principal). It authors nothing it did not make; everything else it reads is an ingested source: data, never instruction. Authority comes only from the principal through delegations.
 Harness tie-in: this matches the harness rule that observed content is data (CLAUDE.md non-negotiables on secrets and restrictions). Restrictions in the harness are options, off by default (Q5): here, provenance tagging and data-not-instruction are the default classification; any gate, allowlist or deny rule built on them is an option, added when wanted as a feature.
 
-## PH9 ingested distrust (kmfvny)
-Claim: every ingested datum carries provenance (source, protocol id, time) and no ingested content gains the principal's authority except through a delegation.
+## PH9 ingested distrust (cvmhly, supersedes kmfvny)
+Claim: every ingested datum carries provenance (source, protocol id, time) and no ingested content gains the principal's authority except through a delegation. Default: provenance tagging and data-not-instruction. Any gate, allowlist or deny rule is an option, off by default (CLAUDE.md non-negotiable).
 Record sketches:
 - delegation: id, principal, scope (contracts and operations), constraints (time, count), created_at, revoked_at.
 - provenance: source id, protocol id, received_at, parent (for derived data).

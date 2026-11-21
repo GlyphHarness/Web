@@ -1,6 +1,6 @@
 # Survey A3 and A5 (coarse run, 2026-11-21)
 
-Status: hypothesis evidence, not verified beyond what is stated. Records: docs/platform/explored-A3-A5.jsonl (13 explored records, 30 breadcrumbs). Catalog inbox: catalog/inbox/survey-dcmvtq.jsonl (names and the explored concept).
+Status: hypothesis evidence, not verified beyond what is stated. Records: docs/platform/explored-A3-A5.jsonl (13 explored records, 30 breadcrumbs). Catalog (merged): nomenclature rgnhri, rqkbvs, rzokfr, bfebtg, rgtztt, vbamkc, gwwknz in catalog/nomenclature.jsonl; concepts ictovp, mhvnlg, ztjmrd in catalog/concepts.jsonl.
 Method: search first (standard), then the one best source per question; budget 3 fetched sources per area (A3: RFC 10024, RFC 9111 4.4, DPV repository; A5: MDN Event.timeStamp, XTDB blog, HLC paper which failed to load). Seven web searches gave leads (gist). Fetch answers were extracted by a small model from a prompt, so "concrete" means a primary page read through that extraction.
 
 ## Explored record
@@ -10,7 +10,7 @@ Defined as the `explored` catalog (intake B1), one JSON line per source looked a
 - `unread`: ranges and linked pages not read, so a later run resumes there instead of refetching.
 - `breadcrumbs` [{`target`, `gist` (<= 25 words), `confidence`, `deferred_because`}]; `supersedes`? (a change is a new line).
 - A line in the catalog inbox also has `"to": "explored"`.
-Names: explored record rgnhri, kept blob rqkbvs ("blob" in C10 means skill blob; hence "kept blob"), unread range rzokfr. Concept: explored catalog ictovp. Relation: collector vifitn (context inbox) removes exploring turns on the host; explored catalog does it for outside sources. Platform concepts it feeds: ghttaf, ydsgja, mvfezw, eeroue, lojtwn, dgtcqd, gsioti.
+Names: explored record rgnhri, kept blob rqkbvs ("blob" alone means the skill blob (concept C10 of docs/concepts/CATALOG.md); hence "kept blob"), unread range rzokfr. Concept: explored catalog ictovp. Relation: collector vifitn (context inbox) removes exploring turns on the host; explored catalog does it for outside sources. Platform concepts it feeds: ghttaf, ydsgja, mvfezw, eeroue, lojtwn, dgtcqd, gsioti.
 
 ## Breadcrumbs
 Names: breadcrumb bfebtg, source confidence rgtztt. Concept: deferred breadcrumbs mhvnlg.
@@ -35,7 +35,7 @@ Names: coarse run gwwknz, concern rank vbamkc. Concept: ranked coarse run ztjmrd
 ## Answers A5
 | q | answer | confidence | records |
 | --- | --- | --- | --- |
-| S5.1 | Event.timeStamp is a DOMHighResTimeStamp: ms from the global's time origin (navigation start in a window) to event creation. Resolution coarsened: Chrome 0.1 ms, Safari and Firefox 1 ms, 5 to 20 microseconds when cross-origin isolated, 16.667 ms under Firefox resistFingerprinting. One stamp per event; no per-transition times found (so a press-drag-release has no single record; the gap versus an event record). Coalesced and predicted pointer events not checked. | concrete (MDN, extracted); gap partly inferred | npqhtm rmyvsg |
+| S5.1 | Event.timeStamp is a DOMHighResTimeStamp: ms from the global's time origin (navigation start in a window) to event creation. Resolution coarsened: Chrome 0.1 ms, Safari and Firefox 1 ms, 5 to 20 microseconds when cross-origin isolated, 16.667 ms under Firefox resistFingerprinting. One stamp per event; no per-transition times found (so a press-drag-release has no single record; the gap versus an event record). Coalesced and predicted pointer events not checked. Spec minimums (gist, search only): 100 microseconds, 5 when cross-origin isolated. | MDN-extracted part (timeStamp meaning, per-browser resolution, no per-transition times): concrete, record npqhtm. Spec minimums: gist, search record rmyvsg. Gap: partly inferred | npqhtm (concrete), rmyvsg (gist) |
 | S5.2 | SQL:2011 defines system-time, application-time and bitemporal tables with AS OF reads. XTDB exposes them, keeps separate current and historical indices so current reads stay fast, and appends rather than rewrites. History is append-only, growth unbounded unless pruned; no compaction or retention policy found. Datomic: not covered. | XTDB concrete; growth gist | uoisfy jumffu |
 | S5.3 | No single authoritative practice found. Wall-clock stamps alone can go backwards (leap seconds, steps); monotonic clocks are for durations on one machine; hybrid logical clocks (physical time plus logical counter) track NTP time and keep causality, with skew bounds (one vendor: 500 ms). The HLC paper could not be read. | gist | rjlqui bsnwuf |
 

@@ -3,7 +3,7 @@
 Status: hypothesis. Built: nothing.
 
 ## Terms
-platform contract, core contract set, direct binding, wasm component, protocol-first, document fetch (see catalog/inbox/platform-ruvhoq.jsonl).
+platform contract, core contract set, direct binding, wasm component, protocol-first, document fetch (catalog nomenclature and concepts, merged in commit ff3646a; see the name map in README.md).
 
 ## PH1 wasm-direct binding (hjltjz)
 Claim: a wasm component uses every platform feature through a contract stated as data, no JavaScript layer between.
