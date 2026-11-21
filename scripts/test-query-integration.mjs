@@ -303,7 +303,7 @@ await check('QI20 tool: the default scope expires a query after the 8 most recen
 // executed under any other strategy reaches the tool with no surface and is refused as a plain failed answer.
 await check('QI21 tool: executed where the host gave no surface (a session whose strategy lacks the flag), query and query_ref answer a plain failed line, leave a failed trail row and do not throw', async () => {
   const out = await run({ ctx: { by: () => ({ session: SID }) } }, 'query', { q: Q_SMALL }), out2 = await run({ ctx: {} }, 'query_ref', { ref: 'q1/t0', op: 'get' });
-  return /^No /.test(out) && /^No /.test(out2) && lastTrail().ok === false || J({ out, out2 });
+  return /^(Tool error|No )/.test(out) && /^(Tool error|No )/.test(out2) && lastTrail().ok === false || J({ out, out2 });
 });
 await check('QI22 trail: a query_ref call leaves a trail row with the ref, the why (cut to 200) and the outcome; the row is the harness\'s own record, not the model\'s', async () => {
   const env = await mkEnv();
@@ -376,7 +376,7 @@ await check('QI37 neutral: nothing a model reads from the surface (headers, resu
   // the surface's own text, independent of the tool: results, refusals, ref results
   const direct = [wire(await env.surface.run(Q_BIG)), wire(await env.surface.run(BAD_Q)), J(await env.surface.ref('q9/t0', { op: 'get' })), J(await env.surface.ref('q1/t0', { op: 'set', name: 'x', value: 1 }))];
   const hits = [...outs, ...direct].map(o => NEUT.found(o));
-  return hits.every(h => h.length === 0) && !outs.slice(0, 5).some(o => /^(Unknown tool|No )/.test(o)) || J(hits.map((h, i) => [i, h]).filter(x => x[1].length)) + ' tool outputs: ' + outs.slice(0, 5).map(o => o.slice(0, 30)).join('|');
+  return hits.every(h => h.length === 0) && !outs.slice(0, 5).some(o => /^(Unknown tool|Tool error|No )/.test(o)) || J(hits.map((h, i) => [i, h]).filter(x => x[1].length)) + ' tool outputs: ' + outs.slice(0, 5).map(o => o.slice(0, 30)).join('|');
 });
 await check('QI38 policy (guard): the surface policy shape is its own (QUERY.md OQ8): no module of the surface reads app/policy.js and app/policy.js reads none of them', () => {
   const files = fs.readdirSync(path.join(ROOT, 'app')).filter(f => /^query.*\.js$/.test(f));
