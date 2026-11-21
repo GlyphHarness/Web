@@ -20,7 +20,6 @@ export function chain(handlers) {
 // ---- headers. Pairs are [name, value]; names are read, values are carried by reference and never touched.
 const lower = n => String(n).toLowerCase();
 const HOP = new Set(['host', 'connection']);
-const CREDENTIAL = new Set(['authorization', 'x-api-key']);
 const carry = (pairs, drop) => pairs.filter(([n]) => !drop.has(lower(n))).map(([n, v]) => [n, v]);
 const namesOf = headers => headers.map(([n]) => lower(n));
 
@@ -30,11 +29,13 @@ export function passHeaders(pairs) {
   return { headers, trace: { names: namesOf(headers) } };
 }
 
-// Harness listener: the client's credential headers are dropped; the gateway's own key is given per call and kept nowhere.
+// Harness listener: an allowlist (R16: nothing else a client sends, cookies and proxy credentials included, goes upstream);
+// the gateway's own key is given per call and kept nowhere.
+const HARNESS_FORWARD = new Set(['content-type', 'accept', 'anthropic-version']);
 export function harnessHeaders(pairs, opts) {
   const apiKey = opts?.apiKey;
   if (typeof apiKey !== 'string' || !apiKey) return reject(401, 'no-api-key');
-  const headers = carry(pairs, new Set([...HOP, ...CREDENTIAL]));
+  const headers = pairs.filter(([n]) => HARNESS_FORWARD.has(lower(n))).map(([n, v]) => [n, v]);
   headers.push(['x-api-key', apiKey]);
   return { verdict: 'allow', headers, trace: { names: namesOf(headers) } };
 }
