@@ -1,10 +1,10 @@
 # Query surface and text striping on the app platform
 
-Status: hypothesis. Built on the platform side: nothing. Source: two sibling pieces named and specified by `context` in other worktrees (branches `query-surface`, `stripe-surface`; at the time of writing neither has a commit past dev 2c6b717). Their prose will be `docs/QUERY.md` and `docs/STRIPE.md`; their terms (query-ref, result-set header, query decorator, kinds, materialized-kind, staged intent, striped skeleton, reducer class, analyzed-before indicator) are theirs and are not re-recorded here. This note maps them onto the platform (docs/platform/README.md A1-A7) and adds only the platform-side terms below.
+Status: hypothesis. Built on the platform side: nothing. Source: two sibling pieces named and specified by `context` in other worktrees (branches `query-surface`, through ff56c14: implemented, unintegrated, 177 checks; `stripe-surface`, not rechecked). Query prose is `docs/QUERY.md` on that branch; striping prose is `docs/STRIPE.md`; their terms (query-ref, result-set header, query decorator, kinds, materialized-kind, staged intent, striped skeleton, reducer class, analyzed-before indicator) are theirs and are not re-recorded here. This note maps them onto the platform (docs/platform/README.md A1-A7) and adds only the platform-side terms below.
 Built in the harness today, stated apart (docs/TENETS.md): trail row per tool call (18), output store handles and deterministic squeeze (13, 25), handles (swhuvh), has/has-not view (hnuspc, built and measured per docs/concepts/INVENTORY.md). Everything else here is hypothesis.
 
 ## Terms
-New (nomenclature inbox `catalog/inbox/platform-uvwzeg.jsonl`): ref lifetime (vliqts), label scope (wpgkqs), claim limit (tzacvg).
+New (nomenclature inbox `catalog/inbox/platform-uvwzeg.jsonl`): claim limit (tzacvg). Extensions of sibling terms, not twins: query scope (platform extension) zbmrka supersedes wpgkqs (sibling mutcns, aka ref scope); label lifetime (platform extension) hkpwne supersedes vliqts (sibling QUERY.md 4.4 @scope). Platform additions: validation against the declaration record, closed terminator set as data, as-of replay. Sibling ids live in query-surface inboxes `context-bbpyva`/`context-vlfwaj` until merged; chain tails there: query-ref uyhrwh, kinds and labels umknat, result-set header xhjhjy, query surface xmxscd.
 Reused: event record lvdddu, as-of read cifgws, enumerated invalidation dvovnc, enumerable result set kctczv, protocol catalog lroksy, default protocol botoyv, provenance vwjhrd, ingested source ougwwn, trace guard tdxcee, knockout mkohts, epoch pin hcipca, handle swhuvh, passive marker fjcvwq, command alias yijgei, result shape rfeeue, has/has-not view hnuspc.
 "Declared interaction" is used as the operator uses it: an operation on a result label that the query announced. Sibling-named; not duplicated.
 
@@ -16,7 +16,7 @@ Placement: the query surface is not a seventh contract. It is an exchange-layer 
 | A1 contracts as data (PH1 hjltjz) | instance, extended | `ref` contract: operations property(label, name), get(label), set(label, value, version); errors unknown-label, undeclared, stale, terminated, withheld, no-lifetime. Extension: which operations a label offers is derived per result from the query shape, so a contract instance (the declared set) has a lifetime; only the static `ref` contract is versioned. |
 | A2 protocol-first (PH3 cvycil) | instance | A query is a named exchange; labels give no ambient read: a value is reachable only through `ref` calls the result declared. Same discipline as "no ambient fetch". |
 | A3 protocol catalog (PH4 ghttaf) | instance | Header decorator defaults, exposure policy, descriptor elision, ref lifetime values are catalog records; omitted -> catalog default per layer; none found -> named error, no code default. |
-| A3 enumerable result set (PH6 mvfezw) | instance, with a conflict | Header = member list with count and cursor. Conflict: PH6 wants ids stable until a recorded change; labels are terse aliases for small models (wrqmen). Resolution: alias is stable only inside its ref lifetime and scoped to its result (label scope); the member id behind it is the PH6 stable id. |
+| A3 enumerable result set (PH6 mvfezw) | instance, with a conflict | Header = member list with count and cursor. Conflict: PH6 wants ids stable until a recorded change; labels are terse aliases for small models (wrqmen). Resolution: the label (QUERY.md: the name of an entry, e.g. t0) is stable only inside its label lifetime and scoped to its result (query scope); the member id behind it is the PH6 stable id. |
 | A3 enumerated invalidation (PH5 ydsgja) | instance | A label terminates when its member id is enumerated as invalidated; other labels of the same result stay valid. |
 | A3 regulatory records (PH7 eeroue) | composes | A data-minimization outcome is an exposure policy result: it reduces the view and the reduction is marked (c). |
 | A4 trust (PH9 cvmhly) | instance | Result payload and names are ingested data with provenance; `set` is an effect and needs a delegation. See (c). |
@@ -43,7 +43,7 @@ Model (hypothesis): a query result is one event record (time.md): id, source (th
 
 ## (c) Trust: exposure and striping
 Stance (trust.md): result payload and the member names are ingested sources; derived data keeps parent provenance (PH9). The query/stripe outputs are derived data and add provenance steps (reducer class, policy id); they never raise authority.
-- Label scope: a label resolves only against the result whose header declared it. Names in the header are data; the alias that `ref` accepts is platform-issued and not copied from content. Payload text that spells another alias, or imitates a declared interaction, mints nothing. Duplicate names in one header are disambiguated by the platform deterministically.
+- Query scope (sibling mutcns; platform extension zbmrka): a label resolves only against the result whose header declared it. Names in the header are data; the label that `ref` accepts must be in the declaration record (for data-derived labels the origin is the kind's label function, see decision 1). Payload text that spells another alias, or imitates a declared interaction, mints nothing. Duplicate names in one header are disambiguated by the platform deterministically.
 - Claim limit: a reduced view (policy exposure or striped skeleton) may claim only: these spans or entries exist in the source as of T, in this order, with these omitted counts and this reducer class. It may not claim absence ("no X in the blob"), completeness, equivalence with the source, or safety (that omitted spans carry no instruction). It is held-not-checked in has/has-not terms (INVENTORY invariant 3: a capture never stands in for content not read). A reducer that is a model is flagged as such (invariant 4, one cent per operation pppezv).
 - Knowing it was reduced: the header carries a reduction mark per reduced entry or blob (reducer class, policy id, whole-blob digest, omitted counts, analyzed-before indicator, as-of). Silent reduction is not allowed; a policy may hide the counts (option, off by default) but still emits "reduced: restricted". Inline omission markers are ingested-forgeable (a source can contain the same text), so their number must equal the mark's count; a mismatch is flagged.
 - Policy is not the consumer's: exposure policy, decorator defaults and descriptor elision are catalog records changed only on the authoring path under the principal (Q1 reading (a)); data kinds that hold policy, delegations or the catalog declare no `set`, so no query shape can offer it.
@@ -51,9 +51,9 @@ Stance (trust.md): result payload and the member names are ingested sources; der
 - Risks, kept not claimed: rarity and Zipf heuristics preferentially keep unusual spans, which is where injected instructions sit; an attacker can also shift whole-blob versus sub-chunk statistics to get chosen spans kept or dropped. The skeleton is therefore data, subject to the claim limit, never a filter that clears content. Whether the stripe helps a model decide is the sibling's measurement, not claimed here.
 
 ## Hypotheses (catalog records in the inbox; all status hypothesis, no per-model entries)
-Siblings' concept ids are not in the catalog yet; cited by path until the steward merges them: docs/QUERY.md (query surface, query-ref, header) and docs/STRIPE.md (striping).
+Concept records here: ntqsvc (supersedes dtroyx; instance of sibling uyhrwh chain) and gwcdrp (supersedes uczpdw; extension of sibling umknat chain); the other P-Q claims are platform-only. Sibling ids are not in the catalog yet; cited by inbox and chain tail until the steward merges them: docs/QUERY.md (query surface, query-ref, header) and docs/STRIPE.md (striping).
 
-P-Q1 Declared set is a pure function of the query (dtroyx).
+P-Q1 Declared set is a pure function of the query (ntqsvc, supersedes dtroyx).
 Claim: the follow-up actions of a result are determined by query text, data kind contracts and policy alone; only those are callable.
 Holds if: the same query text and policy yield the same declared_hash on two runs and in two bindings; every call outside the set is refused with `undeclared`; a field is settable in the set iff its kind contract marks it settable and the shape selected it.
 Fails if: an action works that the declared set did not list, or the set depends on hidden state.
@@ -77,13 +77,13 @@ Ties: cvmhly (derived data keeps provenance); hnuspc (held versus checked); docs
 Replaces: unmarked truncation (head and tail) as the only way a long blob is cut.
 Seam: reducer -> header. Cost: a digest and counts per reduced blob; a claim validator.
 
-P-Q4 Labels are scoped and not forgeable from content (uczpdw).
-Claim: a label resolves only inside its declaring result, aliases are platform-issued, and ingested names, payload text or fake declarations cannot mint a callable ref.
-Holds if: an alias taken from header A is refused against result B; a payload that spells a valid alias or lists a fake interaction yields no ref and no declared op; duplicate names get distinct aliases.
+P-Q4 Labels are scoped and not forgeable from content (gwcdrp, supersedes uczpdw).
+Claim: a label resolves only inside its declaring result, labels are checked against the declaration record (platform-issued only for collision-prefixed or index labels; decision 1), and ingested names, payload text or fake declarations cannot mint a callable ref.
+Holds if: a label taken from header A is refused against result B; a payload that spells a valid label or lists a fake interaction yields no ref and no declared op; duplicate names get distinct (prefixed) labels.
 Fails if: any content-derived string resolves to a ref it was not issued.
 Ties: cvmhly (ingested distrust); glxylm (passive markers, recency), wrqmen (alias); fault hqvmzk (made-up handle) as the failure this guards.
 Replaces: references by free name or global id.
-Seam: ref resolve. Cost: per-result alias table; alias length for small models.
+Seam: ref resolve. Cost: per-result label table; label length for small models.
 
 P-Q5 Exposure policy is catalog data the consumer cannot loosen (qaeeyl).
 Claim: exposure policy, header decorator defaults and descriptor elision are catalog records with catalog defaults; a consumer, ingested content or a `set` can change none of them.
@@ -112,7 +112,7 @@ Seam: trail. Cost: declaration record kept; hash of declared set per result.
 - Unproven: that a striped skeleton helps a model; that hypermedia-style declared actions (response lists the next actions, a known pattern named from memory, unverified) reduce made-up references in small models. Both belong to context measurements.
 
 ## Open questions and decisions taken (none asked of anyone; each revisable by the operator)
-1. Label: name or issued alias? Decision: alias token scoped to the result, name shown beside as data. If QUERY.md fixes the name as the label, the scope rule (P-Q4) still applies.
+1. Label: name or issued alias? Settled by the sibling: label (nxevyr) is the name of an entry, made by the kind's label function, addressed as <query>/<label>; there is no second alias. Platform reading: the "alias" in this note is the pair (result id, label), validated against the declaration record. Open difference: sibling labels may derive from entry data (ids such as km7q2x); this note's "platform-issued, not copied from content" holds only for collision-prefixed or index labels. Not claimed for data-derived labels; the scope check (P-Q4) is what blocks forgery, not the label's origin. Refutation: a payload that spells a label absent from the header is refused (REF_UNKNOWN_LABEL), and a valid label under another query id is refused; if either resolves, the check fails. Whether labels must never derive from content is a context question.
 2. `set` semantics? Decision: compare-and-set on the declared version.
 3. Default ref lifetime? Decision: catalog data (interval n, min life, epoch-pinned); none -> `no-lifetime` error.
 4. May a write take a reduced view as its base (read-modify-write)? Decision: no by default; the write carries the reduction mark as provenance; a require-full-read rule is an option, off by default.
