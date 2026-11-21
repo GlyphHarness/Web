@@ -13,6 +13,18 @@ const arg = n => (process.argv.includes(n) ? process.argv[process.argv.indexOf(n
 const DATE = arg('--date') || new Date().toISOString().slice(0, 10), ONLY = arg('--only')?.split(','), SKIP = (arg('--skip') || '').split(',').filter(Boolean);
 const OUT = path.join(ROOT, 'docs/concepts/results', `query-probe-${DATE}.jsonl`);
 
+// --summarize: read the jsonl, write the .md table and print the headline numbers; no key needed, no request
+if (process.argv.includes('--summarize')) {
+  const L = fs.readFileSync(OUT, 'utf8').split('\n').filter(Boolean).map(l => JSON.parse(l)).filter(l => l.kind !== 'summary'), T = L.filter(l => l.kind === 'task'), R = L.filter(l => l.kind === 'request');
+  const sum = k => T.reduce((a, t) => a + (t[k] || 0), 0), q = sum('queries'), rf = sum('refs'), pv = sum('parseValidateFail');
+  const laterQ = T.reduce((a, t) => a + Math.max(0, t.queries - 2), 0);
+  const o = { model: MODEL, tasks: T.length, requests: R.length, completed: T.filter(t => t.completed).length, queries: q, parseValidateFail: pv, parseValidateFailRate: +(pv / q).toFixed(3), firstQueryFailed: T.filter(t => t.firstQueryFailed).length, laterQueries: laterQ, laterQueryParseValidateFail: T.reduce((a, t) => a + t.queryFails.slice(2).filter(c => !c.startsWith('exec:')).length, 0), refs: rf, misRef: sum('misRef'), misRefRate: rf ? +(sum('misRef') / rf).toFixed(3) : null, reruns: sum('reruns'), roundTrips: sum('requests'), promptTokens: sum('promptTokens'), completionTokens: sum('completionTokens'), reasoningTokens: sum('reasoningTokens'), cost: +sum('cost').toFixed(5), tokensPerTask: Math.round((sum('promptTokens') + sum('completionTokens')) / T.length), codes: T.flatMap(t => t.queryFails).reduce((a, c) => ((a[c] = (a[c] || 0) + 1), a), {}) };
+  fs.appendFileSync(OUT, J({ kind: 'summary', ...o }) + '\n');
+  const md = ['# Query surface: live probe (' + DATE + ')', '', 'Model ' + MODEL + ' via OpenRouter, ' + o.requests + ' requests (cap ' + MAX_REQUESTS + ', ' + PER_TASK + ' per task), 8 tasks, n = 1 run per task: a smoke-level probe, not a rate estimate. Raw: query-probe-' + DATE + '.jsonl. A first canary series (T2, with the synthetic scratch adapter in the schema, 4 requests) is in query-probe-canary-scratch-' + DATE + '.jsonl and is not counted in these numbers.', '', '| task | completed | requests | queries | parse/validate fails | refs | ref refusals | reruns | prompt tok | completion tok | ended |', '| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |', ...T.map(t => '| ' + [t.id, t.completed, t.requests, t.queries, t.parseValidateFail + (t.queryFails.length ? ' (' + t.queryFails.join(',') + ')' : ''), t.refs, t.refFails.join(',') || '-', t.reruns, t.promptTokens, t.completionTokens, t.ended].join(' | ') + ' |'), '', '`' + J(o) + '`', ''];
+  fs.writeFileSync(OUT.replace('.jsonl', '.md'), md.join('\n'));
+  console.log(J(o, null, 1)); process.exit(0);
+}
+
 // key: only the OpenRouter variable line, only inside this process
 let KEY = null;
 try { const m = /^OPENROUTER_API_KEY\s*=\s*(.+)$/m.exec(fs.readFileSync('C:\\wh\\secrets.env', 'utf8')); if (m) KEY = m[1].trim().replace(/^["']|["']$/g, ''); } catch {}
